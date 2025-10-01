@@ -1,20 +1,17 @@
 package ru.marslab.ide.ride.integration.llm.impl
 
 import com.intellij.openapi.diagnostic.Logger
-import io.ktor.client.*
-import io.ktor.client.call.*
-import io.ktor.client.engine.cio.*
-import io.ktor.client.plugins.*
-import io.ktor.client.plugins.contentnegotiation.*
-import io.ktor.client.plugins.logging.*
-import io.ktor.client.request.*
-import io.ktor.http.*
-import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.delay
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import ru.marslab.ide.ride.integration.llm.LLMProvider
 import ru.marslab.ide.ride.model.LLMParameters
 import ru.marslab.ide.ride.model.LLMResponse
+import java.net.URI
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
+import java.time.Duration
 
 /**
  * Конфигурация для Yandex GPT Provider
@@ -28,6 +25,7 @@ data class YandexGPTConfig(
 
 /**
  * Реализация LLM провайдера для Yandex GPT
+ * Использует Java HttpClient (JDK 11+) для избежания конфликтов корутин
  */
 class YandexGPTProvider(
     private val config: YandexGPTConfig
@@ -35,34 +33,14 @@ class YandexGPTProvider(
     
     private val logger = Logger.getInstance(YandexGPTProvider::class.java)
     
-    private val httpClient = HttpClient(CIO) {
-        install(ContentNegotiation) {
-            json(Json {
-                ignoreUnknownKeys = true
-                prettyPrint = true
-                isLenient = true
-            })
-        }
-        
-        install(Logging) {
-            logger = object : io.ktor.client.plugins.logging.Logger {
-                override fun log(message: String) {
-                    this@YandexGPTProvider.logger.debug(message)
-                }
-            }
-            level = LogLevel.INFO
-        }
-        
-        install(HttpTimeout) {
-            requestTimeoutMillis = config.timeout
-            connectTimeoutMillis = 10000
-            socketTimeoutMillis = config.timeout
-        }
-        
-        defaultRequest {
-            header("Authorization", "Api-Key ${config.apiKey}")
-            header("Content-Type", "application/json")
-        }
+    private val httpClient = HttpClient.newBuilder()
+        .connectTimeout(Duration.ofSeconds(10))
+        .build()
+    
+    private val json = Json {
+        ignoreUnknownKeys = true
+        prettyPrint = false
+        isLenient = true
     }
     
     override suspend fun sendRequest(prompt: String, parameters: LLMParameters): LLMResponse {
@@ -119,19 +97,30 @@ class YandexGPTProvider(
         
         repeat(maxRetries) { attempt ->
             try {
-                val response: io.ktor.client.statement.HttpResponse = httpClient.post(API_ENDPOINT) {
-                    setBody(request)
-                }
+                // Сериализуем запрос в JSON
+                val requestBody = json.encodeToString(request)
                 
-                return when (response.status) {
-                    HttpStatusCode.OK -> {
-                        val yandexResponse = response.body<YandexGPTResponse>()
+                // Создаем HTTP запрос
+                val httpRequest = HttpRequest.newBuilder()
+                    .uri(URI.create(API_ENDPOINT))
+                    .timeout(Duration.ofSeconds(config.timeout / 1000))
+                    .header("Authorization", "Api-Key ${config.apiKey}")
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+                    .build()
+                
+                // Отправляем запрос
+                val httpResponse = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString())
+                
+                return when (httpResponse.statusCode()) {
+                    200 -> {
+                        val yandexResponse = json.decodeFromString<YandexGPTResponse>(httpResponse.body())
                         parseSuccessResponse(yandexResponse)
                     }
-                    HttpStatusCode.Unauthorized -> {
+                    401 -> {
                         LLMResponse.error("Неверный API ключ. Проверьте настройки.")
                     }
-                    HttpStatusCode.TooManyRequests -> {
+                    429 -> {
                         if (attempt < maxRetries - 1) {
                             logger.warn("Rate limit exceeded, retrying after delay...")
                             delay(currentDelay)
@@ -142,9 +131,8 @@ class YandexGPTProvider(
                         }
                     }
                     else -> {
-                        val errorText = response.body<String>()
-                        logger.error("Yandex GPT API error: ${response.status}, body: $errorText")
-                        LLMResponse.error("Ошибка API: ${response.status}")
+                        logger.error("Yandex GPT API error: ${httpResponse.statusCode()}, body: ${httpResponse.body()}")
+                        LLMResponse.error("Ошибка API: ${httpResponse.statusCode()}")
                     }
                 }
                 
@@ -188,7 +176,7 @@ class YandexGPTProvider(
      */
     private fun shouldRetry(exception: Exception): Boolean {
         return when (exception) {
-            is HttpRequestTimeoutException -> true
+            is java.net.http.HttpTimeoutException -> true
             is java.net.SocketTimeoutException -> true
             is java.io.IOException -> true
             else -> exception.message?.contains("Rate limit") == true
