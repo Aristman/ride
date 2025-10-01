@@ -5,48 +5,48 @@
 
 ## Этапы реализации
 
-### 1. Базовая инфраструктура
-- [ ] Создать модели данных (Message, ChatContext, AgentResponse, LLMParameters, LLMResponse)
-- [ ] Создать enum MessageRole
-- [ ] Добавить зависимости в build.gradle.kts (Ktor Client, kotlinx.serialization)
+### 1. Базовая инфраструктура ✅
+- [x] Создать модели данных (Message, ChatContext, AgentResponse, LLMParameters, LLMResponse)
+- [x] Создать enum MessageRole
+- [x] Добавить зависимости в build.gradle.kts (Ktor Client, kotlinx.serialization)
 
-### 2. Integration Layer - Yandex GPT Provider
-- [ ] Создать интерфейс LLMProvider
-- [ ] Создать модели для Yandex GPT API (YandexGPTRequest, YandexGPTResponse)
-- [ ] Реализовать YandexGPTProvider с HTTP клиентом
-- [ ] Добавить обработку ошибок и retry логику
+### 2. Integration Layer - Yandex GPT Provider ✅
+- [x] Создать интерфейс LLMProvider
+- [x] Создать модели для Yandex GPT API (YandexGPTRequest, YandexGPTResponse)
+- [x] Реализовать YandexGPTProvider с HTTP клиентом
+- [x] Добавить обработку ошибок и retry логику
 - [ ] Покрыть unit тестами
 
-### 3. Agent Layer
-- [ ] Создать интерфейс Agent
-- [ ] Реализовать ChatAgent с dependency injection LLMProvider
-- [ ] Реализовать AgentFactory
+### 3. Agent Layer ✅
+- [x] Создать интерфейс Agent
+- [x] Реализовать ChatAgent с dependency injection LLMProvider
+- [x] Реализовать AgentFactory
 - [ ] Покрыть unit тестами
 
-### 4. Service Layer
-- [ ] Создать MessageHistory для хранения сообщений
-- [ ] Создать ChatService как Application Service
-- [ ] Интегрировать Agent в ChatService
+### 4. Service Layer ✅
+- [x] Создать MessageHistory для хранения сообщений
+- [x] Создать ChatService как Application Service
+- [x] Интегрировать Agent в ChatService
 - [ ] Покрыть unit тестами
 
-### 5. Configuration Layer
-- [ ] Создать PluginSettings (Persistent State Component)
-- [ ] Реализовать хранение API ключа через PasswordSafe
-- [ ] Создать SettingsConfigurable для UI настроек
-- [ ] Добавить валидацию настроек
+### 5. Configuration Layer ✅
+- [x] Создать PluginSettings (Persistent State Component)
+- [x] Реализовать хранение API ключа через PasswordSafe
+- [x] Создать SettingsConfigurable для UI настроек
+- [x] Добавить валидацию настроек
 
-### 6. UI Layer
-- [ ] Создать ChatToolWindowFactory
-- [ ] Реализовать ChatPanel с основными компонентами
-- [ ] Добавить MessageRenderer для отображения сообщений
-- [ ] Создать InputPanel для ввода текста
-- [ ] Интегрировать с ChatService
+### 6. UI Layer ✅
+- [x] Создать ChatToolWindowFactory
+- [x] Реализовать ChatPanel с основными компонентами
+- [x] Добавить MessageRenderer для отображения сообщений (встроено в ChatPanel)
+- [x] Создать InputPanel для ввода текста (встроено в ChatPanel)
+- [x] Интегрировать с ChatService
 - [ ] Создать инструментальные UI тесты
 
-### 7. Конфигурация плагина
-- [ ] Обновить plugin.xml (Tool Window, Settings, Actions)
+### 7. Конфигурация плагина ✅
+- [x] Обновить plugin.xml (Tool Window, Settings, Actions)
 - [ ] Добавить иконки
-- [ ] Настроить метаданные плагина
+- [x] Настроить метаданные плагина
 
 ### 8. Интеграция и тестирование
 - [ ] Интеграционные тесты для полного flow
