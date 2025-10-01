@@ -8,13 +8,36 @@
     <name>Ride</name>
 
     <!-- A displayed Vendor name or Organization ID displayed on the Plugins Page. -->
-    <vendor url="https://www.yourcompany.com">YourCompany</vendor>
+    <vendor email="your.email@example.com" url="https://github.com/yourusername/ride">MarsLab</vendor>
 
     <!-- Description of the plugin displayed on the Plugin Page and IDE Plugin Manager.
          Guidelines: https://plugins.jetbrains.com/docs/marketplace/best-practices-for-listing.html#plugin-description -->
     <description><![CDATA[
-        AI-ассистент для разработчиков с интеграцией Yandex GPT.<br>
-        Помогает с вопросами о коде, отладке и разработке прямо в IDE.
+        <h2>Ride - AI-ассистент для разработчиков</h2>
+        
+        <p>Интерактивный чат с AI прямо в вашей IDE! Получайте помощь с кодом, отладкой и разработкой через интеграцию с Yandex GPT.</p>
+        
+        <h3>Основные возможности:</h3>
+        <ul>
+            <li><strong>Интерактивный чат</strong> - общайтесь с AI-ассистентом прямо в IDE</li>
+            <li><strong>Yandex GPT интеграция</strong> - качественные ответы на русском и английском языках</li>
+            <li><strong>История диалогов</strong> - сохранение контекста в рамках сессии</li>
+            <li><strong>Безопасность</strong> - API ключи хранятся в PasswordSafe</li>
+            <li><strong>Асинхронность</strong> - не блокирует работу IDE</li>
+            <li><strong>Настройки</strong> - гибкая настройка промптов и параметров генерации</li>
+        </ul>
+        
+        <h3>Как использовать:</h3>
+        <ol>
+            <li>Получите API ключ от Yandex Cloud</li>
+            <li>Настройте плагин в Settings → Tools → Ride</li>
+            <li>Откройте Tool Window "Ride Chat"</li>
+            <li>Задавайте вопросы и получайте ответы!</li>
+        </ol>
+        
+        <p><strong>Требования:</strong> IntelliJ IDEA 2025.1.4.1+, JDK 21, Yandex Cloud аккаунт</p>
+        
+        <p>Исходный код: <a href="https://github.com/yourusername/ride">GitHub</a></p>
     ]]></description>
 
     <!-- Product and plugin compatibility requirements.
