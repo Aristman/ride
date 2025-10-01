@@ -2,6 +2,7 @@ plugins {
     id("java")
     id("org.jetbrains.kotlin.jvm") version "2.1.0"
     id("org.jetbrains.intellij.platform") version "2.7.1"
+    kotlin("plugin.serialization") version "2.1.0"
 }
 
 group = "ru.marslab.ide"
@@ -24,6 +25,25 @@ dependencies {
         // Add necessary plugin dependencies for compilation here, example:
         // bundledPlugin("com.intellij.java")
     }
+    
+    // Ktor Client for HTTP requests
+    implementation("io.ktor:ktor-client-core:2.3.7")
+    implementation("io.ktor:ktor-client-cio:2.3.7")
+    implementation("io.ktor:ktor-client-content-negotiation:2.3.7")
+    implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.7")
+    implementation("io.ktor:ktor-client-logging:2.3.7")
+    
+    // Kotlinx Serialization
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.2")
+    
+    // Coroutines (обычно уже включены в Kotlin, но явно укажем)
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.7.3")
+    
+    // Testing
+    testImplementation("org.jetbrains.kotlin:kotlin-test")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
+    testImplementation("io.mockk:mockk:1.13.8")
 }
 
 intellijPlatform {
