@@ -132,7 +132,7 @@ class ChatAgent(
     companion object {
         private const val HISTORY_LIMIT = 5
         
-        private const val DEFAULT_SYSTEM_PROMPT = """
+        private val DEFAULT_SYSTEM_PROMPT = """
 Ты - AI-ассистент для разработчиков в IntelliJ IDEA.
 Твоя задача - помогать программистам с их вопросами о коде, отладке и разработке.
 
