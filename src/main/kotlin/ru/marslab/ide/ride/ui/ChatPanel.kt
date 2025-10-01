@@ -109,17 +109,6 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
             return
         }
         
-        // Проверяем настройки
-        if (!settings.isConfigured()) {
-            JOptionPane.showMessageDialog(
-                this,
-                "Пожалуйста, настройте API ключ в Settings → Tools → Ride",
-                "Настройки не заданы",
-                JOptionPane.WARNING_MESSAGE
-            )
-            return
-        }
-        
         // Очищаем поле ввода
         inputArea.text = ""
         
@@ -130,7 +119,7 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         setUIEnabled(false)
         appendSystemMessage("⏳ Обработка запроса...")
         
-        // Отправляем запрос
+        // Отправляем запрос (проверка настроек будет в фоновом потоке)
         chatService.sendMessage(
             userMessage = text,
             project = project,

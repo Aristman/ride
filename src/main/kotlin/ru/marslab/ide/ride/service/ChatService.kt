@@ -1,5 +1,6 @@
 package ru.marslab.ide.ride.service
 
+import com.intellij.openapi.application.EDT
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
@@ -66,6 +67,15 @@ class ChatService {
         // Обрабатываем запрос асинхронно
         scope.launch {
             try {
+                // Проверяем настройки в фоновом потоке (не на EDT!)
+                val agent = getAgent()
+                if (!agent.getName().isNotBlank()) {
+                    withContext(Dispatchers.EDT) {
+                        onError("Плагин не настроен. Перейдите в Settings → Tools → Ride")
+                    }
+                    return@launch
+                }
+                
                 // Формируем контекст
                 val context = ChatContext(
                     project = project,
@@ -76,7 +86,7 @@ class ChatService {
                 val agentResponse = getAgent().processRequest(userMessage, context)
                 
                 // Обрабатываем ответ в UI потоке
-                withContext(Dispatchers.Main) {
+                withContext(Dispatchers.EDT) {
                     if (agentResponse.success) {
                         // Создаем и сохраняем сообщение ассистента
                         val assistantMsg = Message(
@@ -96,7 +106,7 @@ class ChatService {
                 
             } catch (e: Exception) {
                 logger.error("Error processing message", e)
-                withContext(Dispatchers.Main) {
+                withContext(Dispatchers.EDT) {
                     onError("Ошибка обработки сообщения: ${e.message}")
                 }
             }
