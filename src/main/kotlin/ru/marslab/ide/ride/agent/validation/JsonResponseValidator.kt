@@ -52,8 +52,8 @@ class JsonResponseValidator : ResponseValidator {
 
     private fun primitiveType(p: JsonPrimitive): String = when {
         p.isString -> "string"
-        p.booleanOrNull != null -> "boolean"
-        p.longOrNull != null || p.doubleOrNull != null -> "number"
+        p.content.toBooleanStrictOrNull() != null -> "boolean"
+        p.content.toLongOrNull() != null || p.content.toDoubleOrNull() != null -> "number"
         else -> "unknown"
     }
 }
