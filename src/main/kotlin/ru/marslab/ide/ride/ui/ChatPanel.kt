@@ -13,10 +13,15 @@ import ru.marslab.ide.ride.settings.ChatAppearanceListener
 import ru.marslab.ide.ride.settings.PluginSettings
 import java.awt.BorderLayout
 import java.awt.Dimension
+import java.awt.Toolkit
+import java.awt.datatransfer.StringSelection
 import java.awt.event.KeyAdapter
 import java.awt.event.KeyEvent
+import java.util.LinkedHashMap
+import java.util.UUID
 import javax.swing.*
 import javax.swing.SwingUtilities
+import javax.swing.event.HyperlinkEvent
 
 /**
  * Главная панель чата
@@ -28,6 +33,7 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
     
     private val chatHistoryArea: JEditorPane
     private val htmlBuffer = StringBuilder()
+    private val codeBlockRegistry = LinkedHashMap<String, String>()
     private var loadingStart: Int = -1
     private var loadingEnd: Int = -1
     private val inputArea: JBTextArea
@@ -41,6 +47,15 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
             contentType = "text/html"
             isEditable = false
             putClientProperty(JEditorPane.HONOR_DISPLAY_PROPERTIES, true)
+            addHyperlinkListener { event ->
+                if (event.eventType == HyperlinkEvent.EventType.ACTIVATED) {
+                    val description = event.description
+                    if (description != null && description.startsWith(COPY_LINK_PREFIX)) {
+                        val key = description.removePrefix(COPY_LINK_PREFIX)
+                        codeBlockRegistry[key]?.let { copyCodeToClipboard(it) }
+                    }
+                }
+            }
         }
         initHtml()
         subscribeToAppearanceChanges()
@@ -261,12 +276,15 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         loadingStart = -1
         loadingEnd = -1
         lastRole = null
+        codeBlockRegistry.clear()
         val fontSize = settings.chatFontSize
         val codeFontSize = (fontSize - 1).coerceAtLeast(10)
         val prefixColor = settings.chatPrefixColor
         val codeBg = settings.chatCodeBackgroundColor
         val codeText = settings.chatCodeTextColor
         val codeBorder = settings.chatCodeBorderColor
+        val userBg = settings.chatUserBackgroundColor
+        val userBorder = settings.chatUserBorderColor
 
         htmlBuffer.append(
             """
@@ -277,9 +295,20 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                     .msg { margin-top: 8px; margin-left: 8px; margin-right: 8px; margin-bottom: 12px; }
                     .prefix { color: $prefixColor; margin-bottom: 4px; }
                     .content { }
+                    .msg.user .prefix { color: $prefixColor; margin-bottom: 6px; }
+                    .msg.user .content { display: inline-block; background-color: $userBg; border: 1px solid $userBorder; padding: 10px 14px; color: inherit; text-align: left; }
+                    .msg.user .content table.code-block { margin-top: 12px; }
                     /* Code block styling (configurable) */
                     pre { background-color: $codeBg; color: $codeText; padding: 8px; border: 1px solid $codeBorder; }
+                    pre { margin: 0; }
                     code { font-family: monospace; font-size: ${codeFontSize}px; color: $codeText; }
+                    table.code-block { width: 100%; border-collapse: collapse; margin-top: 8px; }
+                    table.code-block td { padding: 0; }
+                    td.code-lang { font-size: ${codeFontSize - 1}px; color: $prefixColor; padding: 4px 6px; }
+                    td.code-copy-cell { text-align: right; padding: 4px 6px; }
+                    a.code-copy-link { color: $prefixColor; text-decoration: none; display: inline-block; width: 20px; height: 20px; text-align: center; line-height: 20px; }
+                    a.code-copy-link:hover { background-color: $userBorder; }
+                    .code-copy-icon { font-size: ${codeFontSize}px; line-height: 1; font-family: 'Segoe UI Symbol', 'Apple Color Emoji', sans-serif; }
                     .msg.user { text-align: right; }
                     .msg.user .prefix { text-align: right; }
                     .msg.user .content { text-align: right; }
@@ -342,7 +371,13 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                 }
             }.getOrDefault(code)
             val escaped = escapeHtml(code)
-            result.append("<pre><code class='lang-$normalizedLang'>").append(escaped).append("</code></pre>")
+            val codeId = registerCodeBlock(code)
+            val langLabel = normalizedLang.takeUnless { it.isBlank() || it == "text" }?.uppercase() ?: ""
+            result.append("<table class='code-block'>")
+            result.append("<tr><td class='code-lang'>").append(escapeHtml(langLabel)).append("</td>")
+            result.append("<td class='code-copy-cell'><a href='${COPY_LINK_PREFIX}$codeId' class='code-copy-link' title='Скопировать'><span class='code-copy-icon'>&#128203;</span></a></td></tr>")
+            result.append("<tr><td colspan='2'><pre><code class='lang-$normalizedLang'>").append(escaped).append("</code></pre></td></tr>")
+            result.append("</table>")
             lastIndex = m.range.last + 1
         }
         // Хвост
@@ -428,6 +463,8 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
             "yaml" to "yaml",
             "md" to "markdown"
         )
+        private const val COPY_LINK_PREFIX = "ride-copy:"
+        private const val CODE_CACHE_LIMIT = 200
     }
 
     private fun subscribeToAppearanceChanges() {
@@ -450,5 +487,23 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         if (!settings.isConfigured()) {
             appendSystemMessage("⚠️ Плагин не настроен. Перейдите в Settings → Tools → Ride для настройки API ключа.")
         }
+    }
+
+    private fun registerCodeBlock(code: String): String {
+        if (codeBlockRegistry.size >= CODE_CACHE_LIMIT) {
+            val iterator = codeBlockRegistry.entries.iterator()
+            if (iterator.hasNext()) {
+                iterator.next()
+                iterator.remove()
+            }
+        }
+        val key = "code-" + UUID.randomUUID().toString()
+        codeBlockRegistry[key] = code
+        return key
+    }
+
+    private fun copyCodeToClipboard(code: String) {
+        val clipboard = Toolkit.getDefaultToolkit().systemClipboard
+        clipboard.setContents(StringSelection(code), null)
     }
 }

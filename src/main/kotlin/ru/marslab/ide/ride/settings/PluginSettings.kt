@@ -110,6 +110,24 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
         set(value) {
             state.chatCodeBorderColor = normalizeColor(value, PluginSettingsState.DEFAULT_CODE_BORDER_COLOR)
         }
+
+    /**
+     * Цвет фона сообщений пользователя
+     */
+    var chatUserBackgroundColor: String
+        get() = state.chatUserBackgroundColor
+        set(value) {
+            state.chatUserBackgroundColor = normalizeColor(value, PluginSettingsState.DEFAULT_USER_BACKGROUND_COLOR)
+        }
+
+    /**
+     * Цвет рамки сообщений пользователя
+     */
+    var chatUserBorderColor: String
+        get() = state.chatUserBorderColor
+        set(value) {
+            state.chatUserBorderColor = normalizeColor(value, PluginSettingsState.DEFAULT_USER_BORDER_COLOR)
+        }
     
     /**
      * Сохраняет API ключ в безопасном хранилище
@@ -171,6 +189,8 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
         state.chatCodeBackgroundColor = normalizeColor(state.chatCodeBackgroundColor, PluginSettingsState.DEFAULT_CODE_BACKGROUND_COLOR)
         state.chatCodeTextColor = normalizeColor(state.chatCodeTextColor, PluginSettingsState.DEFAULT_CODE_TEXT_COLOR)
         state.chatCodeBorderColor = normalizeColor(state.chatCodeBorderColor, PluginSettingsState.DEFAULT_CODE_BORDER_COLOR)
+        state.chatUserBackgroundColor = normalizeColor(state.chatUserBackgroundColor, PluginSettingsState.DEFAULT_USER_BACKGROUND_COLOR)
+        state.chatUserBorderColor = normalizeColor(state.chatUserBorderColor, PluginSettingsState.DEFAULT_USER_BORDER_COLOR)
     }
 
     private fun normalizeColor(value: String?, default: String): String {

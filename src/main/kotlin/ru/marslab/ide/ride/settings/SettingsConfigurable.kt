@@ -1,5 +1,6 @@
 package ru.marslab.ide.ride.settings
 
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.options.Configurable
 import com.intellij.openapi.ui.DialogPanel
@@ -9,8 +10,10 @@ import com.intellij.ui.components.JBTextArea
 import com.intellij.ui.components.JBTextField
 import com.intellij.ui.components.JBTabbedPane
 import com.intellij.ui.dsl.builder.*
+import com.intellij.util.SlowOperations
 import java.awt.Color
 import javax.swing.JComponent
+import javax.swing.SwingUtilities
 
 /**
  * UI для настроек плагина в IDE Settings
@@ -29,8 +32,12 @@ class SettingsConfigurable : Configurable {
     private lateinit var chatCodeBackgroundPanel: ColorPanel
     private lateinit var chatCodeTextPanel: ColorPanel
     private lateinit var chatCodeBorderPanel: ColorPanel
+    private lateinit var chatUserBackgroundPanel: ColorPanel
+    private lateinit var chatUserBorderPanel: ColorPanel
 
     private var panel: DialogPanel? = null
+    private var initialApiKey: String = ""
+    private var apiKeyLoaded = false
 
     override fun getDisplayName(): String = "Ride"
 
@@ -56,7 +63,13 @@ class SettingsConfigurable : Configurable {
     }
 
     override fun isModified(): Boolean {
-        return apiKeyField.password.concatToString() != settings.getApiKey() ||
+        val apiKeyModified = if (apiKeyLoaded) {
+            apiKeyField.password.concatToString() != initialApiKey
+        } else {
+            false
+        }
+
+        return apiKeyModified ||
                 folderIdField.text != settings.folderId ||
                 systemPromptArea.text != settings.systemPrompt ||
                 temperatureField.text != settings.temperature.toString() ||
@@ -77,7 +90,15 @@ class SettingsConfigurable : Configurable {
                 colorToHex(
                     chatCodeBorderPanel.selectedColor,
                     PluginSettingsState.DEFAULT_CODE_BORDER_COLOR
-                ) != settings.chatCodeBorderColor
+                ) != settings.chatCodeBorderColor ||
+                colorToHex(
+                    chatUserBackgroundPanel.selectedColor,
+                    PluginSettingsState.DEFAULT_USER_BACKGROUND_COLOR
+                ) != settings.chatUserBackgroundColor ||
+                colorToHex(
+                    chatUserBorderPanel.selectedColor,
+                    PluginSettingsState.DEFAULT_USER_BORDER_COLOR
+                ) != settings.chatUserBorderColor
     }
 
     override fun apply() {
@@ -118,6 +139,13 @@ class SettingsConfigurable : Configurable {
             colorToHex(chatCodeTextPanel.selectedColor, PluginSettingsState.DEFAULT_CODE_TEXT_COLOR)
         settings.chatCodeBorderColor =
             colorToHex(chatCodeBorderPanel.selectedColor, PluginSettingsState.DEFAULT_CODE_BORDER_COLOR)
+        settings.chatUserBackgroundColor =
+            colorToHex(chatUserBackgroundPanel.selectedColor, PluginSettingsState.DEFAULT_USER_BACKGROUND_COLOR)
+        settings.chatUserBorderColor =
+            colorToHex(chatUserBorderPanel.selectedColor, PluginSettingsState.DEFAULT_USER_BORDER_COLOR)
+
+        initialApiKey = apiKey
+        apiKeyLoaded = true
 
         // Пересоздаем агента с новыми настройками
         service<ru.marslab.ide.ride.service.ChatService>().recreateAgent()
@@ -125,7 +153,17 @@ class SettingsConfigurable : Configurable {
 
     override fun reset() {
         // Загружаем текущие настройки
-        apiKeyField.text = settings.getApiKey()
+        apiKeyLoaded = false
+        initialApiKey = ""
+        apiKeyField.text = ""
+        ApplicationManager.getApplication().executeOnPooledThread {
+            val key = settings.getApiKey()
+            SwingUtilities.invokeLater {
+                initialApiKey = key
+                apiKeyLoaded = true
+                apiKeyField.text = key
+            }
+        }
         folderIdField.text = settings.folderId
         systemPromptArea.text = settings.systemPrompt
         temperatureField.text = settings.temperature.toString()
@@ -139,6 +177,10 @@ class SettingsConfigurable : Configurable {
             parseColor(settings.chatCodeTextColor, PluginSettingsState.DEFAULT_CODE_TEXT_COLOR)
         chatCodeBorderPanel.selectedColor =
             parseColor(settings.chatCodeBorderColor, PluginSettingsState.DEFAULT_CODE_BORDER_COLOR)
+        chatUserBackgroundPanel.selectedColor =
+            parseColor(settings.chatUserBackgroundColor, PluginSettingsState.DEFAULT_USER_BACKGROUND_COLOR)
+        chatUserBorderPanel.selectedColor =
+            parseColor(settings.chatUserBorderColor, PluginSettingsState.DEFAULT_USER_BORDER_COLOR)
     }
 
     override fun disposeUIResources() {
@@ -174,12 +216,10 @@ class SettingsConfigurable : Configurable {
         row {
             comment(
                 """
-                <html>
-                <b>Как получить API ключ:</b><br>
-                1. Перейдите в <a href="https://console.cloud.yandex.ru">Yandex Cloud Console</a><br>
-                2. Создайте API ключ в разделе "Сервисные аккаунты"<br>
+                Как получить API ключ:
+                1. Перейдите в Yandex Cloud Console
+                2. Создайте API ключ в разделе "Сервисные аккаунты"
                 3. Скопируйте Folder ID из настроек проекта
-                </html>
             """.trimIndent()
             )
         }
@@ -191,7 +231,7 @@ class SettingsConfigurable : Configurable {
                 chatFontSizeField = JBTextField()
                 cell(chatFontSizeField)
                     .columns(8)
-                    .comment("Размер шрифта (10-32)")
+                    .comment("Размер шрифта (8-32)")
             }
 
             row("Font Color:") {
@@ -218,6 +258,20 @@ class SettingsConfigurable : Configurable {
             row("Border:") {
                 chatCodeBorderPanel = ColorPanel()
                 cell(chatCodeBorderPanel)
+                    .align(AlignX.LEFT)
+            }
+        }
+
+        group("User Message Colors") {
+            row("Background:") {
+                chatUserBackgroundPanel = ColorPanel()
+                cell(chatUserBackgroundPanel)
+                    .align(AlignX.LEFT)
+            }
+
+            row("Border:") {
+                chatUserBorderPanel = ColorPanel()
+                cell(chatUserBorderPanel)
                     .align(AlignX.LEFT)
             }
         }
