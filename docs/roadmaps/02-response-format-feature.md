@@ -95,13 +95,17 @@ val schema = ResponseSchema.json("""
 {
   "answer": "string",
   "confidence": "number",
-  "sources": ["string"]
+  "sources": [{"string"}]
 }
 
 {
   "title": "string",
   "items": [
-    { "name": "string", "value_name": "String", "value": "number" }
+    { 
+      "name": "string",
+      "value_name": "String",
+      "value": "number" 
+    }
   ]
 }
 """)
