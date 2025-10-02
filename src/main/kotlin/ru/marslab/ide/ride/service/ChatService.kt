@@ -22,6 +22,10 @@ class ChatService {
     private val messageHistory = MessageHistory()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     
+    // Текущие настройки формата ответа (для UI)
+    private var currentFormat: ResponseFormat? = null
+    private var currentSchema: ResponseSchema? = null
+    
     // Агент создается лениво при первом использовании
     private var agent: Agent? = null
     
@@ -155,6 +159,8 @@ class ChatService {
     fun setResponseFormat(format: ResponseFormat, schema: ResponseSchema?) {
         getAgent().setResponseFormat(format, schema)
         logger.info("Response format set to: $format")
+        currentFormat = format
+        currentSchema = schema
     }
 
     /**
@@ -163,12 +169,19 @@ class ChatService {
     fun clearResponseFormat() {
         getAgent().clearResponseFormat()
         logger.info("Response format cleared")
+        currentFormat = null
+        currentSchema = null
     }
 
     /**
      * Возвращает текущий установленный формат ответа
      */
-    fun getResponseFormat(): ResponseFormat? = getAgent().getResponseFormat()
+    fun getResponseFormat(): ResponseFormat? = currentFormat ?: getAgent().getResponseFormat()
+
+    /**
+     * Возвращает текущую схему ответа (если была задана)
+     */
+    fun getResponseSchema(): ResponseSchema? = currentSchema
 
     /**
      * Освобождает ресурсы при закрытии

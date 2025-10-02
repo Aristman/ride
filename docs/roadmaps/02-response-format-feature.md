@@ -97,6 +97,13 @@ val schema = ResponseSchema.json("""
   "confidence": "number",
   "sources": ["string"]
 }
+
+{
+  "title": "string",
+  "items": [
+    { "name": "string", "value_name": "String", "value": "number" }
+  ]
+}
 """)
 agent.setResponseFormat(ResponseFormat.JSON, schema)
 val response = agent.processRequest("Что такое Kotlin?", context)
