@@ -21,6 +21,11 @@ class SettingsConfigurable : Configurable {
     private lateinit var systemPromptArea: JBTextArea
     private lateinit var temperatureField: JBTextField
     private lateinit var maxTokensField: JBTextField
+    private lateinit var chatFontSizeField: JBTextField
+    private lateinit var chatPrefixColorField: JBTextField
+    private lateinit var chatCodeBackgroundField: JBTextField
+    private lateinit var chatCodeTextField: JBTextField
+    private lateinit var chatCodeBorderField: JBTextField
     
     private var panel: DialogPanel? = null
     
@@ -41,6 +46,43 @@ class SettingsConfigurable : Configurable {
                     cell(folderIdField)
                         .columns(COLUMNS_LARGE)
                         .comment("Folder ID из Yandex Cloud")
+                }
+            }
+
+            group("Chat Appearance") {
+                row("Font Size:") {
+                    chatFontSizeField = JBTextField()
+                    cell(chatFontSizeField)
+                        .columns(8)
+                        .comment("Размер шрифта (10-32)")
+                }
+
+                row("Prefix Color:") {
+                    chatPrefixColorField = JBTextField()
+                    cell(chatPrefixColorField)
+                        .columns(12)
+                        .comment("Цвет префикса сообщений (HEX, например #6b6b6b)")
+                }
+
+                row("Code Background:") {
+                    chatCodeBackgroundField = JBTextField()
+                    cell(chatCodeBackgroundField)
+                        .columns(12)
+                        .comment("Фон кодовых блоков (HEX)")
+                }
+
+                row("Code Text Color:") {
+                    chatCodeTextField = JBTextField()
+                    cell(chatCodeTextField)
+                        .columns(12)
+                        .comment("Цвет текста в кодовых блоках (HEX)")
+                }
+
+                row("Code Border Color:") {
+                    chatCodeBorderField = JBTextField()
+                    cell(chatCodeBorderField)
+                        .columns(12)
+                        .comment("Цвет рамки кодовых блоков (HEX)")
                 }
             }
             
@@ -89,7 +131,12 @@ class SettingsConfigurable : Configurable {
                 folderIdField.text != settings.folderId ||
                 systemPromptArea.text != settings.systemPrompt ||
                 temperatureField.text != settings.temperature.toString() ||
-                maxTokensField.text != settings.maxTokens.toString()
+                maxTokensField.text != settings.maxTokens.toString() ||
+                chatFontSizeField.text != settings.chatFontSize.toString() ||
+                chatPrefixColorField.text != settings.chatPrefixColor ||
+                chatCodeBackgroundField.text != settings.chatCodeBackgroundColor ||
+                chatCodeTextField.text != settings.chatCodeTextColor ||
+                chatCodeBorderField.text != settings.chatCodeBorderColor
     }
     
     override fun apply() {
@@ -115,6 +162,17 @@ class SettingsConfigurable : Configurable {
         } catch (e: NumberFormatException) {
             settings.maxTokens = 2000
         }
+
+        try {
+            settings.chatFontSize = chatFontSizeField.text.toInt()
+        } catch (e: NumberFormatException) {
+            settings.chatFontSize = PluginSettingsState.DEFAULT_CHAT_FONT_SIZE
+        }
+
+        settings.chatPrefixColor = chatPrefixColorField.text
+        settings.chatCodeBackgroundColor = chatCodeBackgroundField.text
+        settings.chatCodeTextColor = chatCodeTextField.text
+        settings.chatCodeBorderColor = chatCodeBorderField.text
         
         // Пересоздаем агента с новыми настройками
         service<ru.marslab.ide.ride.service.ChatService>().recreateAgent()
@@ -127,6 +185,11 @@ class SettingsConfigurable : Configurable {
         systemPromptArea.text = settings.systemPrompt
         temperatureField.text = settings.temperature.toString()
         maxTokensField.text = settings.maxTokens.toString()
+        chatFontSizeField.text = settings.chatFontSize.toString()
+        chatPrefixColorField.text = settings.chatPrefixColor
+        chatCodeBackgroundField.text = settings.chatCodeBackgroundColor
+        chatCodeTextField.text = settings.chatCodeTextColor
+        chatCodeBorderField.text = settings.chatCodeBorderColor
     }
     
     override fun disposeUIResources() {

@@ -21,11 +21,13 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
     private var state = PluginSettingsState()
     
     override fun getState(): PluginSettingsState {
+        ensureDefaults()
         return state
     }
     
     override fun loadState(state: PluginSettingsState) {
         this.state = state
+        ensureDefaults()
     }
     
     /**
@@ -62,6 +64,51 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
         get() = state.maxTokens
         set(value) {
             state.maxTokens = value.coerceAtLeast(1)
+        }
+    
+    /**
+     * Размер шрифта в окне чата
+     */
+    var chatFontSize: Int
+        get() = state.chatFontSize
+        set(value) {
+            state.chatFontSize = value.coerceIn(10, 32)
+        }
+
+    /**
+     * Цвет заголовка сообщений (префиксов)
+     */
+    var chatPrefixColor: String
+        get() = state.chatPrefixColor
+        set(value) {
+            state.chatPrefixColor = normalizeColor(value, PluginSettingsState.DEFAULT_PREFIX_COLOR)
+        }
+
+    /**
+     * Цвет фона кодовых блоков
+     */
+    var chatCodeBackgroundColor: String
+        get() = state.chatCodeBackgroundColor
+        set(value) {
+            state.chatCodeBackgroundColor = normalizeColor(value, PluginSettingsState.DEFAULT_CODE_BACKGROUND_COLOR)
+        }
+
+    /**
+     * Цвет текста в кодовых блоках
+     */
+    var chatCodeTextColor: String
+        get() = state.chatCodeTextColor
+        set(value) {
+            state.chatCodeTextColor = normalizeColor(value, PluginSettingsState.DEFAULT_CODE_TEXT_COLOR)
+        }
+
+    /**
+     * Цвет рамки кодовых блоков
+     */
+    var chatCodeBorderColor: String
+        get() = state.chatCodeBorderColor
+        set(value) {
+            state.chatCodeBorderColor = normalizeColor(value, PluginSettingsState.DEFAULT_CODE_BORDER_COLOR)
         }
     
     /**
@@ -115,5 +162,19 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
     companion object {
         private const val SERVICE_NAME = "ru.marslab.ide.ride.yandexgpt"
         private const val API_KEY_USERNAME = "api_key"
+        private val COLOR_REGEX = Regex("^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
+    }
+
+    private fun ensureDefaults() {
+        state.chatFontSize = state.chatFontSize.takeIf { it in 10..32 } ?: PluginSettingsState.DEFAULT_CHAT_FONT_SIZE
+        state.chatPrefixColor = normalizeColor(state.chatPrefixColor, PluginSettingsState.DEFAULT_PREFIX_COLOR)
+        state.chatCodeBackgroundColor = normalizeColor(state.chatCodeBackgroundColor, PluginSettingsState.DEFAULT_CODE_BACKGROUND_COLOR)
+        state.chatCodeTextColor = normalizeColor(state.chatCodeTextColor, PluginSettingsState.DEFAULT_CODE_TEXT_COLOR)
+        state.chatCodeBorderColor = normalizeColor(state.chatCodeBorderColor, PluginSettingsState.DEFAULT_CODE_BORDER_COLOR)
+    }
+
+    private fun normalizeColor(value: String?, default: String): String {
+        val trimmed = value?.trim().orEmpty()
+        return if (COLOR_REGEX.matches(trimmed)) trimmed else default
     }
 }
