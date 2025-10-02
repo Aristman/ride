@@ -100,13 +100,7 @@ val schema = ResponseSchema.json("""
 
 {
   "title": "string",
-  "items": [
-    { 
-      "name": "string",
-      "value_name": "String",
-      "value": "number" 
-    }
-  ]
+  "items": [{"name": "string", "value_name": "String", "value": "number" }]
 }
 """)
 agent.setResponseFormat(ResponseFormat.JSON, schema)
