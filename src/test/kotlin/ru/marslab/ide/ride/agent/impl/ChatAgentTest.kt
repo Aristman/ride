@@ -1,8 +1,10 @@
 package ru.marslab.ide.ride.agent.impl
 
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -141,5 +143,72 @@ class ChatAgentTest {
 
         val response = agent.processRequest("Test", context)
         assertEquals(null, response.parsedContent)
+    }
+
+    @Test
+    fun `passes only assistant history to provider`() = runTest {
+        val provider = mockk<LLMProvider> {
+            every { isAvailable() } returns true
+            every { getProviderName() } returns "MockProvider"
+        }
+
+        val assistantHistorySlot = slot<List<String>>()
+
+        coEvery {
+            provider.sendRequest(any(), any(), capture(assistantHistorySlot), any())
+        } returns LLMResponse.success("History test", tokensUsed = 5)
+
+        val agent = ChatAgent(provider)
+
+        val history = listOf(
+            Message(content = "Hello", role = MessageRole.USER),
+            Message(content = "Answer 1", role = MessageRole.ASSISTANT),
+            Message(content = "Instruction", role = MessageRole.SYSTEM),
+            Message(content = "Answer 2", role = MessageRole.ASSISTANT)
+        )
+
+        val context = mockk<ChatContext> {
+            every { getRecentHistory(any()) } returns history
+        }
+
+        agent.processRequest("Test request", context)
+
+        assertTrue(assistantHistorySlot.isCaptured)
+        assertEquals(listOf("Answer 1", "Answer 2"), assistantHistorySlot.captured)
+    }
+
+    @Test
+    fun `extends system prompt with schema instructions via PromptFormatter`() = runTest {
+        val provider = mockk<LLMProvider> {
+            every { isAvailable() } returns true
+            every { getProviderName() } returns "MockProvider"
+        }
+
+        val systemPromptSlot = slot<String>()
+
+        coEvery {
+            provider.sendRequest(capture(systemPromptSlot), any(), any(), any())
+        } returns LLMResponse.success("Schema test", tokensUsed = 5)
+
+        val agent = ChatAgent(provider)
+        val context = createMockContext()
+
+        val schema = ResponseSchema.json(
+            """{"answer": "string"}""",
+            "Предоставь ответ в JSON с ключом answer"
+        )
+        agent.setResponseFormat(ResponseFormat.JSON, schema)
+
+        agent.processRequest("What is Kotlin?", context)
+
+        assertTrue(systemPromptSlot.isCaptured)
+        val capturedPrompt = systemPromptSlot.captured
+        assertTrue(capturedPrompt.contains("Ты - AI-ассистент для разработчиков"))
+        assertTrue(capturedPrompt.contains("ВАЖНО: Ответ должен быть в формате JSON."))
+        assertTrue(capturedPrompt.contains("\"answer\""))
+
+        coVerify {
+            provider.sendRequest(systemPromptSlot.captured, any(), any(), any())
+        }
     }
 }
