@@ -161,6 +161,25 @@ class ChatService {
         logger.info("Response format set to: $format")
         currentFormat = format
         currentSchema = schema
+        // Добавляем системное сообщение в историю, чтобы переопределить контекст LLM
+        val schemaHint = when (format) {
+            ResponseFormat.JSON -> (schema?.schemaDefinition ?: "{}")
+            ResponseFormat.XML -> (schema?.schemaDefinition ?: "<root/>")
+            ResponseFormat.TEXT -> ""
+        }
+        val content = buildString {
+            append("Формат ответа изменён на ")
+            append(format.name)
+            if (schemaHint.isNotBlank()) {
+                append(". Следуй СТРОГО схеме без пояснений и текста вне структуры.\nСхема:\n")
+                append(schemaHint)
+            } else if (format == ResponseFormat.TEXT) {
+                append(". Отвечай обычным текстом без дополнительной разметки.")
+            }
+        }
+        messageHistory.addMessage(
+            Message(content = content, role = MessageRole.SYSTEM)
+        )
     }
 
     /**
@@ -171,6 +190,12 @@ class ChatService {
         logger.info("Response format cleared")
         currentFormat = null
         currentSchema = null
+        messageHistory.addMessage(
+            Message(
+                content = "Формат ответа сброшен. Отвечай обычным текстом без пояснений о формате.",
+                role = MessageRole.SYSTEM
+            )
+        )
     }
 
     /**
