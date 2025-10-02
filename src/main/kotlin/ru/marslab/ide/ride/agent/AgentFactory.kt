@@ -25,9 +25,10 @@ object AgentFactory {
         // Получаем настройки для Yandex GPT
         val apiKey = settings.getApiKey()
         val folderId = settings.folderId
+        val modelId = settings.yandexModelId
         
         // Создаем провайдер
-        val llmProvider = createYandexGPTProvider(apiKey, folderId)
+        val llmProvider = createYandexGPTProvider(apiKey, folderId, modelId)
         
         // Создаем агента с провайдером
         return ChatAgent(
@@ -79,10 +80,11 @@ object AgentFactory {
     /**
      * Создает провайдер Yandex GPT с указанными настройками
      */
-    private fun createYandexGPTProvider(apiKey: String, folderId: String): LLMProvider {
+    private fun createYandexGPTProvider(apiKey: String, folderId: String, modelId: String): LLMProvider {
         val config = YandexGPTConfig(
             apiKey = apiKey,
-            folderId = folderId
+            folderId = folderId,
+            modelId = modelId
         )
         return YandexGPTProvider(config)
     }

@@ -19,7 +19,8 @@ import java.time.Duration
 data class YandexGPTConfig(
     val apiKey: String,
     val folderId: String,
-    val modelUri: String = "gpt://$folderId/yandexgpt-lite/latest",
+    val modelId: String = "yandexgpt-lite",
+    val modelUri: String = "gpt://$folderId/${modelId}/latest",
     val timeout: Long = 60000 // 60 секунд
 )
 

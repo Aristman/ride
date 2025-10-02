@@ -4,6 +4,7 @@ import com.intellij.credentialStore.CredentialAttributes
 import com.intellij.credentialStore.Credentials
 import com.intellij.ide.passwordSafe.PasswordSafe
 import com.intellij.openapi.components.*
+import java.util.LinkedHashMap
 
 /**
  * Сервис для хранения настроек плагина
@@ -128,6 +129,15 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
         set(value) {
             state.chatUserBorderColor = normalizeColor(value, PluginSettingsState.DEFAULT_USER_BORDER_COLOR)
         }
+
+    /**
+     * Текущий идентификатор модели Yandex для генерации
+     */
+    var yandexModelId: String
+        get() = state.yandexModelId
+        set(value) {
+            state.yandexModelId = normalizeModelId(value)
+        }
     
     /**
      * Сохраняет API ключ в безопасном хранилище
@@ -181,6 +191,13 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
         private const val SERVICE_NAME = "ru.marslab.ide.ride.yandexgpt"
         private const val API_KEY_USERNAME = "api_key"
         private val COLOR_REGEX = Regex("^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
+        val AVAILABLE_YANDEX_MODELS: LinkedHashMap<String, String> = linkedMapOf(
+            "yandexgpt-lite" to "YandexGPT Lite",
+            "yandexgpt" to "YandexGPT",
+//            "qwen3-235b-a22b-fp8" to "Qwen3 235B (fp8)",
+//            "gpt-oss-120b" to "GPT-OSS 120B",
+//            "gpt-oss-20b" to "GPT-OSS 20B"
+        )
     }
 
     private fun ensureDefaults() {
@@ -191,10 +208,16 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
         state.chatCodeBorderColor = normalizeColor(state.chatCodeBorderColor, PluginSettingsState.DEFAULT_CODE_BORDER_COLOR)
         state.chatUserBackgroundColor = normalizeColor(state.chatUserBackgroundColor, PluginSettingsState.DEFAULT_USER_BACKGROUND_COLOR)
         state.chatUserBorderColor = normalizeColor(state.chatUserBorderColor, PluginSettingsState.DEFAULT_USER_BORDER_COLOR)
+        state.yandexModelId = normalizeModelId(state.yandexModelId)
     }
 
     private fun normalizeColor(value: String?, default: String): String {
         val trimmed = value?.trim().orEmpty()
         return if (COLOR_REGEX.matches(trimmed)) trimmed else default
+    }
+
+    private fun normalizeModelId(value: String?): String {
+        val normalized = value?.trim().orEmpty()
+        return if (AVAILABLE_YANDEX_MODELS.containsKey(normalized)) normalized else PluginSettingsState.DEFAULT_YANDEX_MODEL_ID
     }
 }

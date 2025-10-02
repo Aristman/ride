@@ -16,7 +16,8 @@ data class PluginSettingsState(
     var chatCodeTextColor: String = DEFAULT_CODE_TEXT_COLOR,
     var chatCodeBorderColor: String = DEFAULT_CODE_BORDER_COLOR,
     var chatUserBackgroundColor: String = DEFAULT_USER_BACKGROUND_COLOR,
-    var chatUserBorderColor: String = DEFAULT_USER_BORDER_COLOR
+    var chatUserBorderColor: String = DEFAULT_USER_BORDER_COLOR,
+    var yandexModelId: String = DEFAULT_YANDEX_MODEL_ID
 ) {
     companion object {
         const val DEFAULT_SYSTEM_PROMPT = """Ты - AI-ассистент для разработчиков в IntelliJ IDEA.
@@ -38,5 +39,6 @@ data class PluginSettingsState(
         const val DEFAULT_CODE_BORDER_COLOR = "#444444"
         const val DEFAULT_USER_BACKGROUND_COLOR = "#e3ecff"
         const val DEFAULT_USER_BORDER_COLOR = "#6d8fd8"
+        const val DEFAULT_YANDEX_MODEL_ID = "yandexgpt-lite"
     }
 }

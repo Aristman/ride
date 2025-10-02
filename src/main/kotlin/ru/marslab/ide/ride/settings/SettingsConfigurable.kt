@@ -3,6 +3,7 @@ package ru.marslab.ide.ride.settings
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.options.Configurable
+import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.DialogPanel
 import com.intellij.ui.ColorPanel
 import com.intellij.ui.components.JBPasswordField
@@ -34,6 +35,7 @@ class SettingsConfigurable : Configurable {
     private lateinit var chatCodeBorderPanel: ColorPanel
     private lateinit var chatUserBackgroundPanel: ColorPanel
     private lateinit var chatUserBorderPanel: ColorPanel
+    private lateinit var modelComboBox: ComboBox<String>
 
     private var panel: DialogPanel? = null
     private var initialApiKey: String = ""
@@ -69,6 +71,8 @@ class SettingsConfigurable : Configurable {
             false
         }
 
+        val selectedModel = (modelComboBox.selectedItem as? String)?.trim().orEmpty()
+
         return apiKeyModified ||
                 folderIdField.text != settings.folderId ||
                 systemPromptArea.text != settings.systemPrompt ||
@@ -98,7 +102,8 @@ class SettingsConfigurable : Configurable {
                 colorToHex(
                     chatUserBorderPanel.selectedColor,
                     PluginSettingsState.DEFAULT_USER_BORDER_COLOR
-                ) != settings.chatUserBorderColor
+                ) != settings.chatUserBorderColor ||
+                selectedModel != settings.yandexModelId
     }
 
     override fun apply() {
@@ -111,6 +116,7 @@ class SettingsConfigurable : Configurable {
         // Сохраняем остальные настройки
         settings.folderId = folderIdField.text.trim()
         settings.systemPrompt = systemPromptArea.text
+        settings.yandexModelId = modelComboBox.selectedItem as? String ?: PluginSettingsState.DEFAULT_YANDEX_MODEL_ID
 
         // Валидация и сохранение числовых параметров
         try {
@@ -165,6 +171,7 @@ class SettingsConfigurable : Configurable {
             }
         }
         folderIdField.text = settings.folderId
+        modelComboBox.selectedItem = settings.yandexModelId
         systemPromptArea.text = settings.systemPrompt
         temperatureField.text = settings.temperature.toString()
         maxTokensField.text = settings.maxTokens.toString()
@@ -210,6 +217,27 @@ class SettingsConfigurable : Configurable {
                 cell(folderIdField)
                     .columns(COLUMNS_LARGE)
                     .comment("Folder ID из Yandex Cloud")
+            }
+
+            row("Model:") {
+                modelComboBox = comboBox(PluginSettings.AVAILABLE_YANDEX_MODELS.keys.toList())
+                    .applyToComponent {
+                        renderer = object : javax.swing.DefaultListCellRenderer() {
+                            override fun getListCellRendererComponent(
+                                list: javax.swing.JList<*>,
+                                value: Any?,
+                                index: Int,
+                                isSelected: Boolean,
+                                cellHasFocus: Boolean
+                            ): java.awt.Component {
+                                val component = super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus)
+                                val key = value as? String
+                                text = PluginSettings.AVAILABLE_YANDEX_MODELS[key] ?: key.orEmpty()
+                                return component
+                            }
+                        }
+                    }
+                    .component
             }
         }
 
