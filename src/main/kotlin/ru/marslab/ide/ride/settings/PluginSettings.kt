@@ -166,7 +166,7 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
     }
 
     private fun ensureDefaults() {
-        state.chatFontSize = state.chatFontSize.takeIf { it in 10..32 } ?: PluginSettingsState.DEFAULT_CHAT_FONT_SIZE
+        state.chatFontSize = state.chatFontSize.takeIf { it in 8..32 } ?: PluginSettingsState.DEFAULT_CHAT_FONT_SIZE
         state.chatPrefixColor = normalizeColor(state.chatPrefixColor, PluginSettingsState.DEFAULT_PREFIX_COLOR)
         state.chatCodeBackgroundColor = normalizeColor(state.chatCodeBackgroundColor, PluginSettingsState.DEFAULT_CODE_BACKGROUND_COLOR)
         state.chatCodeTextColor = normalizeColor(state.chatCodeTextColor, PluginSettingsState.DEFAULT_CODE_TEXT_COLOR)

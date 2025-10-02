@@ -1,5 +1,6 @@
 package ru.marslab.ide.ride.ui
 
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.ui.components.JBScrollPane
@@ -8,12 +9,14 @@ import com.intellij.util.ui.JBUI
 import ru.marslab.ide.ride.model.Message
 import ru.marslab.ide.ride.model.MessageRole
 import ru.marslab.ide.ride.service.ChatService
+import ru.marslab.ide.ride.settings.ChatAppearanceListener
 import ru.marslab.ide.ride.settings.PluginSettings
 import java.awt.BorderLayout
 import java.awt.Dimension
 import java.awt.event.KeyAdapter
 import java.awt.event.KeyEvent
 import javax.swing.*
+import javax.swing.SwingUtilities
 
 /**
  * Главная панель чата
@@ -40,6 +43,7 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
             putClientProperty(JEditorPane.HONOR_DISPLAY_PROPERTIES, true)
         }
         initHtml()
+        subscribeToAppearanceChanges()
         
         val historyScrollPane = JBScrollPane(chatHistoryArea).apply {
             preferredSize = Dimension(400, 400)
@@ -275,7 +279,7 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                     .content { }
                     /* Code block styling (configurable) */
                     pre { background-color: $codeBg; color: $codeText; padding: 8px; border: 1px solid $codeBorder; }
-                    code { font-family: monospace; font-size: ${codeFontSize}px; color: inherit; }
+                    code { font-family: monospace; font-size: ${codeFontSize}px; color: $codeText; }
                     .msg.user { text-align: right; }
                     .msg.user .prefix { text-align: right; }
                     .msg.user .content { text-align: right; }
@@ -424,5 +428,27 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
             "yaml" to "yaml",
             "md" to "markdown"
         )
+    }
+
+    private fun subscribeToAppearanceChanges() {
+        ApplicationManager.getApplication()
+            .messageBus
+            .connect(project)
+            .subscribe(ChatAppearanceListener.TOPIC, ChatAppearanceListener {
+                SwingUtilities.invokeLater { refreshAppearance() }
+            })
+    }
+
+    private fun refreshAppearance() {
+        val history = chatService.getHistory()
+        initHtml()
+        if (history.isNotEmpty()) {
+            history.forEach { appendMessage(it, addToHistory = false) }
+        } else {
+            appendSystemMessage("👋 Привет! Я AI-ассистент для разработчиков. Чем могу помочь?")
+        }
+        if (!settings.isConfigured()) {
+            appendSystemMessage("⚠️ Плагин не настроен. Перейдите в Settings → Tools → Ride для настройки API ключа.")
+        }
     }
 }

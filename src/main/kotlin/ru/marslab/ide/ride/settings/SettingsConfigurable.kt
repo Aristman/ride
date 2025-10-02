@@ -3,11 +3,13 @@ package ru.marslab.ide.ride.settings
 import com.intellij.openapi.components.service
 import com.intellij.openapi.options.Configurable
 import com.intellij.openapi.ui.DialogPanel
+import com.intellij.ui.ColorPanel
 import com.intellij.ui.components.JBPasswordField
 import com.intellij.ui.components.JBTextArea
 import com.intellij.ui.components.JBTextField
 import com.intellij.ui.dsl.builder.*
 import javax.swing.JComponent
+import java.awt.Color
 
 /**
  * UI для настроек плагина в IDE Settings
@@ -22,10 +24,10 @@ class SettingsConfigurable : Configurable {
     private lateinit var temperatureField: JBTextField
     private lateinit var maxTokensField: JBTextField
     private lateinit var chatFontSizeField: JBTextField
-    private lateinit var chatPrefixColorField: JBTextField
-    private lateinit var chatCodeBackgroundField: JBTextField
-    private lateinit var chatCodeTextField: JBTextField
-    private lateinit var chatCodeBorderField: JBTextField
+    private lateinit var chatPrefixColorPanel: ColorPanel
+    private lateinit var chatCodeBackgroundPanel: ColorPanel
+    private lateinit var chatCodeTextPanel: ColorPanel
+    private lateinit var chatCodeBorderPanel: ColorPanel
     
     private var panel: DialogPanel? = null
     
@@ -50,39 +52,40 @@ class SettingsConfigurable : Configurable {
             }
 
             group("Chat Appearance") {
-                row("Font Size:") {
-                    chatFontSizeField = JBTextField()
-                    cell(chatFontSizeField)
-                        .columns(8)
-                        .comment("Размер шрифта (10-32)")
+                group("Fonts & Colors") {
+                    row("Font Size:") {
+                        chatFontSizeField = JBTextField()
+                        cell(chatFontSizeField)
+                            .columns(8)
+                            .comment("Размер шрифта (10-32)")
+                    }
+
+                    row("Font Color:") {
+                        chatPrefixColorPanel = ColorPanel()
+                        cell(chatPrefixColorPanel)
+                            .align(AlignX.LEFT)
+                            .comment("Цвет подписей сообщений")
+                    }
                 }
 
-                row("Prefix Color:") {
-                    chatPrefixColorField = JBTextField()
-                    cell(chatPrefixColorField)
-                        .columns(12)
-                        .comment("Цвет префикса сообщений (HEX, например #6b6b6b)")
-                }
+                group("Code Block Colors") {
+                    row("Background:") {
+                        chatCodeBackgroundPanel = ColorPanel()
+                        cell(chatCodeBackgroundPanel)
+                            .align(AlignX.LEFT)
+                    }
 
-                row("Code Background:") {
-                    chatCodeBackgroundField = JBTextField()
-                    cell(chatCodeBackgroundField)
-                        .columns(12)
-                        .comment("Фон кодовых блоков (HEX)")
-                }
+                    row("Text:") {
+                        chatCodeTextPanel = ColorPanel()
+                        cell(chatCodeTextPanel)
+                            .align(AlignX.LEFT)
+                    }
 
-                row("Code Text Color:") {
-                    chatCodeTextField = JBTextField()
-                    cell(chatCodeTextField)
-                        .columns(12)
-                        .comment("Цвет текста в кодовых блоках (HEX)")
-                }
-
-                row("Code Border Color:") {
-                    chatCodeBorderField = JBTextField()
-                    cell(chatCodeBorderField)
-                        .columns(12)
-                        .comment("Цвет рамки кодовых блоков (HEX)")
+                    row("Border:") {
+                        chatCodeBorderPanel = ColorPanel()
+                        cell(chatCodeBorderPanel)
+                            .align(AlignX.LEFT)
+                    }
                 }
             }
             
@@ -133,10 +136,10 @@ class SettingsConfigurable : Configurable {
                 temperatureField.text != settings.temperature.toString() ||
                 maxTokensField.text != settings.maxTokens.toString() ||
                 chatFontSizeField.text != settings.chatFontSize.toString() ||
-                chatPrefixColorField.text != settings.chatPrefixColor ||
-                chatCodeBackgroundField.text != settings.chatCodeBackgroundColor ||
-                chatCodeTextField.text != settings.chatCodeTextColor ||
-                chatCodeBorderField.text != settings.chatCodeBorderColor
+                colorToHex(chatPrefixColorPanel.selectedColor, PluginSettingsState.DEFAULT_PREFIX_COLOR) != settings.chatPrefixColor ||
+                colorToHex(chatCodeBackgroundPanel.selectedColor, PluginSettingsState.DEFAULT_CODE_BACKGROUND_COLOR) != settings.chatCodeBackgroundColor ||
+                colorToHex(chatCodeTextPanel.selectedColor, PluginSettingsState.DEFAULT_CODE_TEXT_COLOR) != settings.chatCodeTextColor ||
+                colorToHex(chatCodeBorderPanel.selectedColor, PluginSettingsState.DEFAULT_CODE_BORDER_COLOR) != settings.chatCodeBorderColor
     }
     
     override fun apply() {
@@ -169,10 +172,10 @@ class SettingsConfigurable : Configurable {
             settings.chatFontSize = PluginSettingsState.DEFAULT_CHAT_FONT_SIZE
         }
 
-        settings.chatPrefixColor = chatPrefixColorField.text
-        settings.chatCodeBackgroundColor = chatCodeBackgroundField.text
-        settings.chatCodeTextColor = chatCodeTextField.text
-        settings.chatCodeBorderColor = chatCodeBorderField.text
+        settings.chatPrefixColor = colorToHex(chatPrefixColorPanel.selectedColor, PluginSettingsState.DEFAULT_PREFIX_COLOR)
+        settings.chatCodeBackgroundColor = colorToHex(chatCodeBackgroundPanel.selectedColor, PluginSettingsState.DEFAULT_CODE_BACKGROUND_COLOR)
+        settings.chatCodeTextColor = colorToHex(chatCodeTextPanel.selectedColor, PluginSettingsState.DEFAULT_CODE_TEXT_COLOR)
+        settings.chatCodeBorderColor = colorToHex(chatCodeBorderPanel.selectedColor, PluginSettingsState.DEFAULT_CODE_BORDER_COLOR)
         
         // Пересоздаем агента с новыми настройками
         service<ru.marslab.ide.ride.service.ChatService>().recreateAgent()
@@ -186,13 +189,22 @@ class SettingsConfigurable : Configurable {
         temperatureField.text = settings.temperature.toString()
         maxTokensField.text = settings.maxTokens.toString()
         chatFontSizeField.text = settings.chatFontSize.toString()
-        chatPrefixColorField.text = settings.chatPrefixColor
-        chatCodeBackgroundField.text = settings.chatCodeBackgroundColor
-        chatCodeTextField.text = settings.chatCodeTextColor
-        chatCodeBorderField.text = settings.chatCodeBorderColor
+        chatPrefixColorPanel.selectedColor = parseColor(settings.chatPrefixColor, PluginSettingsState.DEFAULT_PREFIX_COLOR)
+        chatCodeBackgroundPanel.selectedColor = parseColor(settings.chatCodeBackgroundColor, PluginSettingsState.DEFAULT_CODE_BACKGROUND_COLOR)
+        chatCodeTextPanel.selectedColor = parseColor(settings.chatCodeTextColor, PluginSettingsState.DEFAULT_CODE_TEXT_COLOR)
+        chatCodeBorderPanel.selectedColor = parseColor(settings.chatCodeBorderColor, PluginSettingsState.DEFAULT_CODE_BORDER_COLOR)
     }
     
     override fun disposeUIResources() {
         panel = null
+    }
+
+    private fun colorToHex(color: Color?, fallbackHex: String): String {
+        val resolved = color ?: parseColor(fallbackHex, fallbackHex)
+        return String.format("#%06X", resolved.rgb and 0xFFFFFF)
+    }
+
+    private fun parseColor(value: String, fallbackHex: String): Color {
+        return runCatching { Color.decode(value) }.getOrElse { Color.decode(fallbackHex) }
     }
 }
