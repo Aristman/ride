@@ -72,7 +72,7 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
     var chatFontSize: Int
         get() = state.chatFontSize
         set(value) {
-            state.chatFontSize = value.coerceIn(10, 32)
+            state.chatFontSize = value.coerceIn(8, 32)
         }
 
     /**
