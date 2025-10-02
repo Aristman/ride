@@ -66,4 +66,23 @@
         <applicationService 
                 serviceImplementation="ru.marslab.ide.ride.service.ChatService"/>
     </extensions>
+
+    <!-- Actions registration -->
+    <actions>
+        <group id="Ride.FormatActions" text="Ride: Response Format" description="Set response format for Ride agent">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+            <action id="Ride.SetJsonFormatAction"
+                    class="ru.marslab.ide.ride.actions.SetJsonFormatAction"
+                    text="Set JSON Format"
+                    description="Set agent response format to JSON"/>
+            <action id="Ride.SetXmlFormatAction"
+                    class="ru.marslab.ide.ride.actions.SetXmlFormatAction"
+                    text="Set XML Format"
+                    description="Set agent response format to XML"/>
+            <action id="Ride.ClearFormatAction"
+                    class="ru.marslab.ide.ride.actions.ClearFormatAction"
+                    text="Clear Format (Text)"
+                    description="Reset agent response format to TEXT"/>
+        </group>
+    </actions>
 </idea-plugin>

@@ -150,6 +150,27 @@ class ChatService {
     }
     
     /**
+     * Устанавливает формат ответа для текущего агента
+     */
+    fun setResponseFormat(format: ResponseFormat, schema: ResponseSchema?) {
+        getAgent().setResponseFormat(format, schema)
+        logger.info("Response format set to: $format")
+    }
+
+    /**
+     * Сбрасывает формат ответа к TEXT (по умолчанию)
+     */
+    fun clearResponseFormat() {
+        getAgent().clearResponseFormat()
+        logger.info("Response format cleared")
+    }
+
+    /**
+     * Возвращает текущий установленный формат ответа
+     */
+    fun getResponseFormat(): ResponseFormat? = getAgent().getResponseFormat()
+
+    /**
      * Освобождает ресурсы при закрытии
      */
     fun dispose() {
