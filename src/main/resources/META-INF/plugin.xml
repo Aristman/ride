@@ -13,8 +13,8 @@
     <!-- Description of the plugin displayed on the Plugin Page and IDE Plugin Manager.
          Guidelines: https://plugins.jetbrains.com/docs/marketplace/best-practices-for-listing.html#plugin-description -->
     <description><![CDATA[
-        Enter short description for your plugin here.<br>
-        <em>most HTML tags may be used</em>
+        AI-ассистент для разработчиков с интеграцией Yandex GPT.<br>
+        Помогает с вопросами о коде, отладке и разработке прямо в IDE.
     ]]></description>
 
     <!-- Product and plugin compatibility requirements.
@@ -24,6 +24,23 @@
     <!-- Extension points defined by the plugin.
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-extension-points.html -->
     <extensions defaultExtensionNs="com.intellij">
-
+        <!-- Tool Window -->
+        <toolWindow id="Ride Chat" 
+                    anchor="right" 
+                    factoryClass="ru.marslab.ide.ride.ui.ChatToolWindowFactory"
+                    icon="AllIcons.General.User"/>
+        
+        <!-- Settings -->
+        <applicationConfigurable 
+                parentId="tools"
+                instance="ru.marslab.ide.ride.settings.SettingsConfigurable"
+                id="ru.marslab.ide.ride.settings.SettingsConfigurable"
+                displayName="Ride"/>
+        
+        <!-- Application Services -->
+        <applicationService 
+                serviceImplementation="ru.marslab.ide.ride.settings.PluginSettings"/>
+        <applicationService 
+                serviceImplementation="ru.marslab.ide.ride.service.ChatService"/>
     </extensions>
 </idea-plugin>
