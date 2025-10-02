@@ -11,6 +11,7 @@ import ru.marslab.ide.ride.model.ChatContext
 import ru.marslab.ide.ride.model.LLMParameters
 import ru.marslab.ide.ride.model.ResponseFormat
 import ru.marslab.ide.ride.model.ResponseSchema
+import ru.marslab.ide.ride.model.Message
 
 /**
  * Универсальная реализация агента для общения с пользователем
@@ -44,14 +45,17 @@ class ChatAgent(
         }
         
         return try {
-            // Формируем промпт с учетом контекста
-            val fullPrompt = buildPrompt(request, context)
+            // Системный промпт (опционально расширяем инструкциями формата)
+            val systemPromptForRequest = buildSystemPrompt()
             
-            logger.debug("Built prompt, length: ${fullPrompt.length}")
+            // История ответов ассистента для контекста
+            val assistantHistory = getAssistantHistory(context)
             
             // Делегируем запрос в LLM провайдер
             val llmResponse = llmProvider.sendRequest(
-                prompt = fullPrompt,
+                systemPrompt = systemPromptForRequest,
+                userMessage = request,
+                assistantHistory = assistantHistory,
                 parameters = LLMParameters.DEFAULT
             )
             
@@ -158,58 +162,22 @@ class ChatAgent(
     }
     
     /**
-     * Формирует полный промпт с учетом системного промпта и контекста
+     * Формирует системный промпт. Если задана схема ответа,
+     * добавляет инструкции по формату в системный промпт.
      */
-    private fun buildPrompt(request: String, context: ChatContext): String {
-        val promptBuilder = StringBuilder()
-        
-        // Системный промпт
-        promptBuilder.append(systemPrompt).append("\n\n")
-        
-        // История сообщений (последние N сообщений)
-        val recentHistory = context.getRecentHistory(HISTORY_LIMIT)
-        if (recentHistory.isNotEmpty()) {
-            promptBuilder.append("История диалога:\n")
-            recentHistory.forEach { message ->
-                val roleText = when {
-                    message.isFromUser() -> "Пользователь"
-                    message.isFromAssistant() -> "Ассистент"
-                    else -> "Система"
-                }
-                promptBuilder.append("$roleText: ${message.content}\n")
-            }
-            promptBuilder.append("\n")
-        }
-        
-        // Контекст текущего файла (опционально)
-        if (context.hasCurrentFile()) {
-            context.currentFile?.let { file ->
-                promptBuilder.append("Текущий файл: ${file.name}\n")
-                promptBuilder.append("Путь: ${file.path}\n\n")
-            }
-        }
-        
-        // Выделенный текст (опционально)
-        if (context.hasSelectedText()) {
-            context.selectedText?.let { text ->
-                promptBuilder.append("Выделенный код:\n")
-                promptBuilder.append("```\n")
-                promptBuilder.append(text)
-                promptBuilder.append("\n```\n\n")
-            }
-        }
-        
-        // Запрос пользователя
-        promptBuilder.append("Пользователь: $request")
-        
-        val basePrompt = promptBuilder.toString()
-        
-        // Добавляем инструкции по форматированию если задана схема
+    private fun buildSystemPrompt(): String {
+        val base = systemPrompt
         return if (responseSchema != null) {
-            PromptFormatter.formatPrompt(basePrompt, responseSchema)
-        } else {
-            basePrompt
-        }
+            PromptFormatter.formatPrompt(base, responseSchema)
+        } else base
+    }
+
+    /**
+     * Возвращает последние ответы ассистента для контекста (до HISTORY_LIMIT)
+     */
+    private fun getAssistantHistory(context: ChatContext): List<String> {
+        val recent: List<Message> = context.getRecentHistory(HISTORY_LIMIT)
+        return recent.filter { it.isFromAssistant() }.map { it.content }
     }
     
     companion object {

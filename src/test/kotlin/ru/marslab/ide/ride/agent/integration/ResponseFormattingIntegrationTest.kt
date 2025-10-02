@@ -22,7 +22,7 @@ class ResponseFormattingIntegrationTest {
         return mockk<LLMProvider> {
             every { isAvailable() } returns true
             every { getProviderName() } returns "MockProvider"
-            coEvery { sendRequest(any(), any()) } returns LLMResponse.success(response, tokensUsed = 10)
+            coEvery { sendRequest(any(), any(), any(), any()) } returns LLMResponse.success(response, tokensUsed = 10)
         }
     }
 
@@ -138,7 +138,7 @@ class ResponseFormattingIntegrationTest {
         val context = createMockContext()
 
         // Act & Assert - JSON
-        coEvery { provider.sendRequest(any(), any()) } returns LLMResponse.success(jsonResponse)
+        coEvery { provider.sendRequest(any(), any(), any(), any()) } returns LLMResponse.success(jsonResponse)
         agent.setResponseFormat(ResponseFormat.JSON, ResponseSchema.json("""{"answer": "string"}"""))
         
         val response1 = agent.processRequest("Test", context)
@@ -146,7 +146,7 @@ class ResponseFormattingIntegrationTest {
         assertIs<ParsedResponse.JsonResponse>(response1.parsedContent)
 
         // Act & Assert - XML
-        coEvery { provider.sendRequest(any(), any()) } returns LLMResponse.success(xmlResponse)
+        coEvery { provider.sendRequest(any(), any(), any(), any()) } returns LLMResponse.success(xmlResponse)
         agent.setResponseFormat(ResponseFormat.XML, ResponseSchema.xml("<response><answer>string</answer></response>"))
         
         val response2 = agent.processRequest("Test", context)
@@ -154,7 +154,7 @@ class ResponseFormattingIntegrationTest {
         assertIs<ParsedResponse.XmlResponse>(response2.parsedContent)
 
         // Act & Assert - TEXT
-        coEvery { provider.sendRequest(any(), any()) } returns LLMResponse.success(textResponse)
+        coEvery { provider.sendRequest(any(), any(), any(), any()) } returns LLMResponse.success(textResponse)
         agent.clearResponseFormat()
         
         val response3 = agent.processRequest("Test", context)

@@ -18,7 +18,7 @@ class ChatAgentTest {
         return mockk<LLMProvider> {
             every { isAvailable() } returns true
             every { getProviderName() } returns "MockProvider"
-            coEvery { sendRequest(any(), any()) } returns LLMResponse.success(response, tokensUsed = 10)
+            coEvery { sendRequest(any(), any(), any(), any()) } returns LLMResponse.success(response, tokensUsed = 10)
         }
     }
 

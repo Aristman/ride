@@ -13,11 +13,18 @@ interface LLMProvider {
     /**
      * Отправляет запрос в LLM и получает ответ
      * 
-     * @param prompt Текст промпта для LLM
+     * @param systemPrompt Системный промпт от агента (контекст и инструкции)
+     * @param userMessage Пользовательское обращение к модели
+     * @param assistantHistory Список ответов модели (assistant) для сохранения контекста
      * @param parameters Параметры генерации
      * @return Ответ от LLM
      */
-    suspend fun sendRequest(prompt: String, parameters: LLMParameters): LLMResponse
+    suspend fun sendRequest(
+        systemPrompt: String,
+        userMessage: String,
+        assistantHistory: List<String>,
+        parameters: LLMParameters
+    ): LLMResponse
     
     /**
      * Проверяет доступность провайдера
