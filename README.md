@@ -60,6 +60,7 @@
 - 🎨 **Удобный интерфейс** с Tool Window
 - 🏗️ **Модульная архитектура** с возможностью расширения
 - 🧪 **Покрытие тестами** всех ключевых компонентов
+- 🧩 **Форматирование ответов** (JSON/XML/TEXT) с парсингом и валидацией по схеме
 
 ## 🎯 Быстрый старт
 
@@ -138,6 +139,42 @@ cd ride
 1. Введите ваш вопрос в поле ввода внизу окна чата
 2. Нажмите **Enter** или кнопку **"Отправить"**
 3. Дождитесь ответа от AI-ассистента
+
+### Форматированные ответы (JSON / XML / TEXT)
+
+Вы можете запросить у агента строго структурированный ответ и получить его уже распарсенным с проверкой по схеме.
+
+Пример JSON:
+
+```kotlin
+import ru.marslab.ide.ride.agent.AgentFactory
+import ru.marslab.ide.ride.model.ResponseFormat
+import ru.marslab.ide.ride.model.ResponseSchema
+import ru.marslab.ide.ride.model.ParsedResponse
+
+val agent = AgentFactory.createChatAgent()
+val schema = ResponseSchema.json(
+    """
+    {
+      "answer": "string",
+      "confidence": 0.0,
+      "sources": ["string"]
+    }
+    """.trimIndent(),
+    description = "Структурируй ответ, добавь confidence и источники"
+)
+
+agent.setResponseFormat(ResponseFormat.JSON, schema)
+val response = agent.processRequest("Что такое Kotlin?", context)
+
+when (val parsed = response.parsedContent) {
+    is ParsedResponse.JsonResponse -> println(parsed.jsonElement)
+    is ParsedResponse.ParseError -> println("Ошибка парсинга: ${parsed.error}")
+    else -> println(response.content)
+}
+```
+
+Также поддерживается XML (схема-пример) и TEXT (по умолчанию). См. подробные примеры в `docs/USAGE_EXAMPLES.md`.
 
 ### Примеры запросов
 
