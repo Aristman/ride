@@ -4,6 +4,7 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.ui.components.JBScrollPane
+import com.intellij.ui.components.JBTabbedPane
 import com.intellij.ui.components.JBTextArea
 import com.intellij.util.ui.JBUI
 import ru.marslab.ide.ride.model.Message
@@ -65,6 +66,7 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
     private val sendButton: JButton
     private val clearButton: JButton
     private var lastRole: MessageRole? = null
+    private lateinit var sessionsTabs: JBTabbedPane
 
     // JCEF (если доступен)
     private val useJcef: Boolean = true
@@ -116,25 +118,27 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
             add(buttonPanel, BorderLayout.SOUTH)
         }
 
-        // Панель последних сессий (слева)
-        val sessionsPanel = RecentSessionsPanel(chatService) { session ->
-            if (chatService.switchSession(session.id)) {
-                refreshAppearance()
-            }
-        }
-        val sessionsContainer = JPanel(BorderLayout()).apply {
-            preferredSize = Dimension(220, 100)
-            add(sessionsPanel, BorderLayout.CENTER)
-        }
-        add(sessionsContainer, BorderLayout.WEST)
-
-        // Верхний тулбар действий
+        // Верхний тулбар действий + табы сессий (в одном контейнере)
         val actionManager = ActionManager.getInstance()
         val toolbarGroup = (actionManager.getAction("Ride.ToolWindowActions") as? DefaultActionGroup)
             ?: DefaultActionGroup()
         val toolbar = actionManager.createActionToolbar("RideToolbar", toolbarGroup, true)
         toolbar.targetComponent = this
-        add(toolbar.component, BorderLayout.NORTH)
+        val topPanel = JPanel(BorderLayout())
+        topPanel.add(toolbar.component, BorderLayout.NORTH)
+
+        sessionsTabs = JBTabbedPane()
+        sessionsTabs.addChangeListener {
+            val idx = sessionsTabs.selectedIndex
+            val sessions = chatService.getSessions()
+            if (idx in sessions.indices) {
+                if (chatService.switchSession(sessions[idx].id)) {
+                    refreshAppearance()
+                }
+            }
+        }
+        topPanel.add(sessionsTabs, BorderLayout.SOUTH)
+        add(topPanel, BorderLayout.NORTH)
 
         // Компоновка: центр — JCEF если доступен, иначе fallback
         if (jcefView != null) {
@@ -144,9 +148,9 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         }
         add(bottomPanel, BorderLayout.SOUTH)
 
-        // История при старте
+        // История и табы при старте
         loadHistory()
-        sessionsPanel.refresh(selectCurrent = true)
+        refreshTabs()
 
         if (!settings.isConfigured()) {
             appendSystemMessage("⚠️ Плагин не настроен. Перейдите в Settings → Tools → Ride для настройки API ключа.")
@@ -258,6 +262,25 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
     private fun setUIEnabled(enabled: Boolean) {
         inputArea.isEnabled = enabled
         sendButton.isEnabled = enabled
+    }
+
+    /**
+     * Обновляет вкладки сессий согласно ChatService
+     */
+    private fun refreshTabs() {
+        val sessions = chatService.getSessions()
+        sessionsTabs.removeAll()
+        sessions.forEach { s -> sessionsTabs.addTab(s.title, null) }
+        val current = chatService.getCurrentSessionId()
+        val idx = sessions.indexOfFirst { it.id == current }
+        if (idx >= 0) sessionsTabs.selectedIndex = idx
+    }
+
+    /** Создание новой сессии из действия тулбара */
+    fun onNewSession() {
+        chatService.createNewSession()
+        refreshTabs()
+        refreshAppearance()
     }
 
     private fun initHtml() {

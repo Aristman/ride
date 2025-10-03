@@ -71,7 +71,14 @@ class ChatService {
             content = userMessage,
             role = MessageRole.USER
         )
-        getCurrentHistory().addMessage(userMsg)
+        val history = getCurrentHistory()
+        val wasEmpty = history.getMessageCount() == 0
+        history.addMessage(userMsg)
+        if (wasEmpty) {
+            // Авто-именование сессии по первым словам
+            val title = deriveTitleFrom(userMessage)
+            updateSessionTitle(currentSessionId, title)
+        }
         
         // Обрабатываем запрос асинхронно
         scope.launch {
@@ -178,7 +185,7 @@ class ChatService {
                 append(". Отвечай обычным текстом без дополнительной разметки.")
             }
         }
-        messageHistory.addMessage(
+        getCurrentHistory().addMessage(
             Message(content = content, role = MessageRole.SYSTEM)
         )
     }
@@ -242,6 +249,21 @@ class ChatService {
     }
 
     fun getCurrentSessionId(): String = currentSessionId
+
+    fun updateSessionTitle(sessionId: String, title: String) {
+        val idx = sessions.indexOfFirst { it.id == sessionId }
+        if (idx >= 0) {
+            sessions[idx] = sessions[idx].copy(title = title.take(50), updatedAt = Instant.now())
+        }
+    }
+
+    private fun deriveTitleFrom(text: String): String {
+        val clean = text.trim().replace("\n", " ").replace("\s+".toRegex(), " ")
+        if (clean.isEmpty()) return "Session"
+        val words = clean.split(' ')
+        val pick = words.take(3).joinToString(" ")
+        return pick.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+    }
 
     private fun getCurrentHistory(): MessageHistory =
         sessionHistories.getOrPut(currentSessionId) { MessageHistory() }
