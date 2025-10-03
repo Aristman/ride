@@ -258,7 +258,7 @@ class ChatService {
     }
 
     private fun deriveTitleFrom(text: String): String {
-        val clean = text.trim().replace("\n", " ").replace("\s+".toRegex(), " ")
+        val clean = text.trim().replace("\n", " ").replace("\\s+".toRegex(), " ")
         if (clean.isEmpty()) return "Session"
         val words = clean.split(' ')
         val pick = words.take(3).joinToString(" ")

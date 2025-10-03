@@ -123,7 +123,6 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         val toolbarGroup = (actionManager.getAction("Ride.ToolWindowActions") as? DefaultActionGroup)
             ?: DefaultActionGroup()
         val toolbar = actionManager.createActionToolbar("RideToolbar", toolbarGroup, true)
-        toolbar.targetComponent = this
         val topPanel = JPanel(BorderLayout())
         topPanel.add(toolbar.component, BorderLayout.NORTH)
 
@@ -139,6 +138,8 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         }
         topPanel.add(sessionsTabs, BorderLayout.SOUTH)
         add(topPanel, BorderLayout.NORTH)
+        // Назначаем targetComponent после добавления topPanel в иерархию
+        toolbar.targetComponent = topPanel
 
         // Компоновка: центр — JCEF если доступен, иначе fallback
         if (jcefView != null) {
@@ -270,7 +271,7 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
     private fun refreshTabs() {
         val sessions = chatService.getSessions()
         sessionsTabs.removeAll()
-        sessions.forEach { s -> sessionsTabs.addTab(s.title, null) }
+        sessions.forEach { s -> sessionsTabs.addTab(s.title, JPanel()) }
         val current = chatService.getCurrentSessionId()
         val idx = sessions.indexOfFirst { it.id == current }
         if (idx >= 0) sessionsTabs.selectedIndex = idx
