@@ -30,6 +30,8 @@ class JcefChatView : JPanel(BorderLayout()) {
               const root = document.getElementById('messages');
               root.innerHTML = ${html.toJSString()};
               requestAnimationFrame(()=> { window.scrollTo(0, document.body.scrollHeight); });
+              window.__ride_initHl && window.__ride_initHl();
+              window.__ride_highlightAll && window.__ride_highlightAll();
             })();
         """.trimIndent()
         exec(js)
@@ -44,6 +46,13 @@ class JcefChatView : JPanel(BorderLayout()) {
               const root = document.getElementById('messages');
               while (tmp.firstChild) root.appendChild(tmp.firstChild);
               requestAnimationFrame(()=> { window.scrollTo(0, document.body.scrollHeight); });
+              window.__ride_initHl && window.__ride_initHl();
+              // Подсвечиваем только новые блоки в конце
+              const blocks = root.querySelectorAll('pre code');
+              if (window.hljs && blocks.length){
+                const last = blocks[blocks.length - 1];
+                try { window.hljs.highlightElement(last); } catch(_){ }
+              }
             })();
         """.trimIndent()
         exec(js)
@@ -100,6 +109,21 @@ class JcefChatView : JPanel(BorderLayout()) {
                 try { navigator.clipboard.writeText(code.textContent || ''); } catch(_) {}
               }
             });
+
+            // Lazy load highlight.js once
+            window.__ride_initHl = function(){
+              if (window.__ride_hlLoaded) return;
+              const addCss = (href)=>{ const l = document.createElement('link'); l.rel='stylesheet'; l.href=href; document.head.appendChild(l); };
+              const addJs = (src, onload)=>{ const s = document.createElement('script'); s.src=src; s.onload=onload; document.head.appendChild(s); };
+              addCss('https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css');
+              addJs('https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js', function(){
+                window.__ride_hlLoaded = true;
+              });
+            };
+            window.__ride_highlightAll = function(){
+              if (!window.hljs) return;
+              document.querySelectorAll('pre code').forEach(function(block){ try{ window.hljs.highlightElement(block); }catch(_){ } });
+            };
         """.trimIndent()
 
         return """
