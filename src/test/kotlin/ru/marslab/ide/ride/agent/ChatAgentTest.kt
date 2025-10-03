@@ -21,7 +21,7 @@ class ChatAgentTest {
         every { mockProvider.isAvailable() } returns true
         every { mockProvider.getProviderName() } returns "Test Provider"
         coEvery { 
-            mockProvider.sendRequest(any(), any()) 
+            mockProvider.sendRequest(any(), any(), any(), any()) 
         } returns LLMResponse.success("Test response", tokensUsed = 100)
         
         val agent = ChatAgent(mockProvider)
@@ -63,7 +63,7 @@ class ChatAgentTest {
         val mockProvider = mockk<LLMProvider>()
         every { mockProvider.isAvailable() } returns true
         coEvery { 
-            mockProvider.sendRequest(any(), any()) 
+            mockProvider.sendRequest(any(), any(), any(), any()) 
         } returns LLMResponse.error("API Error")
         
         val agent = ChatAgent(mockProvider)

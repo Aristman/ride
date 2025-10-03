@@ -8,6 +8,8 @@ import kotlinx.coroutines.*
 import ru.marslab.ide.ride.agent.Agent
 import ru.marslab.ide.ride.agent.AgentFactory
 import ru.marslab.ide.ride.model.*
+import ru.marslab.ide.ride.model.ChatSession
+import java.time.Instant
 
 /**
  * Центральный сервис для управления чатом
@@ -19,8 +21,15 @@ import ru.marslab.ide.ride.model.*
 class ChatService {
     
     private val logger = Logger.getInstance(ChatService::class.java)
-    private val messageHistory = MessageHistory()
+    // Несколько сессий и история сообщений по каждой
+    private val sessionHistories = mutableMapOf<String, MessageHistory>()
+    private val sessions = mutableListOf<ChatSession>()
+    private var currentSessionId: String = createNewSessionInternal().id
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    
+    // Текущие настройки формата ответа (для UI)
+    private var currentFormat: ResponseFormat? = null
+    private var currentSchema: ResponseSchema? = null
     
     // Агент создается лениво при первом использовании
     private var agent: Agent? = null
@@ -62,7 +71,14 @@ class ChatService {
             content = userMessage,
             role = MessageRole.USER
         )
-        messageHistory.addMessage(userMsg)
+        val history = getCurrentHistory()
+        val wasEmpty = history.getMessageCount() == 0
+        history.addMessage(userMsg)
+        if (wasEmpty) {
+            // Авто-именование сессии по первым словам
+            val title = deriveTitleFrom(userMessage)
+            updateSessionTitle(currentSessionId, title)
+        }
         
         // Обрабатываем запрос асинхронно
         scope.launch {
@@ -79,7 +95,7 @@ class ChatService {
                 // Формируем контекст
                 val context = ChatContext(
                     project = project,
-                    history = messageHistory.getMessages()
+                    history = getCurrentHistory().getMessages()
                 )
                 
                 // Отправляем запрос агенту
@@ -94,7 +110,7 @@ class ChatService {
                             role = MessageRole.ASSISTANT,
                             metadata = agentResponse.metadata
                         )
-                        messageHistory.addMessage(assistantMsg)
+                        getCurrentHistory().addMessage(assistantMsg)
                         
                         logger.info("Response received successfully")
                         onResponse(assistantMsg)
@@ -118,16 +134,14 @@ class ChatService {
      * 
      * @return Список всех сообщений
      */
-    fun getHistory(): List<Message> {
-        return messageHistory.getMessages()
-    }
+    fun getHistory(): List<Message> = getCurrentHistory().getMessages()
     
     /**
      * Очищает историю чата
      */
     fun clearHistory() {
-        logger.info("Clearing chat history")
-        messageHistory.clear()
+        logger.info("Clearing chat history for session $currentSessionId")
+        getCurrentHistory().clear()
     }
     
     /**
@@ -135,9 +149,7 @@ class ChatService {
      * 
      * @return true если история пуста
      */
-    fun isHistoryEmpty(): Boolean {
-        return messageHistory.isEmpty()
-    }
+    fun isHistoryEmpty(): Boolean = getCurrentHistory().isEmpty()
     
     /**
      * Пересоздает агента с новыми настройками
@@ -150,10 +162,109 @@ class ChatService {
     }
     
     /**
+     * Устанавливает формат ответа для текущего агента
+     */
+    fun setResponseFormat(format: ResponseFormat, schema: ResponseSchema?) {
+        getAgent().setResponseFormat(format, schema)
+        logger.info("Response format set to: $format")
+        currentFormat = format
+        currentSchema = schema
+        // Добавляем системное сообщение в историю, чтобы переопределить контекст LLM
+        val schemaHint = when (format) {
+            ResponseFormat.JSON -> (schema?.schemaDefinition ?: "{}")
+            ResponseFormat.XML -> (schema?.schemaDefinition ?: "<root/>")
+            ResponseFormat.TEXT -> ""
+        }
+        val content = buildString {
+            append("Формат ответа изменён на ")
+            append(format.name)
+            if (schemaHint.isNotBlank()) {
+                append(". Следуй СТРОГО схеме без пояснений и текста вне структуры.\nСхема:\n")
+                append(schemaHint)
+            } else if (format == ResponseFormat.TEXT) {
+                append(". Отвечай обычным текстом без дополнительной разметки.")
+            }
+        }
+        getCurrentHistory().addMessage(
+            Message(content = content, role = MessageRole.SYSTEM)
+        )
+    }
+
+    /**
+     * Сбрасывает формат ответа к TEXT (по умолчанию)
+     */
+    fun clearResponseFormat() {
+        getAgent().clearResponseFormat()
+        logger.info("Response format cleared")
+        currentFormat = null
+        currentSchema = null
+        getCurrentHistory().addMessage(
+            Message(
+                content = "Формат ответа сброшен. Отвечай обычным текстом без пояснений о формате.",
+                role = MessageRole.SYSTEM
+            )
+        )
+    }
+
+    /**
+     * Возвращает текущий установленный формат ответа
+     */
+    fun getResponseFormat(): ResponseFormat? = currentFormat ?: getAgent().getResponseFormat()
+
+    /**
+     * Возвращает текущую схему ответа (если была задана)
+     */
+    fun getResponseSchema(): ResponseSchema? = currentSchema
+
+    /**
      * Освобождает ресурсы при закрытии
      */
     fun dispose() {
         logger.info("Disposing ChatService")
         scope.cancel()
     }
+
+    // --- Sessions API ---
+    fun createNewSession(title: String = "Session"): ChatSession {
+        val s = createNewSessionInternal(title)
+        currentSessionId = s.id
+        return s
+    }
+
+    private fun createNewSessionInternal(title: String = "Session"): ChatSession {
+        val session = ChatSession(title = title, createdAt = Instant.now(), updatedAt = Instant.now())
+        sessions.add(0, session)
+        sessionHistories[session.id] = MessageHistory()
+        return session
+    }
+
+    fun getSessions(): List<ChatSession> = sessions.toList()
+
+    fun switchSession(sessionId: String): Boolean {
+        if (sessions.any { it.id == sessionId }) {
+            currentSessionId = sessionId
+            return true
+        }
+        return false
+    }
+
+    fun getCurrentSessionId(): String = currentSessionId
+
+    fun updateSessionTitle(sessionId: String, title: String) {
+        val idx = sessions.indexOfFirst { it.id == sessionId }
+        if (idx >= 0) {
+            sessions[idx] = sessions[idx].copy(title = title.take(50), updatedAt = Instant.now())
+        }
+    }
+
+    private fun deriveTitleFrom(text: String): String {
+        val clean = text.trim().replace("\n", " ").replace("\\s+".toRegex(), " ")
+        if (clean.isEmpty()) return "Session"
+        val words = clean.split(' ')
+        val pick = words.take(3).joinToString(" ")
+        return pick.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+    }
+
+    private fun getCurrentHistory(): MessageHistory =
+        sessionHistories.getOrPut(currentSessionId) { MessageHistory() }
 }

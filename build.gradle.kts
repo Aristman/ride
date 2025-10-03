@@ -28,6 +28,10 @@ dependencies {
     
     // Kotlinx Serialization (для JSON, БЕЗ Ktor)
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.2")
+
+    // XML serialization via xmlutil (kotlinx-serialization-xml)
+    implementation("io.github.pdvrieze.xmlutil:core:0.86.3")
+    implementation("io.github.pdvrieze.xmlutil:serialization:0.86.3")
     
     // Testing
     testImplementation("org.jetbrains.kotlin:kotlin-test")

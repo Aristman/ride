@@ -1,7 +1,10 @@
 package ru.marslab.ide.ride.agent
 
+import ru.marslab.ide.ride.integration.llm.LLMProvider
 import ru.marslab.ide.ride.model.AgentResponse
 import ru.marslab.ide.ride.model.ChatContext
+import ru.marslab.ide.ride.model.ResponseFormat
+import ru.marslab.ide.ride.model.ResponseSchema
 
 /**
  * Базовый интерфейс для всех агентов
@@ -32,4 +35,38 @@ interface Agent {
      * @return Описание функциональности агента
      */
     fun getDescription(): String
+    
+    /**
+     * Устанавливает LLM провайдер для агента
+     * 
+     * @param provider Новый провайдер
+     */
+    fun setLLMProvider(provider: LLMProvider)
+    
+    /**
+     * Возвращает текущий LLM провайдер
+     * 
+     * @return Текущий провайдер
+     */
+    fun getLLMProvider(): LLMProvider
+    
+    /**
+     * Устанавливает формат ответа с опциональной схемой
+     * 
+     * @param format Формат ответа (JSON, XML, TEXT)
+     * @param schema Схема для структурированного ответа (опционально)
+     */
+    fun setResponseFormat(format: ResponseFormat, schema: ResponseSchema? = null)
+    
+    /**
+     * Возвращает текущий формат ответа
+     * 
+     * @return Текущий формат или null если не установлен
+     */
+    fun getResponseFormat(): ResponseFormat?
+    
+    /**
+     * Сбрасывает формат ответа к дефолтному (TEXT)
+     */
+    fun clearResponseFormat()
 }

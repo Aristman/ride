@@ -19,7 +19,8 @@ import java.time.Duration
 data class YandexGPTConfig(
     val apiKey: String,
     val folderId: String,
-    val modelUri: String = "gpt://$folderId/yandexgpt-lite/latest",
+    val modelId: String = "yandexgpt-lite",
+    val modelUri: String = "gpt://$folderId/${modelId}/latest",
     val timeout: Long = 60000 // 60 секунд
 )
 
@@ -43,11 +44,16 @@ class YandexGPTProvider(
         isLenient = true
     }
     
-    override suspend fun sendRequest(prompt: String, parameters: LLMParameters): LLMResponse {
-        logger.info("Sending request to Yandex GPT, prompt length: ${prompt.length}")
+    override suspend fun sendRequest(
+        systemPrompt: String,
+        userMessage: String,
+        assistantHistory: List<String>,
+        parameters: LLMParameters
+    ): LLMResponse {
+        logger.info("Sending request to Yandex GPT, systemPrompt length: ${systemPrompt.length}, userMessage length: ${userMessage.length}, assistantHistory size: ${assistantHistory.size}")
         
         return try {
-            val request = buildRequest(prompt, parameters)
+            val request = buildRequest(systemPrompt, userMessage, assistantHistory, parameters)
             val response = sendWithRetry(request)
             
             logger.info("Request successful, tokens used: ${response.tokensUsed}")
@@ -68,7 +74,23 @@ class YandexGPTProvider(
     /**
      * Строит запрос к Yandex GPT API
      */
-    private fun buildRequest(prompt: String, parameters: LLMParameters): YandexGPTRequest {
+    private fun buildRequest(
+        systemPrompt: String,
+        userMessage: String,
+        assistantHistory: List<String>,
+        parameters: LLMParameters
+    ): YandexGPTRequest {
+        val messages = buildList {
+            if (systemPrompt.isNotBlank()) {
+                add(YandexMessage(role = "system", text = systemPrompt))
+            }
+            // История ответов ассистента для сохранения контекста
+            assistantHistory.forEach { assistantMsg ->
+                if (assistantMsg.isNotBlank()) add(YandexMessage(role = "assistant", text = assistantMsg))
+            }
+            // Текущее сообщение пользователя
+            add(YandexMessage(role = "user", text = userMessage))
+        }
         return YandexGPTRequest(
             modelUri = config.modelUri,
             completionOptions = CompletionOptions(
@@ -76,12 +98,7 @@ class YandexGPTProvider(
                 temperature = parameters.temperature,
                 maxTokens = parameters.maxTokens
             ),
-            messages = listOf(
-                YandexMessage(
-                    role = "user",
-                    text = prompt
-                )
-            )
+            messages = messages
         )
     }
     

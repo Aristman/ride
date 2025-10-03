@@ -305,6 +305,65 @@ val response = client.newCall(request).execute()
 3. Как сделать код более тестируемым?
 ```
 
+## 🧩 Форматирование ответов (JSON / XML / TEXT)
+
+Ниже показано, как запросить у агента структурированный ответ и получить распарсенный объект с валидацией по схеме.
+
+### JSON
+
+```kotlin
+import ru.marslab.ide.ride.agent.AgentFactory
+import ru.marslab.ide.ride.model.ResponseFormat
+import ru.marslab.ide.ride.model.ResponseSchema
+import ru.marslab.ide.ride.model.ParsedResponse
+
+val agent = AgentFactory.createChatAgent()
+val jsonSchema = ResponseSchema.json(
+    """
+    {
+      "answer": "string",
+      "confidence": 0.0,
+      "sources": ["string"]
+    }
+    """.trimIndent(),
+    description = "Структурируй ответ с оценкой уверенности и источниками"
+)
+
+agent.setResponseFormat(ResponseFormat.JSON, jsonSchema)
+val response = agent.processRequest("Что такое Kotlin?", context)
+
+when (val parsed = response.parsedContent) {
+    is ParsedResponse.JsonResponse -> println(parsed.jsonElement)
+    is ParsedResponse.ParseError -> println("Ошибка парсинга: ${parsed.error}")
+    else -> println(response.content)
+}
+```
+
+### XML
+
+```kotlin
+val xmlSchema = ResponseSchema.xml(
+    """
+    <response>
+      <answer>string</answer>
+      <confidence>number</confidence>
+    </response>
+    """.trimIndent(),
+    description = "Ответ в виде XML"
+)
+
+agent.setResponseFormat(ResponseFormat.XML, xmlSchema)
+val xmlResponse = agent.processRequest("Опиши Kotlin в 1-2 предложениях", context)
+```
+
+### TEXT (по умолчанию)
+
+```kotlin
+agent.clearResponseFormat() // Вернёмся к неструктурированному ответу
+val textResponse = agent.processRequest("Приведи список ключевых преимуществ Kotlin", context)
+println(textResponse.content)
+```
+
 ## 📊 Ограничения
 
 - История сохраняется только в рамках текущей сессии IDE
