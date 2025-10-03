@@ -24,6 +24,8 @@ import java.util.LinkedHashMap
 import java.util.UUID
 import javax.swing.*
 import javax.swing.event.HyperlinkEvent
+import com.intellij.openapi.actionSystem.ActionManager
+import com.intellij.openapi.actionSystem.DefaultActionGroup
 
 /**
  * Главная панель чата (гибрид Swing + JCEF)
@@ -39,7 +41,7 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         isEditable = false
         putClientProperty(JEditorPane.HONOR_DISPLAY_PROPERTIES, true)
         addHyperlinkListener { event ->
-            if (event.eventType == HyperlinkEvent.EventType.ACTIVATED) {
+            if (event.eventType == javax.swing.event.HyperlinkEvent.EventType.ACTIVATED) {
                 val description = event.description
                 if (description != null && description.startsWith(COPY_LINK_PREFIX)) {
                     val key = description.removePrefix(COPY_LINK_PREFIX)
@@ -47,6 +49,12 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                 }
             }
         }
+    }
+
+    fun clearHistoryAndRefresh() {
+        chatService.clearHistory()
+        initHtml()
+        appendSystemMessage("История чата очищена.")
     }
 
     private val htmlBuffer = StringBuilder()
@@ -107,6 +115,14 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
             add(inputScrollPane, BorderLayout.CENTER)
             add(buttonPanel, BorderLayout.SOUTH)
         }
+
+        // Верхний тулбар действий
+        val actionManager = ActionManager.getInstance()
+        val toolbarGroup = (actionManager.getAction("Ride.ToolWindowActions") as? DefaultActionGroup)
+            ?: DefaultActionGroup()
+        val toolbar = actionManager.createActionToolbar("RideToolbar", toolbarGroup, true)
+        toolbar.targetComponent = this
+        add(toolbar.component, BorderLayout.NORTH)
 
         // Компоновка: центр — JCEF если доступен, иначе fallback
         if (jcefView != null) {

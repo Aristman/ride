@@ -70,11 +70,22 @@
     <!-- Actions registration -->
     <actions>
         <group id="Ride.Menu" text="Ride" description="Ride plugin actions" popup="true">
-            <add-to-group group-id="ToolsMenu" anchor="last"/>
             <action id="Ride.SetResponseFormatAction"
                     class="ru.marslab.ide.ride.actions.SetResponseFormatAction"
                     text="Set Response Format..."
                     description="Choose agent response format (JSON/XML/TEXT) and optional schema"/>
+        </group>
+
+        <!-- Toolbar actions for Tool Window -->
+        <group id="Ride.ToolWindowActions" text="Ride Toolbar" popup="false">
+            <action id="Ride.NewSessionAction"
+                    class="ru.marslab.ide.ride.actions.NewSessionAction"
+                    text="New Session"
+                    description="Clear current chat session"/>
+            <action id="Ride.OpenSettingsAction"
+                    class="ru.marslab.ide.ride.actions.OpenSettingsAction"
+                    text="Settings"
+                    description="Open Ride settings"/>
         </group>
     </actions>
 </idea-plugin>
