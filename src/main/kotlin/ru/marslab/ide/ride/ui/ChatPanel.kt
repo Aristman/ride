@@ -116,6 +116,18 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
             add(buttonPanel, BorderLayout.SOUTH)
         }
 
+        // Панель последних сессий (слева)
+        val sessionsPanel = RecentSessionsPanel(chatService) { session ->
+            if (chatService.switchSession(session.id)) {
+                refreshAppearance()
+            }
+        }
+        val sessionsContainer = JPanel(BorderLayout()).apply {
+            preferredSize = Dimension(220, 100)
+            add(sessionsPanel, BorderLayout.CENTER)
+        }
+        add(sessionsContainer, BorderLayout.WEST)
+
         // Верхний тулбар действий
         val actionManager = ActionManager.getInstance()
         val toolbarGroup = (actionManager.getAction("Ride.ToolWindowActions") as? DefaultActionGroup)
@@ -134,6 +146,7 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
 
         // История при старте
         loadHistory()
+        sessionsPanel.refresh(selectCurrent = true)
 
         if (!settings.isConfigured()) {
             appendSystemMessage("⚠️ Плагин не настроен. Перейдите в Settings → Tools → Ride для настройки API ключа.")

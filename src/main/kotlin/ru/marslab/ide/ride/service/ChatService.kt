@@ -8,6 +8,8 @@ import kotlinx.coroutines.*
 import ru.marslab.ide.ride.agent.Agent
 import ru.marslab.ide.ride.agent.AgentFactory
 import ru.marslab.ide.ride.model.*
+import ru.marslab.ide.ride.model.ChatSession
+import java.time.Instant
 
 /**
  * Центральный сервис для управления чатом
@@ -19,7 +21,10 @@ import ru.marslab.ide.ride.model.*
 class ChatService {
     
     private val logger = Logger.getInstance(ChatService::class.java)
-    private val messageHistory = MessageHistory()
+    // Несколько сессий и история сообщений по каждой
+    private val sessionHistories = mutableMapOf<String, MessageHistory>()
+    private val sessions = mutableListOf<ChatSession>()
+    private var currentSessionId: String = createNewSessionInternal().id
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     
     // Текущие настройки формата ответа (для UI)
@@ -66,7 +71,7 @@ class ChatService {
             content = userMessage,
             role = MessageRole.USER
         )
-        messageHistory.addMessage(userMsg)
+        getCurrentHistory().addMessage(userMsg)
         
         // Обрабатываем запрос асинхронно
         scope.launch {
@@ -83,7 +88,7 @@ class ChatService {
                 // Формируем контекст
                 val context = ChatContext(
                     project = project,
-                    history = messageHistory.getMessages()
+                    history = getCurrentHistory().getMessages()
                 )
                 
                 // Отправляем запрос агенту
@@ -98,7 +103,7 @@ class ChatService {
                             role = MessageRole.ASSISTANT,
                             metadata = agentResponse.metadata
                         )
-                        messageHistory.addMessage(assistantMsg)
+                        getCurrentHistory().addMessage(assistantMsg)
                         
                         logger.info("Response received successfully")
                         onResponse(assistantMsg)
@@ -122,16 +127,14 @@ class ChatService {
      * 
      * @return Список всех сообщений
      */
-    fun getHistory(): List<Message> {
-        return messageHistory.getMessages()
-    }
+    fun getHistory(): List<Message> = getCurrentHistory().getMessages()
     
     /**
      * Очищает историю чата
      */
     fun clearHistory() {
-        logger.info("Clearing chat history")
-        messageHistory.clear()
+        logger.info("Clearing chat history for session $currentSessionId")
+        getCurrentHistory().clear()
     }
     
     /**
@@ -139,9 +142,7 @@ class ChatService {
      * 
      * @return true если история пуста
      */
-    fun isHistoryEmpty(): Boolean {
-        return messageHistory.isEmpty()
-    }
+    fun isHistoryEmpty(): Boolean = getCurrentHistory().isEmpty()
     
     /**
      * Пересоздает агента с новыми настройками
@@ -190,7 +191,7 @@ class ChatService {
         logger.info("Response format cleared")
         currentFormat = null
         currentSchema = null
-        messageHistory.addMessage(
+        getCurrentHistory().addMessage(
             Message(
                 content = "Формат ответа сброшен. Отвечай обычным текстом без пояснений о формате.",
                 role = MessageRole.SYSTEM
@@ -215,4 +216,33 @@ class ChatService {
         logger.info("Disposing ChatService")
         scope.cancel()
     }
+
+    // --- Sessions API ---
+    fun createNewSession(title: String = "Session"): ChatSession {
+        val s = createNewSessionInternal(title)
+        currentSessionId = s.id
+        return s
+    }
+
+    private fun createNewSessionInternal(title: String = "Session"): ChatSession {
+        val session = ChatSession(title = title, createdAt = Instant.now(), updatedAt = Instant.now())
+        sessions.add(0, session)
+        sessionHistories[session.id] = MessageHistory()
+        return session
+    }
+
+    fun getSessions(): List<ChatSession> = sessions.toList()
+
+    fun switchSession(sessionId: String): Boolean {
+        if (sessions.any { it.id == sessionId }) {
+            currentSessionId = sessionId
+            return true
+        }
+        return false
+    }
+
+    fun getCurrentSessionId(): String = currentSessionId
+
+    private fun getCurrentHistory(): MessageHistory =
+        sessionHistories.getOrPut(currentSessionId) { MessageHistory() }
 }
