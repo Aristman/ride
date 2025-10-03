@@ -27,6 +27,8 @@ import javax.swing.*
 import javax.swing.event.HyperlinkEvent
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.DefaultActionGroup
+import com.intellij.openapi.actionSystem.ActionToolbar
+import com.intellij.ide.ui.LafManagerListener
 
 /**
  * Главная панель чата (гибрид Swing + JCEF)
@@ -62,9 +64,9 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
     private val codeBlockRegistry = LinkedHashMap<String, String>()
     private var loadingStart: Int = -1
     private var loadingEnd: Int = -1
-    private val inputArea: JBTextArea
-    private val sendButton: JButton
-    private val clearButton: JButton
+    private lateinit var inputArea: JBTextArea
+    private lateinit var sendButton: JButton
+    private lateinit var clearButton: JButton
     private var lastRole: MessageRole? = null
     private lateinit var sessionsTabs: JBTabbedPane
 
@@ -76,55 +78,34 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         // Инициализация HTML/темы
         initHtml()
         subscribeToAppearanceChanges()
-
-        // Прокидываем тему в JCEF
         jcefView?.setTheme(ThemeTokens.fromSettings(settings).toJcefMap())
 
-        val historyScrollPane = JBScrollPane(chatHistoryArea).apply {
-            preferredSize = Dimension(400, 400)
-        }
+        // Верхняя панель (тулбар + табы)
+        val (topPanel, toolbar) = buildTopPanel()
+        add(topPanel, BorderLayout.NORTH)
+        // Назначаем targetComponent после добавления topPanel в иерархию
+        toolbar.targetComponent = topPanel
 
-        // Ввод
-        inputArea = JBTextArea().apply {
-            lineWrap = true
-            wrapStyleWord = true
-            rows = 3
-            font = font.deriveFont(14f)
-        }
-        inputArea.addKeyListener(object : KeyAdapter() {
-            override fun keyPressed(e: KeyEvent) {
-                if (e.keyCode == KeyEvent.VK_ENTER && !e.isShiftDown) {
-                    e.consume()
-                    sendMessage()
-                }
-            }
-        })
-        val inputScrollPane = JBScrollPane(inputArea).apply { preferredSize = Dimension(400, 80) }
+        // Центральная область (JCEF или fallback HTML)
+        add(buildCenterComponent(), BorderLayout.CENTER)
 
-        // Кнопки
-        sendButton = JButton("Отправить").apply { addActionListener { sendMessage() } }
-        clearButton = JButton("Очистить").apply { addActionListener { clearChat() } }
-        val buttonPanel = JPanel().apply {
-            layout = BoxLayout(this, BoxLayout.X_AXIS)
-            add(sendButton)
-            add(Box.createHorizontalStrut(5))
-            add(clearButton)
-        }
+        // Нижняя панель (композер)
+        add(buildBottomPanel(), BorderLayout.SOUTH)
 
-        // Нижняя панель
-        val bottomPanel = JPanel(BorderLayout()).apply {
-            border = JBUI.Borders.empty(5)
-            add(inputScrollPane, BorderLayout.CENTER)
-            add(buttonPanel, BorderLayout.SOUTH)
-        }
+        // История и табы при старте
+        loadHistory()
+        refreshTabs()
 
-        // Верхний тулбар действий + табы сессий (в одном контейнере)
+        if (!settings.isConfigured()) {
+            appendSystemMessage("⚠️ Плагин не настроен. Перейдите в Settings → Tools → Ride для настройки API ключа.")
+        }
+    }
+
+    private fun buildTopPanel(): Pair<JPanel, ActionToolbar> {
         val actionManager = ActionManager.getInstance()
         val toolbarGroup = (actionManager.getAction("Ride.ToolWindowActions") as? DefaultActionGroup)
             ?: DefaultActionGroup()
         val toolbar = actionManager.createActionToolbar("RideToolbar", toolbarGroup, true)
-        val topPanel = JPanel(BorderLayout())
-        topPanel.add(toolbar.component, BorderLayout.NORTH)
 
         sessionsTabs = JBTabbedPane()
         sessionsTabs.addChangeListener {
@@ -136,25 +117,48 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                 }
             }
         }
-        topPanel.add(sessionsTabs, BorderLayout.SOUTH)
-        add(topPanel, BorderLayout.NORTH)
-        // Назначаем targetComponent после добавления topPanel в иерархию
-        toolbar.targetComponent = topPanel
 
-        // Компоновка: центр — JCEF если доступен, иначе fallback
-        if (jcefView != null) {
-            add(jcefView!!.getComponent(), BorderLayout.CENTER)
+        val panel = JPanel(BorderLayout())
+        panel.add(toolbar.component, BorderLayout.NORTH)
+        panel.add(sessionsTabs, BorderLayout.SOUTH)
+        return panel to toolbar
+    }
+
+    private fun buildCenterComponent(): JComponent {
+        return if (jcefView != null) {
+            jcefView!!.getComponent()
         } else {
-            add(historyScrollPane, BorderLayout.CENTER)
+            JBScrollPane(chatHistoryArea).apply { preferredSize = Dimension(HISTORY_WIDTH, HISTORY_HEIGHT) }
         }
-        add(bottomPanel, BorderLayout.SOUTH)
+    }
 
-        // История и табы при старте
-        loadHistory()
-        refreshTabs()
+    private fun buildBottomPanel(): JPanel {
+        // Ввод
+        inputArea = JBTextArea().apply {
+            lineWrap = true
+            wrapStyleWord = true
+            rows = INPUT_ROWS
+            font = font.deriveFont(14f)
+        }
+        inputArea.addKeyListener(object : KeyAdapter() {
+            override fun keyPressed(e: KeyEvent) = handleComposerKey(e)
+        })
+        val inputScrollPane = JBScrollPane(inputArea).apply { preferredSize = Dimension(HISTORY_WIDTH, INPUT_HEIGHT) }
 
-        if (!settings.isConfigured()) {
-            appendSystemMessage("⚠️ Плагин не настроен. Перейдите в Settings → Tools → Ride для настройки API ключа.")
+        // Кнопки
+        sendButton = JButton("Отправить").apply { addActionListener { sendMessage() } }
+        clearButton = JButton("Очистить").apply { addActionListener { clearChat() } }
+        val buttonPanel = JPanel().apply {
+            layout = BoxLayout(this, BoxLayout.X_AXIS)
+            add(sendButton)
+            add(Box.createHorizontalStrut(5))
+            add(clearButton)
+        }
+
+        return JPanel(BorderLayout()).apply {
+            border = JBUI.Borders.empty(5)
+            add(inputScrollPane, BorderLayout.CENTER)
+            add(buttonPanel, BorderLayout.SOUTH)
         }
     }
 
@@ -457,6 +461,10 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
     }
 
     companion object {
+        private val HISTORY_WIDTH = 400
+        private val HISTORY_HEIGHT = 400
+        private val INPUT_HEIGHT = 80
+        private val INPUT_ROWS = 3
         private val LANGUAGE_ALIASES = mapOf(
             "js" to "javascript",
             "ts" to "typescript",
@@ -483,12 +491,24 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
     }
 
     private fun subscribeToAppearanceChanges() {
-        ApplicationManager.getApplication()
-            .messageBus
-            .connect(project)
-            .subscribe(ChatAppearanceListener.TOPIC, ChatAppearanceListener {
-                SwingUtilities.invokeLater { refreshAppearance() }
-            })
+        val connection = ApplicationManager.getApplication().messageBus.connect(project)
+        connection.subscribe(ChatAppearanceListener.TOPIC, ChatAppearanceListener {
+            SwingUtilities.invokeLater { scheduleRefreshAppearance() }
+        })
+        // Реакция на смену темы IDE
+        connection.subscribe(LafManagerListener.TOPIC, LafManagerListener {
+            SwingUtilities.invokeLater {
+                jcefView?.setTheme(ThemeTokens.fromSettings(settings).toJcefMap())
+                scheduleRefreshAppearance()
+            }
+        })
+    }
+
+    private fun handleComposerKey(e: KeyEvent) {
+        if (e.keyCode == KeyEvent.VK_ENTER && !e.isShiftDown) {
+            e.consume()
+            sendMessage()
+        }
     }
 
     private fun refreshAppearance() {
@@ -501,6 +521,21 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         if (!settings.isConfigured()) {
             appendSystemMessage("⚠️ Плагин не настроен. Перейдите в Settings → Tools → Ride для настройки API ключа.")
         }
+    }
+
+    /**
+     * Дебаунс обновления внешнего вида, чтобы не перерисовывать UI слишком часто.
+     */
+    private var refreshTimer: javax.swing.Timer? = null
+    private fun scheduleRefreshAppearance(delayMs: Int = 150) {
+        if (refreshTimer == null) {
+            refreshTimer = javax.swing.Timer(delayMs) {
+                refreshAppearance()
+            }.apply { isRepeats = false }
+        }
+        refreshTimer!!.stop()
+        refreshTimer!!.initialDelay = delayMs
+        refreshTimer!!.start()
     }
 
     /**
