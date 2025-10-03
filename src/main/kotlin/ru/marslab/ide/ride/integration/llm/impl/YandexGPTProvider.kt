@@ -7,6 +7,8 @@ import kotlinx.serialization.json.Json
 import ru.marslab.ide.ride.integration.llm.LLMProvider
 import ru.marslab.ide.ride.model.LLMParameters
 import ru.marslab.ide.ride.model.LLMResponse
+import ru.marslab.ide.ride.model.ConversationMessage
+import ru.marslab.ide.ride.model.ConversationRole
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -47,18 +49,18 @@ class YandexGPTProvider(
     override suspend fun sendRequest(
         systemPrompt: String,
         userMessage: String,
-        assistantHistory: List<String>,
+        conversationHistory: List<ConversationMessage>,
         parameters: LLMParameters
     ): LLMResponse {
-        logger.info("Sending request to Yandex GPT, systemPrompt length: ${systemPrompt.length}, userMessage length: ${userMessage.length}, assistantHistory size: ${assistantHistory.size}")
-        
+        logger.info("Sending request to Yandex GPT, systemPrompt length: ${systemPrompt.length}, userMessage length: ${userMessage.length}, conversationHistory size: ${conversationHistory.size}")
+
         return try {
-            val request = buildRequest(systemPrompt, userMessage, assistantHistory, parameters)
+            val request = buildRequest(systemPrompt, userMessage, conversationHistory, parameters)
             val response = sendWithRetry(request)
-            
+
             logger.info("Request successful, tokens used: ${response.tokensUsed}")
             response
-            
+
         } catch (e: Exception) {
             logger.error("Error sending request to Yandex GPT", e)
             LLMResponse.error("Ошибка при обращении к Yandex GPT: ${e.message}")
@@ -77,17 +79,26 @@ class YandexGPTProvider(
     private fun buildRequest(
         systemPrompt: String,
         userMessage: String,
-        assistantHistory: List<String>,
+        conversationHistory: List<ConversationMessage>,
         parameters: LLMParameters
     ): YandexGPTRequest {
         val messages = buildList {
             if (systemPrompt.isNotBlank()) {
                 add(YandexMessage(role = "system", text = systemPrompt))
             }
-            // История ответов ассистента для сохранения контекста
-            assistantHistory.forEach { assistantMsg ->
-                if (assistantMsg.isNotBlank()) add(YandexMessage(role = "assistant", text = assistantMsg))
+
+            // История диалога для сохранения контекста
+            conversationHistory.forEach { convMsg ->
+                val role = when (convMsg.role) {
+                    ConversationRole.USER -> "user"
+                    ConversationRole.ASSISTANT -> "assistant"
+                    ConversationRole.SYSTEM -> "system"
+                }
+                if (convMsg.content.isNotBlank()) {
+                    add(YandexMessage(role = role, text = convMsg.content))
+                }
             }
+
             // Текущее сообщение пользователя
             add(YandexMessage(role = "user", text = userMessage))
         }

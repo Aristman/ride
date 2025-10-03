@@ -2,6 +2,7 @@ package ru.marslab.ide.ride.integration.llm
 
 import ru.marslab.ide.ride.model.LLMParameters
 import ru.marslab.ide.ride.model.LLMResponse
+import ru.marslab.ide.ride.model.ConversationMessage
 
 /**
  * Интерфейс для работы с LLM провайдерами
@@ -12,17 +13,17 @@ import ru.marslab.ide.ride.model.LLMResponse
 interface LLMProvider {
     /**
      * Отправляет запрос в LLM и получает ответ
-     * 
+     *
      * @param systemPrompt Системный промпт от агента (контекст и инструкции)
      * @param userMessage Пользовательское обращение к модели
-     * @param assistantHistory Список ответов модели (assistant) для сохранения контекста
+     * @param conversationHistory Полная история диалога (пользователь + ассистент) для сохранения контекста
      * @param parameters Параметры генерации
      * @return Ответ от LLM
      */
     suspend fun sendRequest(
         systemPrompt: String,
         userMessage: String,
-        assistantHistory: List<String>,
+        conversationHistory: List<ConversationMessage>,
         parameters: LLMParameters
     ): LLMResponse
     

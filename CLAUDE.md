@@ -1,3 +1,4 @@
+
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
@@ -161,4 +162,53 @@ The plugin supports structured responses with validation:
 - **XML**: Schema validation with xmlutil
 - **TEXT**: Plain text responses (default)
 
-Response format is configured per agent through the `setResponseFormat()` method.
+### Core Components
+- **Response Models**: `ResponseFormat`, `ResponseSchema`, `ParsedResponse` (sealed class)
+- **Processing Pipeline**: PromptFormatter → ResponseParser → ResponseValidator
+- **Factory Pattern**: `ResponseParserFactory` and `ResponseValidatorFactory`
+
+### Usage Example
+```kotlin
+val agent = AgentFactory.createChatAgent()
+val schema = ResponseSchema.json(
+    """
+    {
+      "answer": "string",
+      "confidence": 0.0,
+      "sources": ["string"]
+    }
+    """.trimIndent(),
+    description = "Структурируй ответ, добавь confidence и источники"
+)
+
+agent.setResponseFormat(ResponseFormat.JSON, schema)
+val response = agent.processRequest("Что такое Kotlin?", context)
+
+when (val parsed = response.parsedContent) {
+    is ParsedResponse.JsonResponse -> println(parsed.jsonElement)
+    is ParsedResponse.ParseError -> println("Ошибка парсинга: ${parsed.error}")
+    else -> println(response.content)
+}
+```
+
+Response format is configured per agent through the `setResponseFormat()` method with comprehensive error handling for parsing and validation failures.
+
+## Advanced Features
+
+### Response Format Actions
+- **SetResponseFormatAction**: Unified dialog for format selection and schema input
+- **Individual format actions**: Quick access to JSON/XML formats
+- **ClearFormatAction**: Reset to default TEXT format
+- **Integration with ChatService**: Centralized format management
+
+### Error Handling
+- **Parse errors**: Detailed error reporting with original content
+- **Validation errors**: Schema validation with specific error messages
+- **Provider errors**: Graceful fallback and user-friendly messages
+- **Logging**: Comprehensive logging for debugging and monitoring
+
+### Extensibility
+- **Plugin architecture**: Easy addition of new formats and providers
+- **Factory pattern**: Simplified extension of parsing and validation logic
+- **Interface-based design**: Clean separation of concerns
+- **Configuration-driven**: Runtime format switching without code changes

@@ -2,16 +2,20 @@ package ru.marslab.ide.ride.agent.impl
 
 import com.intellij.openapi.diagnostic.Logger
 import ru.marslab.ide.ride.agent.Agent
+import ru.marslab.ide.ride.agent.UncertaintyAnalyzer
 import ru.marslab.ide.ride.agent.formatter.PromptFormatter
 import ru.marslab.ide.ride.agent.parser.ResponseParserFactory
 import ru.marslab.ide.ride.agent.validation.ResponseValidatorFactory
 import ru.marslab.ide.ride.integration.llm.LLMProvider
 import ru.marslab.ide.ride.model.AgentResponse
 import ru.marslab.ide.ride.model.ChatContext
+import ru.marslab.ide.ride.model.ConversationMessage
+import ru.marslab.ide.ride.model.ConversationRole
 import ru.marslab.ide.ride.model.LLMParameters
+import ru.marslab.ide.ride.model.Message
+import ru.marslab.ide.ride.model.MessageRole
 import ru.marslab.ide.ride.model.ResponseFormat
 import ru.marslab.ide.ride.model.ResponseSchema
-import ru.marslab.ide.ride.model.Message
 
 /**
  * Универсальная реализация агента для общения с пользователем
@@ -47,15 +51,15 @@ class ChatAgent(
         return try {
             // Системный промпт (опционально расширяем инструкциями формата)
             val systemPromptForRequest = buildSystemPrompt()
-            
-            // История ответов ассистента для контекста
-            val assistantHistory = getAssistantHistory(context)
-            
+
+            // Полная история диалога для контекста
+            val conversationHistory = buildConversationHistory(context)
+
             // Делегируем запрос в LLM провайдер
             val llmResponse = llmProvider.sendRequest(
                 systemPrompt = systemPromptForRequest,
                 userMessage = request,
-                assistantHistory = assistantHistory,
+                conversationHistory = conversationHistory,
                 parameters = LLMParameters.DEFAULT
             )
             
@@ -99,25 +103,42 @@ class ChatAgent(
                     )
                 }
             }
-            
-            // Возвращаем успешный ответ
+
+            // Анализируем неопределенность ответа
+            val uncertainty = UncertaintyAnalyzer.analyzeUncertainty(llmResponse.content, context)
+            val isFinal = UncertaintyAnalyzer.isFinalResponse(uncertainty)
+
+            logger.info("Uncertainty analysis: uncertainty=$uncertainty, isFinal=$isFinal")
+
+            // Собираем метаданные ответа
+            val baseMetadata = mutableMapOf(
+                "tokensUsed" to llmResponse.tokensUsed,
+                "provider" to llmProvider.getProviderName()
+            )
+
+            if (responseFormat != null) {
+                baseMetadata["format"] = responseFormat!!.name
+            }
+
+            // Добавляем информацию о неопределенности
+            baseMetadata["uncertainty"] = uncertainty
+            baseMetadata["hasClarifyingQuestions"] = UncertaintyAnalyzer.hasExplicitUncertainty(llmResponse.content)
+
+            // Возвращаем успешный ответ с учетом неопределенности
             if (parsedResponse != null) {
                 AgentResponse.success(
                     content = llmResponse.content,
                     parsedContent = parsedResponse,
-                    metadata = mapOf(
-                        "tokensUsed" to llmResponse.tokensUsed,
-                        "provider" to llmProvider.getProviderName(),
-                        "format" to (responseFormat?.name ?: "TEXT")
-                    )
+                    isFinal = isFinal,
+                    uncertainty = uncertainty,
+                    metadata = baseMetadata
                 )
             } else {
                 AgentResponse.success(
                     content = llmResponse.content,
-                    metadata = mapOf(
-                        "tokensUsed" to llmResponse.tokensUsed,
-                        "provider" to llmProvider.getProviderName()
-                    )
+                    isFinal = isFinal,
+                    uncertainty = uncertainty,
+                    metadata = baseMetadata
                 )
             }
             
@@ -173,11 +194,18 @@ class ChatAgent(
     }
 
     /**
-     * Возвращает последние ответы ассистента для контекста (до HISTORY_LIMIT)
+     * Строит полную историю диалога для LLM провайдера
      */
-    private fun getAssistantHistory(context: ChatContext): List<String> {
-        val recent: List<Message> = context.getRecentHistory(HISTORY_LIMIT)
-        return recent.filter { it.isFromAssistant() }.map { it.content }
+    private fun buildConversationHistory(context: ChatContext): List<ConversationMessage> {
+        val recentMessages = context.getRecentHistory(HISTORY_LIMIT)
+        return recentMessages.map { message ->
+            val role = when (message.role) {
+                MessageRole.USER -> ConversationRole.USER
+                MessageRole.ASSISTANT -> ConversationRole.ASSISTANT
+                MessageRole.SYSTEM -> ConversationRole.SYSTEM
+            }
+            ConversationMessage(role, message.content)
+        }
     }
     
     companion object {
@@ -187,12 +215,30 @@ class ChatAgent(
 Ты - AI-ассистент для разработчиков в IntelliJ IDEA.
 Твоя задача - помогать программистам с их вопросами о коде, отладке и разработке.
 
-Правила:
-- Отвечай четко, по существу и профессионально
-- Если нужно показать код, используй markdown форматирование с указанием языка
-- Если не уверен в ответе, честно скажи об этом
-- Предлагай лучшие практики и современные подходы
-- Будь дружелюбным и помогающим
+ПРАВИЛО ОЦЕНКИ НЕОПРЕДЕЛЕННОСТИ:
+Прежде чем дать окончательный ответ, оцени свою уверенность в том, что ты полностью понял вопрос и можешь дать исчерпывающий ответ.
+
+- Если твоя неопределенность больше 0.1 (из 1.0) - ЗАДАВАЙ УТОЧНЯЮЩИЕ ВОПРОСЫ
+- Если неопределенность 0.1 или меньше - давай окончательный ответ
+
+Критерии неопределенности:
+- Недостаточно контекста или информации о проблеме (0.2-0.4)
+- Неясен конкретный сценарий использования кода (0.2-0.3)
+- Отсутствуют детали об окружении или технологиях (0.1-0.3)
+- Вопрос слишком общий или допускает множество интерпретаций (0.3-0.5)
+- Неизвестен уровень знаний пользователя (0.1-0.2)
+
+Правила ответов:
+- Если неопределенность > 0.1: начни с "Давайте уточню..." и задай конкретные вопросы
+- Если неопределенность ≤ 0.1: начни с "Окончательный ответ:" и дай полный ответ
+- Используй markdown для кода с указанием языка
+- Будь дружелюбным и профессиональным
+
+Пример уточняющего вопроса:
+"Давайте уточню несколько деталей: какую версию Kotlin вы используете и это веб-приложение или мобильное?"
+
+Пример окончательного ответа:
+"Окончательный ответ: вот решение вашей проблемы с примером кода..."
 
 Отвечай на русском языке, если пользователь пишет на русском.
         """.trimIndent()
