@@ -11,6 +11,9 @@ import ru.marslab.ide.ride.model.MessageRole
 import ru.marslab.ide.ride.service.ChatService
 import ru.marslab.ide.ride.settings.ChatAppearanceListener
 import ru.marslab.ide.ride.settings.PluginSettings
+import ru.marslab.ide.ride.ui.chat.JcefChatView
+import ru.marslab.ide.ride.theme.ThemeTokens
+
 import java.awt.BorderLayout
 import java.awt.Dimension
 import java.awt.Toolkit
@@ -20,18 +23,32 @@ import java.awt.event.KeyEvent
 import java.util.LinkedHashMap
 import java.util.UUID
 import javax.swing.*
-import javax.swing.SwingUtilities
 import javax.swing.event.HyperlinkEvent
 
 /**
- * Главная панель чата
+ * Главная панель чата (гибрид Swing + JCEF)
  */
 class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
-    
+
     private val chatService = service<ChatService>()
     private val settings = service<PluginSettings>()
-    
-    private val chatHistoryArea: JEditorPane
+
+    // Fallback HTML-история (для режима без JCEF)
+    private val chatHistoryArea: JEditorPane = JEditorPane().apply {
+        contentType = "text/html"
+        isEditable = false
+        putClientProperty(JEditorPane.HONOR_DISPLAY_PROPERTIES, true)
+        addHyperlinkListener { event ->
+            if (event.eventType == HyperlinkEvent.EventType.ACTIVATED) {
+                val description = event.description
+                if (description != null && description.startsWith(COPY_LINK_PREFIX)) {
+                    val key = description.removePrefix(COPY_LINK_PREFIX)
+                    codeBlockRegistry[key]?.let { copyCodeToClipboard(it) }
+                }
+            }
+        }
+    }
+
     private val htmlBuffer = StringBuilder()
     private val codeBlockRegistry = LinkedHashMap<String, String>()
     private var loadingStart: Int = -1
@@ -40,39 +57,30 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
     private val sendButton: JButton
     private val clearButton: JButton
     private var lastRole: MessageRole? = null
-    
+
+    // JCEF (если доступен)
+    private val useJcef: Boolean = true
+    private var jcefView: JcefChatView? = runCatching { if (useJcef) JcefChatView() else null }.getOrNull()
+
     init {
-        // Область истории чата (HTML)
-        chatHistoryArea = JEditorPane().apply {
-            contentType = "text/html"
-            isEditable = false
-            putClientProperty(JEditorPane.HONOR_DISPLAY_PROPERTIES, true)
-            addHyperlinkListener { event ->
-                if (event.eventType == HyperlinkEvent.EventType.ACTIVATED) {
-                    val description = event.description
-                    if (description != null && description.startsWith(COPY_LINK_PREFIX)) {
-                        val key = description.removePrefix(COPY_LINK_PREFIX)
-                        codeBlockRegistry[key]?.let { copyCodeToClipboard(it) }
-                    }
-                }
-            }
-        }
+        // Инициализация HTML/темы
         initHtml()
         subscribeToAppearanceChanges()
-        
+
+        // Прокидываем тему в JCEF
+        jcefView?.setTheme(ThemeTokens.fromSettings(settings).toJcefMap())
+
         val historyScrollPane = JBScrollPane(chatHistoryArea).apply {
             preferredSize = Dimension(400, 400)
         }
-        
-        // Область ввода
+
+        // Ввод
         inputArea = JBTextArea().apply {
             lineWrap = true
             wrapStyleWord = true
             rows = 3
             font = font.deriveFont(14f)
         }
-        
-        // Обработка Enter для отправки
         inputArea.addKeyListener(object : KeyAdapter() {
             override fun keyPressed(e: KeyEvent) {
                 if (e.keyCode == KeyEvent.VK_ENTER && !e.isShiftDown) {
@@ -81,91 +89,65 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                 }
             }
         })
-        
-        val inputScrollPane = JBScrollPane(inputArea).apply {
-            preferredSize = Dimension(400, 80)
-        }
-        
+        val inputScrollPane = JBScrollPane(inputArea).apply { preferredSize = Dimension(400, 80) }
+
         // Кнопки
-        sendButton = JButton("Отправить").apply {
-            addActionListener { sendMessage() }
-        }
-        
-        clearButton = JButton("Очистить").apply {
-            addActionListener { clearChat() }
-        }
-        
-        // Панель с кнопками
+        sendButton = JButton("Отправить").apply { addActionListener { sendMessage() } }
+        clearButton = JButton("Очистить").apply { addActionListener { clearChat() } }
         val buttonPanel = JPanel().apply {
             layout = BoxLayout(this, BoxLayout.X_AXIS)
             add(sendButton)
             add(Box.createHorizontalStrut(5))
             add(clearButton)
         }
-        
-        // Нижняя панель (ввод + кнопки)
+
+        // Нижняя панель
         val bottomPanel = JPanel(BorderLayout()).apply {
             border = JBUI.Borders.empty(5)
             add(inputScrollPane, BorderLayout.CENTER)
             add(buttonPanel, BorderLayout.SOUTH)
         }
-        
-        // Компоновка
-        add(historyScrollPane, BorderLayout.CENTER)
+
+        // Компоновка: центр — JCEF если доступен, иначе fallback
+        if (jcefView != null) {
+            add(jcefView!!.getComponent(), BorderLayout.CENTER)
+        } else {
+            add(historyScrollPane, BorderLayout.CENTER)
+        }
         add(bottomPanel, BorderLayout.SOUTH)
-        
-        // Загружаем историю при открытии
+
+        // История при старте
         loadHistory()
-        
-        // Проверяем настройки
+
         if (!settings.isConfigured()) {
             appendSystemMessage("⚠️ Плагин не настроен. Перейдите в Settings → Tools → Ride для настройки API ключа.")
         }
     }
-    
-    /**
-     * Отправляет сообщение пользователя
-     */
+
     private fun sendMessage() {
         val text = inputArea.text.trim()
-        if (text.isEmpty()) {
-            return
-        }
-        
-        // Очищаем поле ввода
+        if (text.isEmpty()) return
         inputArea.text = ""
-        
-        // Отображаем сообщение пользователя
         appendMessage(Message(content = text, role = MessageRole.USER))
-        
-        // Блокируем UI во время обработки
         setUIEnabled(false)
         appendSystemMessage("⏳ Обработка запроса...")
-        
-        // Отправляем запрос (проверка настроек будет в фоновом потоке)
+
         chatService.sendMessage(
             userMessage = text,
             project = project,
             onResponse = { message ->
-                // Удаляем сообщение о загрузке
                 removeLastSystemMessage()
-                // Отображаем ответ
                 appendMessage(message)
                 setUIEnabled(true)
             },
             onError = { error ->
-                // Удаляем сообщение о загрузке
                 removeLastSystemMessage()
-                // Отображаем ошибку
                 appendSystemMessage("❌ Ошибка: $error")
                 setUIEnabled(true)
             }
         )
     }
-    
-    /**
-     * Очищает историю чата
-     */
+
     private fun clearChat() {
         val result = JOptionPane.showConfirmDialog(
             this,
@@ -173,31 +155,19 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
             "Подтверждение",
             JOptionPane.YES_NO_OPTION
         )
-        
         if (result == JOptionPane.YES_OPTION) {
             chatService.clearHistory()
             initHtml()
             appendSystemMessage("История чата очищена.")
         }
     }
-    
-    /**
-     * Загружает историю сообщений
-     */
+
     private fun loadHistory() {
         val history = chatService.getHistory()
-        if (history.isNotEmpty()) {
-            history.forEach { message ->
-                appendMessage(message, addToHistory = false)
-            }
-        } else {
-            appendSystemMessage("👋 Привет! Я AI-ассистент для разработчиков. Чем могу помочь?")
-        }
+        if (history.isNotEmpty()) history.forEach { appendMessage(it, addToHistory = false) }
+        else appendSystemMessage("👋 Привет! Я AI-ассистент для разработчиков. Чем могу помочь?")
     }
-    
-    /**
-     * Добавляет сообщение в историю
-     */
+
     private fun appendMessage(message: Message, addToHistory: Boolean = true) {
         val roleClass = when (message.role) {
             MessageRole.USER -> "user"
@@ -228,10 +198,7 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         appendHtml(chunk)
         lastRole = message.role
     }
-    
-    /**
-     * Добавляет системное сообщение
-     */
+
     private fun appendSystemMessage(text: String) {
         val isLoading = text.contains("Обработка запроса")
         val content = escapeHtml(text)
@@ -249,23 +216,16 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         }
         lastRole = MessageRole.SYSTEM
     }
-    
-    /**
-     * Удаляет последнее системное сообщение (для удаления "Обработка запроса...")
-     */
+
     private fun removeLastSystemMessage() {
         if (loadingStart != -1 && loadingEnd != -1 && loadingStart < loadingEnd && loadingEnd <= htmlBuffer.length) {
             htmlBuffer.delete(loadingStart, loadingEnd)
-            // сбрасываем индексы
             loadingStart = -1
             loadingEnd = -1
-            refreshEditor()
+            if (jcefView != null) jcefView?.setBody(htmlBuffer.toString()) else refreshEditor()
         }
     }
-    
-    /**
-     * Включает/выключает UI элементы
-     */
+
     private fun setUIEnabled(enabled: Boolean) {
         inputArea.isEnabled = enabled
         sendButton.isEnabled = enabled
@@ -277,88 +237,96 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         loadingEnd = -1
         lastRole = null
         codeBlockRegistry.clear()
-        val fontSize = settings.chatFontSize
-        val codeFontSize = (fontSize - 1).coerceAtLeast(10)
-        val prefixColor = settings.chatPrefixColor
-        val codeBg = settings.chatCodeBackgroundColor
-        val codeText = settings.chatCodeTextColor
-        val codeBorder = settings.chatCodeBorderColor
-        val userBg = settings.chatUserBackgroundColor
-        val userBorder = settings.chatUserBorderColor
 
-        htmlBuffer.append(
-            """
-                <html>
-                <head>
-                  <style>
-                    body { font-family: Arial, sans-serif; font-size: ${fontSize}px; }
-                    .msg { margin-top: 8px; margin-left: 8px; margin-right: 8px; margin-bottom: 12px; }
-                    .prefix { color: $prefixColor; margin-bottom: 4px; }
-                    .content { }
-                    .msg.user .prefix { color: $prefixColor; margin-bottom: 6px; }
-                    .msg.user .content { display: inline-block; background-color: $userBg; border: 1px solid $userBorder; padding: 10px 14px; color: inherit; text-align: left; }
-                    .msg.user .content table.code-block { margin-top: 12px; }
-                    /* Code block styling (configurable) */
-                    pre { background-color: $codeBg; color: $codeText; padding: 8px; border: 1px solid $codeBorder; }
-                    pre { margin: 0; }
-                    code { font-family: monospace; font-size: ${codeFontSize}px; color: $codeText; }
-                    table.code-block { width: 100%; border-collapse: collapse; margin-top: 8px; }
-                    table.code-block td { padding: 0; }
-                    td.code-lang { font-size: ${codeFontSize - 1}px; color: $prefixColor; padding: 4px 6px; }
-                    td.code-copy-cell { text-align: right; padding: 4px 6px; }
-                    a.code-copy-link { color: $prefixColor; text-decoration: none; display: inline-block; width: 20px; height: 20px; text-align: center; line-height: 20px; }
-                    a.code-copy-link:hover { background-color: $userBorder; }
-                    .code-copy-icon { font-size: ${codeFontSize}px; line-height: 1; font-family: 'Segoe UI Symbol', 'Apple Color Emoji', sans-serif; }
-                    .msg.user { text-align: right; }
-                    .msg.user .prefix { text-align: right; }
-                    .msg.user .content { text-align: right; }
-                    .msg.after-system { margin-top: 20px; }
-                  </style>
-                </head>
-                <body>
-            """.trimIndent()
-        )
-        refreshEditor()
+        if (jcefView != null) {
+            jcefView?.clear()
+        } else {
+            val fontSize = settings.chatFontSize
+            val codeFontSize = (fontSize - 1).coerceAtLeast(10)
+            val t = ThemeTokens.fromSettings(settings)
+
+            htmlBuffer.append(
+                """
+                    <html>
+                    <head>
+                      <style>
+                        body { font-family: Arial, sans-serif; font-size: ${fontSize}px; }
+                        .msg { margin-top: 8px; margin-left: 8px; margin-right: 8px; margin-bottom: 12px; }
+                        .prefix { color: ${t.prefix}; margin-bottom: 4px; }
+                        .content { }
+                        .msg.user .prefix { color: ${t.prefix}; margin-bottom: 6px; }
+                        .msg.user .content { display: inline-block; background-color: ${t.userBg}; border: 1px solid ${t.userBorder}; padding: 10px 14px; color: inherit; text-align: left; }
+                        .msg.user .content table.code-block { margin-top: 12px; }
+                        pre { background-color: ${t.codeBg}; color: ${t.codeText}; padding: 8px; border: 1px solid ${t.codeBorder}; }
+                        pre { margin: 0; }
+                        code { font-family: monospace; font-size: ${codeFontSize}px; color: ${t.codeText}; }
+                        table.code-block { width: 100%; border-collapse: collapse; margin-top: 8px; }
+                        table.code-block td { padding: 0; }
+                        td.code-lang { font-size: ${codeFontSize - 1}px; color: ${t.prefix}; padding: 4px 6px; }
+                        td.code-copy-cell { text-align: right; padding: 4px 6px; }
+                        a.code-copy-link { color: ${t.prefix}; text-decoration: none; display: inline-block; width: 20px; height: 20px; text-align: center; line-height: 20px; }
+                        a.code-copy-link:hover { background-color: ${t.userBorder}; }
+                        .code-copy-icon { font-size: ${codeFontSize}px; line-height: 1; font-family: 'Segoe UI Symbol', 'Apple Color Emoji', sans-serif; }
+                        .msg.user { text-align: right; }
+                        .msg.user .prefix { text-align: right; }
+                        .msg.user .content { text-align: right; }
+                        .msg.after-system { margin-top: 20px; }
+                      </style>
+                    </head>
+                    <body>
+                """.trimIndent()
+            )
+            refreshEditor()
+        }
     }
 
     private fun refreshEditor() {
-        val html = StringBuilder(htmlBuffer).append("\n</body>\n</html>").toString()
-        chatHistoryArea.text = html
-        chatHistoryArea.caretPosition = chatHistoryArea.document.length
+        if (jcefView != null) {
+            jcefView?.setBody(htmlBuffer.toString())
+        } else {
+            val html = StringBuilder(htmlBuffer).append("\n</body>\n</html>").toString()
+            chatHistoryArea.text = html
+            chatHistoryArea.caretPosition = chatHistoryArea.document.length
+        }
     }
 
     private fun appendHtml(chunk: String) {
-        // Удаляем хвост </body></html> если уже добавляли
-        val closing = "</body>\n</html>"
-        val idx = htmlBuffer.indexOf(closing)
-        if (idx != -1) {
-            htmlBuffer.delete(idx, htmlBuffer.length)
+        if (jcefView != null) {
+            htmlBuffer.append("\n").append(chunk)
+            jcefView?.appendHtml(chunk)
+        } else {
+            val closing = "</body>\n</html>"
+            val idx = htmlBuffer.indexOf(closing)
+            if (idx != -1) htmlBuffer.delete(idx, htmlBuffer.length)
+            htmlBuffer.append("\n").append(chunk)
+            refreshEditor()
         }
-        htmlBuffer.append("\n").append(chunk)
-        refreshEditor()
     }
 
     private fun appendHtmlWithRange(chunk: String): Pair<Int, Int> {
-        // Удаляем хвост </body></html> если уже добавляли
-        val closing = "</body>\n</html>"
-        val idx = htmlBuffer.indexOf(closing)
-        if (idx != -1) {
-            htmlBuffer.delete(idx, htmlBuffer.length)
+        if (jcefView != null) {
+            val start = htmlBuffer.length
+            htmlBuffer.append("\n").append(chunk)
+            val end = htmlBuffer.length
+            jcefView?.appendHtml(chunk)
+            return start to end
+        } else {
+            val closing = "</body>\n</html>"
+            val idx = htmlBuffer.indexOf(closing)
+            if (idx != -1) htmlBuffer.delete(idx, htmlBuffer.length)
+            val start = htmlBuffer.length
+            htmlBuffer.append("\n").append(chunk)
+            val end = htmlBuffer.length
+            refreshEditor()
+            return start to end
         }
-        val start = htmlBuffer.length
-        htmlBuffer.append("\n").append(chunk)
-        val end = htmlBuffer.length
-        refreshEditor()
-        return start to end
     }
 
     private fun renderContentToHtml(text: String): String {
-        // Наивная обработка fenced code blocks: ```lang\n...\n```
         val pattern = Regex("""```([\w#+.-]+)?[ \t]*\n?([\s\S]*?)```""", RegexOption.IGNORE_CASE)
         var lastIndex = 0
         val result = StringBuilder()
         pattern.findAll(text).forEach { m ->
-            // Текст до блока
             val pre = text.substring(lastIndex, m.range.first)
             result.append(escapeHtml(pre).replace("\n", "<br/>"))
             val langRaw = (m.groups[1]?.value ?: "").trim().lowercase()
@@ -380,7 +348,6 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
             result.append("</table>")
             lastIndex = m.range.last + 1
         }
-        // Хвост
         if (lastIndex < text.length) {
             result.append(escapeHtml(text.substring(lastIndex)).replace("\n", "<br/>"))
         }
@@ -393,16 +360,13 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         return if (canonical.isBlank()) "text" else canonical
     }
 
-    private fun escapeHtml(s: String): String {
-        return s
-            .replace("&", "&amp;")
+    private fun escapeHtml(s: String): String =
+        s.replace("&", "&amp;")
             .replace("<", "&lt;")
             .replace(">", "&gt;")
             .replace("\"", "&quot;")
             .replace("'", "&#39;")
-    }
 
-    // Простой pretty-print для JSON без внешних зависимостей
     private fun prettyPrintJson(input: String): String {
         val sb = StringBuilder()
         var indent = 0
@@ -431,10 +395,8 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                     sb.append('\n')
                     sb.append("  ".repeat(indent))
                 }
-                ch == ':' -> {
-                    sb.append(": ")
-                }
-                ch.isWhitespace() -> { /* skip */ }
+                ch == ':' -> sb.append(": ")
+                ch.isWhitespace() -> { }
                 else -> sb.append(ch)
             }
         }
@@ -478,16 +440,34 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
 
     private fun refreshAppearance() {
         val history = chatService.getHistory()
+        // Обновляем тему JCEF без перезагрузки страницы
+        jcefView?.setTheme(jcefThemeTokens())
         initHtml()
-        if (history.isNotEmpty()) {
-            history.forEach { appendMessage(it, addToHistory = false) }
-        } else {
-            appendSystemMessage("👋 Привет! Я AI-ассистент для разработчиков. Чем могу помочь?")
-        }
+        if (history.isNotEmpty()) history.forEach { appendMessage(it, addToHistory = false) }
+        else appendSystemMessage("👋 Привет! Я AI-ассистент для разработчиков. Чем могу помочь?")
         if (!settings.isConfigured()) {
             appendSystemMessage("⚠️ Плагин не настроен. Перейдите в Settings → Tools → Ride для настройки API ключа.")
         }
     }
+
+    /**
+     * Токены темы для JCEF (CSS variables)
+     */
+    private fun jcefThemeTokens(): Map<String, String> = mapOf(
+        // Общие
+        "bg" to settings.chatCodeBackgroundColor, // временно используем фон код-блоков как общий, до ввода отдельного токена
+        "textPrimary" to "#e6e6e6",
+        "textSecondary" to "#9aa0a6",
+        // Префиксы/метки
+        "prefix" to settings.chatPrefixColor,
+        // Пользовательские блоки
+        "userBg" to settings.chatUserBackgroundColor,
+        "userBorder" to settings.chatUserBorderColor,
+        // Кодовые блоки
+        "codeBg" to settings.chatCodeBackgroundColor,
+        "codeText" to settings.chatCodeTextColor,
+        "codeBorder" to settings.chatCodeBorderColor
+    )
 
     private fun registerCodeBlock(code: String): String {
         if (codeBlockRegistry.size >= CODE_CACHE_LIMIT) {
