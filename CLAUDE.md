@@ -65,17 +65,47 @@ The core agent interface supports:
 - Structured response parsing and validation
 
 ### LLM Provider Abstraction
-The `LLMProvider` interface uses a modern message-based API:
+The `LLMProvider` interface uses a modern message-based API with full dialogue history support:
 ```kotlin
 suspend fun sendRequest(
     systemPrompt: String,
     userMessage: String,
-    assistantHistory: List<String>,
+    conversationHistory: List<ConversationMessage>,
     parameters: LLMParameters
 ): LLMResponse
 ```
 
-This design supports conversation history and multi-turn dialogues.
+This design supports complete conversation history and multi-turn dialogues with role-based message representation.
+
+### Uncertainty Analysis System
+The plugin implements intelligent uncertainty analysis to determine when the AI should ask clarifying questions versus providing final answers:
+
+#### Key Components
+- **UncertaintyAnalyzer**: Pattern-based uncertainty detection with configurable threshold (default: 0.1)
+- **ConversationMessage**: Structured representation of dialogue with roles (USER, ASSISTANT, SYSTEM)
+- **AgentResponse**: Extended with uncertainty scores and final response flags
+- **System Prompts**: Enhanced with uncertainty evaluation rules
+
+#### Uncertainty Detection Logic
+- **Pattern Matching**: Analyzes responses for uncertainty indicators in Russian
+- **Question Detection**: Identifies clarifying questions in responses
+- **Scoring Algorithm**: Normalized uncertainty calculation (0.0 - 1.0)
+- **Threshold Logic**: If uncertainty > 0.1 → ask clarifying questions; ≤ 0.1 → provide final answer
+
+#### Usage Example
+```kotlin
+val agent = AgentFactory.createChatAgent()
+val response = agent.processRequest("Как оптимизировать код?", context)
+
+if (response.isFinal) {
+    // Окончательный ответ с высокой уверенностью
+    println("Окончательный ответ: ${response.content}")
+} else {
+    // Требуются уточняющие вопросы
+    println("Уточняющие вопросы: ${UncertaintyAnalyzer.extractClarifyingQuestions(response.content)}")
+    println("Уровень неопределенности: ${response.uncertainty}")
+}
+```
 
 ## Module Structure
 
@@ -92,10 +122,11 @@ src/main/kotlin/ru/marslab/ide/ride/
 ```
 
 ### Key Components
-- **ChatAgent**: Universal agent implementation that works with any LLM provider
-- **YandexGPTProvider**: HTTP client for Yandex GPT API integration
+- **ChatAgent**: Universal agent implementation with uncertainty analysis and full dialogue history
+- **YandexGPTProvider**: HTTP client for Yandex GPT API integration with conversation support
+- **UncertaintyAnalyzer**: Pattern-based uncertainty detection and question extraction
 - **ChatService**: Central service coordinating UI, agents, and message history
-- **MessageHistory**: In-memory storage for chat conversations
+- **MessageHistory**: In-memory storage for chat conversations with role-based messages
 - **PluginSettings**: Persistent configuration using IntelliJ's PersistentStateComponent
 
 ## Technology Stack
@@ -131,6 +162,9 @@ src/main/kotlin/ru/marslab/ide/ride/
 - Mock external dependencies (LLM providers)
 - Integration tests for response formatting and parsing
 - UI tests for critical user interactions
+- Uncertainty analysis tests with comprehensive coverage (12 tests)
+- Conversation history validation tests
+- Pattern matching validation for Russian language uncertainty indicators
 
 ## Important Constraints
 
@@ -212,3 +246,22 @@ Response format is configured per agent through the `setResponseFormat()` method
 - **Factory pattern**: Simplified extension of parsing and validation logic
 - **Interface-based design**: Clean separation of concerns
 - **Configuration-driven**: Runtime format switching without code changes
+
+## Feature Roadmaps
+
+### Uncertainty Analysis System
+Документация по реализованной системе анализа неопределенности доступна в файле:
+- **[UNCERTAINTY_ANALYSIS_ROADMAP.md](UNCERTAINTY_ANALYSIS_ROADMAP.md)** - Полный роадмап разработки с техническими деталями
+
+**Краткая справка по использованию:**
+```kotlin
+// Проверка типа ответа
+if (response.isFinal) {
+    // Окончательный ответ - можно визуально выделить в UI
+    displayFinalAnswer(response.content)
+} else {
+    // Уточняющие вопросы - показать индикатор неопределенности
+    val questions = UncertaintyAnalyzer.extractClarifyingQuestions(response.content)
+    displayClarifyingQuestions(questions, response.uncertainty)
+}
+```
