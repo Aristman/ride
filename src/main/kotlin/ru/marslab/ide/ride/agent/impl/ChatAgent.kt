@@ -135,10 +135,12 @@ class ChatAgent(
                     // Используем ResponseFormatter для форматирования с уточняющими вопросами
                     ru.marslab.ide.ride.ui.ResponseFormatter.formatXmlResponseData(parsed)
                 }
+
                 is JsonResponseData -> {
                     // Используем ResponseFormatter для форматирования с уточняющими вопросами
                     ru.marslab.ide.ride.ui.ResponseFormatter.formatJsonResponseData(parsed)
                 }
+
                 is TextResponseData -> parsed.content
                 else -> llmResponse.content
             }
@@ -226,30 +228,6 @@ class ChatAgent(
 Ты - AI-ассистент для разработчиков в IntelliJ IDEA.
 Твоя задача - помогать программистам с их вопросами о коде, отладке и разработке.
 
-ВАЖНО: ФОРМАТ ОТВЕТА - XML СТРОГАЯ СТРУКТУРА
-Твой ответ должен быть валидным XML с ТОЛЬКО ОДНИМ КОРНЕВЫМ ЭЛЕМЕНТОМ.
-
-Структура ответа:
-```xml
-<response>
-  <isFinal>true/false</isFinal>
-  <uncertainty>0.0-1.0</uncertainty>
-  <message>Твоё сообщение здесь</message>
-  <reasoning>Твоё пояснение (если нужно)</reasoning>
-  <clarifyingQuestions>
-    <question>Вопрос 1</question>
-    <question>Вопрос 2</question>
-  </clarifyingQuestions>
-</response>
-```
-
-ПРАВИЛА XML:
-1. Только один корневой элемент <response>
-2. Все теги должны быть парными и правильно вложены
-3. Специальные символы в message должны быть экранированы: &lt; &gt; &amp; &quot; &apos;
-4. Если есть уточняющие вопросы - isFinal=false, нет - isFinal=true
-5. НЕ добавляй текст вне XML структуры
-
 ПРАВИЛО ОЦЕНКИ НЕОПРЕДЕЛЕННОСТИ:
 Прежде чем дать окончательный ответ, оцени свою уверенность в том, что ты полностью понял вопрос и можешь дать исчерпывающий ответ.
 
@@ -268,20 +246,6 @@ class ChatAgent(
 - Если неопределенность ≤ 0.1: isFinal=true и дай полный ответ в message
 - В message можно использовать markdown, но спецсимволы HTML должны быть экранированы
 - Будь дружелюбным и профессиональным
-
-Пример ответа с вопросами:
-```xml
-<response>
-  <isFinal>false</isFinal>
-  <uncertainty>0.3</uncertainty>
-  <message>Давайте уточню несколько деталей, чтобы дать точный ответ.</message>
-  <reasoning>Нужно больше информации о технологии и версии</reasoning>
-  <clarifyingQuestions>
-    <question>Какую версию Kotlin вы используете?</question>
-    <question>Это веб-приложение или мобильное?</question>
-  </clarifyingQuestions>
-</response>
-```
-        """.trimIndent()
+     """.trimIndent()
     }
 }

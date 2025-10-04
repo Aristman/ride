@@ -25,8 +25,7 @@ class SettingsConfigurable : Configurable {
 
     private lateinit var apiKeyField: JBPasswordField
     private lateinit var folderIdField: JBTextField
-    private lateinit var systemPromptArea: JBTextArea
-    private lateinit var temperatureField: JBTextField
+      private lateinit var temperatureField: JBTextField
     private lateinit var maxTokensField: JBTextField
     private lateinit var chatFontSizeField: JBTextField
     private lateinit var chatPrefixColorPanel: ColorPanel
@@ -75,7 +74,6 @@ class SettingsConfigurable : Configurable {
 
         return apiKeyModified ||
                 folderIdField.text != settings.folderId ||
-                systemPromptArea.text != settings.systemPrompt ||
                 temperatureField.text != settings.temperature.toString() ||
                 maxTokensField.text != settings.maxTokens.toString() ||
                 chatFontSizeField.text != settings.chatFontSize.toString() ||
@@ -115,7 +113,6 @@ class SettingsConfigurable : Configurable {
 
         // Сохраняем остальные настройки
         settings.folderId = folderIdField.text.trim()
-        settings.systemPrompt = systemPromptArea.text
         settings.yandexModelId = modelComboBox.selectedItem as? String ?: PluginSettingsState.DEFAULT_YANDEX_MODEL_ID
 
         // Валидация и сохранение числовых параметров
@@ -172,7 +169,6 @@ class SettingsConfigurable : Configurable {
         }
         folderIdField.text = settings.folderId
         modelComboBox.selectedItem = settings.yandexModelId
-        systemPromptArea.text = settings.systemPrompt
         temperatureField.text = settings.temperature.toString()
         maxTokensField.text = settings.maxTokens.toString()
         chatFontSizeField.text = settings.chatFontSize.toString()
@@ -307,14 +303,6 @@ class SettingsConfigurable : Configurable {
 
     private fun createAgentSettingsPanel(): DialogPanel = panel {
         group("Agent Settings") {
-            row("System Prompt:") {
-                systemPromptArea = JBTextArea()
-                systemPromptArea.rows = 8
-                cell(systemPromptArea)
-                    .columns(COLUMNS_LARGE)
-                    .comment("Системный промпт для агента")
-            }
-
             row("Temperature:") {
                 temperatureField = JBTextField()
                 cell(temperatureField)
