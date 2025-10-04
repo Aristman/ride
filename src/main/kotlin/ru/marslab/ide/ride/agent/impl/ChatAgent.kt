@@ -17,13 +17,16 @@ import ru.marslab.ide.ride.model.MessageRole
 import ru.marslab.ide.ride.model.ResponseFormat
 import ru.marslab.ide.ride.model.ResponseSchema
 import ru.marslab.ide.ride.model.UncertaintyResponseSchema
+import ru.marslab.ide.ride.model.XmlResponseData
+import ru.marslab.ide.ride.model.JsonResponseData
+import ru.marslab.ide.ride.model.TextResponseData
 
 /**
  * Универсальная реализация агента для общения с пользователем
- * 
+ *
  * Агент НЕ привязан к конкретному LLM провайдеру.
  * Провайдер передается через конструктор (Dependency Injection).
- * 
+ *
  * @property llmProvider Провайдер для взаимодействия с LLM
  * @property systemPrompt Системный промпт для агента
  */
@@ -36,7 +39,7 @@ class ChatAgent(
     private var responseSchema: ResponseSchema? = UncertaintyResponseSchema.createXmlSchema()
 
     private val logger = Logger.getInstance(ChatAgent::class.java)
-    
+
     override suspend fun processRequest(request: String, context: ChatContext): AgentResponse {
 
         // Проверяем доступность провайдера
@@ -47,7 +50,7 @@ class ChatAgent(
                 content = "Пожалуйста, настройте API ключ в Settings → Tools → Ride"
             )
         }
-        
+
         return try {
             // Системный промпт (опционально расширяем инструкциями формата)
             val systemPromptForRequest = buildSystemPrompt()
@@ -62,7 +65,7 @@ class ChatAgent(
                 conversationHistory = conversationHistory,
                 parameters = LLMParameters.DEFAULT
             )
-            
+
             // Проверяем успешность ответа
             if (!llmResponse.success) {
                 return AgentResponse.error(
@@ -72,19 +75,27 @@ class ChatAgent(
             }
 
             // Парсим ответ если задан формат
-            val parsedResponse = if (responseSchema != null) {
-                val parser = ResponseParserFactory.getParser(responseSchema!!)
-                val parsed = parser.parse(llmResponse.content, responseSchema)
-                parsed
-            } else {
-                null
+            val parsedResponse = responseSchema?.parseResponse(llmResponse.content)
+
+            // Анализируем неопределенность ответа из распарсенных данных или из сырого текста
+            val (uncertainty, isFinal) = when (val parsed = parsedResponse) {
+                is XmlResponseData -> {
+                    // Берем данные из распарсенного XML
+                    Pair(parsed.uncertainty, parsed.isFinal)
+                }
+
+                is JsonResponseData -> {
+                    // Берем данные из распарсенного JSON
+                    Pair(parsed.uncertainty, parsed.isFinal)
+                }
+
+                else -> {
+                    // Анализируем из сырого текста
+                    val uncertainty = UncertaintyAnalyzer.analyzeUncertainty(llmResponse.content, context)
+                    val isFinal = UncertaintyAnalyzer.isFinalResponse(uncertainty)
+                    Pair(uncertainty, isFinal)
+                }
             }
-
-            // Анализируем неопределенность ответа
-            val uncertainty = UncertaintyAnalyzer.analyzeUncertainty(llmResponse.content, context)
-            val isFinal = UncertaintyAnalyzer.isFinalResponse(uncertainty)
-
-            logger.info("Uncertainty analysis: uncertainty=$uncertainty, isFinal=$isFinal")
 
             // Собираем метаданные ответа
             val baseMetadata = mutableMapOf(
@@ -100,90 +111,65 @@ class ChatAgent(
             baseMetadata["uncertainty"] = uncertainty
             baseMetadata["hasClarifyingQuestions"] = UncertaintyAnalyzer.hasExplicitUncertainty(llmResponse.content)
 
-            // Если парсинг задан и произошла ошибка — формируем ошибку
-            if (responseSchema != null && parsedResponse is ru.marslab.ide.ride.model.ParsedResponse.ParseError) {
-                val errorContent = buildString {
-                    appendLine("⚠️ **Ошибка парсинга ответа:** ${parsedResponse.error}")
-                    appendLine()
-                    appendLine("**Сырой ответ от агента:**")
-                    appendLine("```xml")
-                    appendLine(llmResponse.content)
-                    appendLine("```")
-                }
-                return AgentResponse.error(
-                    error = "Ошибка парсинга ответа: ${parsedResponse.error}",
-                    content = errorContent
-                )
-            }
+            // Проверяем результат парсинга
+            // Если парсинг не удался, пробуем извлечь контент через ResponseFormatter
+            val currentSchema = responseSchema
+            if (currentSchema != null && parsedResponse == null) {
 
-            // Валидация распарсенного ответа по схеме
-            if (responseSchema != null && parsedResponse != null) {
-                val validator = ResponseValidatorFactory.getValidator(responseSchema!!.format)
-                val validationError = validator.validate(parsedResponse, responseSchema!!)
-                if (validationError != null) {
+                try {
+                    val extractedContent = ru.marslab.ide.ride.ui.ResponseFormatter.extractMainContent(
+                        llmResponse.content,
+                        ru.marslab.ide.ride.model.Message(
+                            content = llmResponse.content,
+                            role = ru.marslab.ide.ride.model.MessageRole.ASSISTANT
+                        ),
+                        com.intellij.openapi.project.ProjectManager.getInstance().openProjects.firstOrNull()
+                            ?: com.intellij.openapi.project.ProjectManager.getInstance().defaultProject,
+                        ru.marslab.ide.ride.service.ChatService()
+                    )
 
-                    // Если XML невалидный, пробуем обработать его напрямую через ResponseFormatter
-                    if (responseSchema!!.format == ResponseFormat.XML && validationError.contains("XML", ignoreCase = true)) {
-                        try {
-                            // Пробуем извлечь контент напрямую из невалидного XML
-                            val extractedContent = ru.marslab.ide.ride.ui.ResponseFormatter.extractMainContent(
-                                llmResponse.content,
-                                ru.marslab.ide.ride.model.Message(
-                                    content = llmResponse.content,
-                                    role = ru.marslab.ide.ride.model.MessageRole.ASSISTANT
-                                ),
-                                com.intellij.openapi.project.ProjectManager.getInstance().openProjects.firstOrNull()
-                                    ?: com.intellij.openapi.project.ProjectManager.getInstance().defaultProject,
-                                ru.marslab.ide.ride.service.ChatService()
-                            )
-
-                            return AgentResponse.success(
-                                content = extractedContent,
-                                isFinal = isFinal,
-                                uncertainty = uncertainty,
-                                metadata = baseMetadata + mapOf(
-                                    "xmlValidationFailed" to true,
-                                    "extractedFromInvalidXml" to true
-                                )
-                            )
-                        } catch (e: Exception) {
-                            logger.warn("Failed to extract content from invalid XML: ${e.message}")
-                        }
-                    }
-
+                    return AgentResponse.success(
+                        content = extractedContent,
+                        isFinal = isFinal,
+                        uncertainty = uncertainty,
+                        metadata = baseMetadata + mapOf(
+                            "parsingFailed" to true,
+                            "extractedFromRawContent" to true
+                        )
+                    )
+                } catch (e: Exception) {
+                    logger.warn("Failed to extract content from raw response: ${e.message}")
                     val errorContent = buildString {
-                        appendLine("⚠️ **Ошибка валидации ответа:** $validationError")
+                        appendLine("⚠️ **Ошибка парсинга ответа:** Не удалось распарсить ответ в формате ${currentSchema.format}")
                         appendLine()
                         appendLine("**Сырой ответ от агента:**")
-                        appendLine("```xml")
+                        appendLine("```${currentSchema.format.name.lowercase()}")
                         appendLine(llmResponse.content)
                         appendLine("```")
                     }
-                    return AgentResponse.error(
-                        error = "Ответ не соответствует схеме: $validationError",
+                    AgentResponse.error(
+                        error = "Ошибка парсинга ответа: не удалось распарсировать ${currentSchema.format}",
                         content = errorContent
                     )
                 }
             }
 
-            // Возвращаем успешный ответ с учетом неопределенности
-            if (parsedResponse != null) {
-                AgentResponse.success(
-                    content = llmResponse.content,
-                    parsedContent = parsedResponse,
-                    isFinal = isFinal,
-                    uncertainty = uncertainty,
-                    metadata = baseMetadata
-                )
-            } else {
-                AgentResponse.success(
-                    content = llmResponse.content,
-                    isFinal = isFinal,
-                    uncertainty = uncertainty,
-                    metadata = baseMetadata
-                )
+            // Формируем контент на основе распарсенных данных
+            val finalContent = when (val parsed = parsedResponse) {
+                is XmlResponseData -> parsed.message
+                is JsonResponseData -> parsed.message
+                is TextResponseData -> parsed.content
+                else -> llmResponse.content
             }
-            
+
+            // Возвращаем успешный ответ с учетом неопределенности
+            AgentResponse.success(
+                content = finalContent,
+                isFinal = isFinal,
+                uncertainty = uncertainty,
+                metadata = baseMetadata + mapOf("parsedData" to (parsedResponse != null))
+            )
+
         } catch (e: Exception) {
             logger.error("Error processing request", e)
             AgentResponse.error(
@@ -192,38 +178,38 @@ class ChatAgent(
             )
         }
     }
-    
+
     override fun getName(): String = "Chat Agent"
-    
-    override fun getDescription(): String = 
+
+    override fun getDescription(): String =
         "Универсальный агент для общения с пользователем через ${llmProvider.getProviderName()}"
-    
+
     override fun setLLMProvider(provider: LLMProvider) {
         logger.info("Changing LLM provider from ${llmProvider.getProviderName()} to ${provider.getProviderName()}")
         llmProvider = provider
     }
-    
+
     override fun getLLMProvider(): LLMProvider = llmProvider
-    
+
     override fun setResponseFormat(format: ResponseFormat, schema: ResponseSchema?) {
         logger.info("Setting response format to $format")
         responseFormat = format
         responseSchema = schema
-        
+
         // Валидация схемы если она задана
         if (schema != null && !schema.isValid()) {
             logger.warn("Invalid schema provided for format $format")
         }
     }
-    
+
     override fun getResponseFormat(): ResponseFormat? = responseFormat
-    
+
     override fun clearResponseFormat() {
         logger.info("Clearing response format")
         responseFormat = null
         responseSchema = null
     }
-    
+
     /**
      * Формирует системный промпт. Если задана схема ответа,
      * добавляет инструкции по формату в системный промпт.
@@ -249,10 +235,10 @@ class ChatAgent(
             ConversationMessage(role, message.content)
         }
     }
-    
+
     companion object {
         private const val HISTORY_LIMIT = 5
-        
+
         private val DEFAULT_SYSTEM_PROMPT = """
 Ты - AI-ассистент для разработчиков в IntelliJ IDEA.
 Твоя задача - помогать программистам с их вопросами о коде, отладке и разработке.
@@ -313,18 +299,6 @@ class ChatAgent(
   </clarifyingQuestions>
 </response>
 ```
-
-Пример окончательного ответа:
-```xml
-<response>
-  <isFinal>true</isFinal>
-  <uncertainty>0.05</uncertainty>
-  <message>Окончательный ответ: вот решение вашей проблемы с примером кода...</message>
-  <reasoning>Достаточно информации для полного ответа</reasoning>
-</response>
-```
-
-Отвечай на русском языке, если пользователь пишет на русском.
         """.trimIndent()
     }
 }

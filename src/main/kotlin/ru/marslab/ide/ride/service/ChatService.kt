@@ -13,41 +13,31 @@ import java.time.Instant
 
 /**
  * Центральный сервис для управления чатом
- * 
+ *
  * Application Service (Singleton) для координации между UI и Agent.
  * Управляет историей сообщений и обработкой запросов.
  */
 @Service(Service.Level.APP)
 class ChatService {
-    
+
     private val logger = Logger.getInstance(ChatService::class.java)
+
     // Несколько сессий и история сообщений по каждой
     private val sessionHistories = mutableMapOf<String, MessageHistory>()
     private val sessions = mutableListOf<ChatSession>()
     private var currentSessionId: String = createNewSessionInternal().id
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    
+
     // Текущие настройки формата ответа (для UI)
     private var currentFormat: ResponseFormat? = null
     private var currentSchema: ResponseSchema? = null
-    
+
     // Агент создается лениво при первом использовании
-    private var agent: Agent? = null
-    
-    /**
-     * Получает или создает агента
-     */
-    private fun getAgent(): Agent {
-        if (agent == null) {
-            agent = AgentFactory.createChatAgent()
-            logger.info("Agent created: ${agent?.getName()}")
-        }
-        return agent!!
-    }
-    
+    private val agent: Agent by lazy { AgentFactory.createChatAgent() }
+
     /**
      * Отправляет сообщение пользователя и получает ответ от агента
-     * 
+     *
      * @param userMessage Текст сообщения пользователя
      * @param project Текущий проект
      * @param onResponse Callback для получения ответа
@@ -63,9 +53,9 @@ class ChatService {
             onError("Сообщение не может быть пустым")
             return
         }
-        
+
         logger.info("Sending user message, length: ${userMessage.length}")
-        
+
         // Создаем и сохраняем сообщение пользователя
         val userMsg = Message(
             content = userMessage,
@@ -79,28 +69,27 @@ class ChatService {
             val title = deriveTitleFrom(userMessage)
             updateSessionTitle(currentSessionId, title)
         }
-        
+
         // Обрабатываем запрос асинхронно
         scope.launch {
             try {
                 // Проверяем настройки в фоновом потоке (не на EDT!)
-                val agent = getAgent()
                 if (!agent.getName().isNotBlank()) {
                     withContext(Dispatchers.EDT) {
                         onError("Плагин не настроен. Перейдите в Settings → Tools → Ride")
                     }
                     return@launch
                 }
-                
+
                 // Формируем контекст
                 val context = ChatContext(
                     project = project,
                     history = getCurrentHistory().getMessages()
                 )
-                
+
                 // Отправляем запрос агенту
-                val agentResponse = getAgent().processRequest(userMessage, context)
-                
+                val agentResponse = agent.processRequest(userMessage, context)
+
                 // Обрабатываем ответ в UI потоке
                 withContext(Dispatchers.EDT) {
                     if (agentResponse.success) {
@@ -110,52 +99,32 @@ class ChatService {
                             "uncertainty" to (agentResponse.uncertainty ?: 0.0)
                         )
 
-                        // Добавляем распарсенный контент в метаданные если он есть
-                        val metadataWithParsed = if (agentResponse.parsedContent != null) {
-                            metadata + mapOf("parsedContent" to agentResponse.parsedContent)
-                        } else {
-                            metadata
-                        }
-
                         val assistantMsg = Message(
                             content = agentResponse.content,
                             role = MessageRole.ASSISTANT,
-                            metadata = metadataWithParsed
+                            metadata = metadata
                         )
                         getCurrentHistory().addMessage(assistantMsg)
-
-                        logger.info("=== DEBUG: ChatService response START ===")
-                        logger.info("Agent response success: ${agentResponse.success}")
-                        logger.info("Agent response content length: ${agentResponse.content.length}")
-                        logger.info("Agent response isFinal: ${agentResponse.isFinal}")
-                        logger.info("Agent response uncertainty: ${agentResponse.uncertainty}")
-                        logger.info("Agent response parsedContent type: ${agentResponse.parsedContent?.javaClass?.simpleName}")
-                        logger.info("Assistant message metadata: ${assistantMsg.metadata}")
-                        logger.info("=== DEBUG: ChatService response END ===")
-
                         onResponse(assistantMsg)
                     } else {
                         logger.warn("Agent returned error: ${agentResponse.error}")
                         onError(agentResponse.error ?: "Неизвестная ошибка")
                     }
                 }
-                
+
             } catch (e: Exception) {
                 logger.error("Error processing message", e)
-                withContext(Dispatchers.EDT) {
-                    onError("Ошибка обработки сообщения: ${e.message}")
-                }
             }
         }
     }
-    
+
     /**
      * Возвращает историю сообщений
-     * 
+     *
      * @return Список всех сообщений
      */
     fun getHistory(): List<Message> = getCurrentHistory().getMessages()
-    
+
     /**
      * Очищает историю чата
      */
@@ -163,29 +132,29 @@ class ChatService {
         logger.info("Clearing chat history for session $currentSessionId")
         getCurrentHistory().clear()
     }
-    
+
     /**
      * Проверяет, пуста ли история
-     * 
+     *
      * @return true если история пуста
      */
     fun isHistoryEmpty(): Boolean = getCurrentHistory().isEmpty()
-    
-    /**
-     * Пересоздает агента с новыми настройками
-     * 
-     * Вызывается после изменения настроек плагина
-     */
-    fun recreateAgent() {
-        logger.info("Recreating agent with new settings")
-        agent = null
-    }
-    
+
+//    /**
+//     * Пересоздает агента с новыми настройками
+//     *
+//     * Вызывается после изменения настроек плагина
+//     */
+//    fun recreateAgent() {
+//        logger.info("Recreating agent with new settings")
+//        agent = null
+//    }
+
     /**
      * Устанавливает формат ответа для текущего агента
      */
     fun setResponseFormat(format: ResponseFormat, schema: ResponseSchema?) {
-        getAgent().setResponseFormat(format, schema)
+        agent.setResponseFormat(format, schema)
         logger.info("Response format set to: $format")
         currentFormat = format
         currentSchema = schema
@@ -214,7 +183,7 @@ class ChatService {
      * Сбрасывает формат ответа к TEXT (по умолчанию)
      */
     fun clearResponseFormat() {
-        getAgent().clearResponseFormat()
+        agent.clearResponseFormat()
         logger.info("Response format cleared")
         currentFormat = null
         currentSchema = null
@@ -229,7 +198,7 @@ class ChatService {
     /**
      * Возвращает текущий установленный формат ответа
      */
-    fun getResponseFormat(): ResponseFormat? = currentFormat ?: getAgent().getResponseFormat()
+    fun getResponseFormat(): ResponseFormat? = currentFormat ?: agent.getResponseFormat()
 
     /**
      * Возвращает текущую схему ответа (если была задана)

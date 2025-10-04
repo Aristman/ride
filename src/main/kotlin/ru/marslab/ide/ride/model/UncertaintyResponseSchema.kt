@@ -72,7 +72,7 @@ object UncertaintyResponseSchema {
             }
         """.trimIndent()
 
-        return ResponseSchema.json(schemaJson, description)
+        return JsonResponseSchema.create(schemaJson, description)
     }
 
     /**
@@ -117,6 +117,6 @@ object UncertaintyResponseSchema {
             </response>
         """.trimIndent()
 
-        return ResponseSchema.xml(schemaXml, description)
+        return XmlResponseSchema.create(schemaXml, description)
     }
 }

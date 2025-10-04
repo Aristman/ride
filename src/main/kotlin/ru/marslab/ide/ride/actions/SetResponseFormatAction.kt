@@ -7,7 +7,8 @@ import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.Messages
 import org.jetbrains.annotations.Nullable
 import ru.marslab.ide.ride.model.ResponseFormat
-import ru.marslab.ide.ride.model.ResponseSchema
+import ru.marslab.ide.ride.model.JsonResponseSchema
+import ru.marslab.ide.ride.model.XmlResponseSchema
 import ru.marslab.ide.ride.service.ChatService
 import java.awt.BorderLayout
 import java.awt.Dimension
@@ -38,17 +39,17 @@ class SetResponseFormatAction : AnAction("Set Response Format...") {
                 }
                 ResponseFormat.JSON -> {
                     val schema = if (schemaText.isBlank())
-                        ResponseSchema.json("{}", "Структурированный JSON ответ")
+                        JsonResponseSchema.create("{}", "Структурированный JSON ответ")
                     else
-                        ResponseSchema.json(schemaText, "Пользовательская JSON схема")
+                        JsonResponseSchema.create(schemaText, "Пользовательская JSON схема")
                     chatService.setResponseFormat(ResponseFormat.JSON, schema)
                     Messages.showInfoMessage(project, "JSON формат установлен.", "Формат изменён")
                 }
                 ResponseFormat.XML -> {
                     val schema = if (schemaText.isBlank())
-                        ResponseSchema.xml("<root></root>", "Структурированный XML ответ")
+                        XmlResponseSchema.create("<root></root>", "Структурированный XML ответ")
                     else
-                        ResponseSchema.xml(schemaText, "Пользовательская XML схема")
+                        XmlResponseSchema.create(schemaText, "Пользовательская XML схема")
                     chatService.setResponseFormat(ResponseFormat.XML, schema)
                     Messages.showInfoMessage(project, "XML формат установлен.", "Формат изменён")
                 }

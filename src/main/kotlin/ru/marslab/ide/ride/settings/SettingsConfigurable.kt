@@ -154,7 +154,7 @@ class SettingsConfigurable : Configurable {
         apiKeyLoaded = true
 
         // Пересоздаем агента с новыми настройками
-        service<ru.marslab.ide.ride.service.ChatService>().recreateAgent()
+//        service<ru.marslab.ide.ride.service.ChatService>().recreateAgent()
     }
 
     override fun reset() {

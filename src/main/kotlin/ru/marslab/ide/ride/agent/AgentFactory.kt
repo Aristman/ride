@@ -33,7 +33,7 @@ object AgentFactory {
         // Создаем агента с провайдером
         return ChatAgent(
             llmProvider = llmProvider,
-            systemPrompt = settings.systemPrompt
+//            systemPrompt = settings.systemPrompt
         )
     }
     
