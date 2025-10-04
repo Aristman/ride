@@ -389,8 +389,8 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                         .msg.user .prefix { color: ${t.prefix}; margin-bottom: 6px; }
                         .msg.user .content { display: inline-block; background-color: ${t.userBg}; border: 1px solid ${t.userBorder}; padding: 10px 14px; color: inherit; text-align: left; }
                         .msg.user .content table.code-block { margin-top: 12px; }
-                        pre { background-color: ${t.codeBg}; color: ${t.codeText}; padding: 8px; border: 1px solid ${t.codeBorder}; }
-                        pre { margin: 0; }
+                        pre { background-color: ${t.codeBg}; color: ${t.codeText}; padding: 8px; border: 1px solid ${t.codeBorder}; margin: 0; white-space: pre-wrap; }
+                        pre code { display: block; font-family: monospace; font-size: ${codeFontSize}px; color: ${t.codeText}; white-space: pre-wrap; }
                         code { font-family: monospace; font-size: ${codeFontSize}px; color: ${t.codeText}; }
                         table.code-block { width: 100%; border-collapse: collapse; margin-top: 8px; }
                         table.code-block td { padding: 0; }
@@ -497,13 +497,15 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         tripleBacktickPattern.findAll(result).forEach { m ->
             val pre = result.substring(lastIndex, m.range.first)
             if (isJcefMode) {
-                finalResult.append(escapeHtml(pre).replace("\n", "<br/>"))
+                finalResult.append(escapeHtml(pre))
             } else {
                 finalResult.append(pre)
             }
             val langRaw = (m.groups[1]?.value ?: "").trim().lowercase()
             val normalizedLang = normalizeLanguage(langRaw)
             var code = (m.groups[2]?.value ?: "").trim('\n', '\r')
+            // Удаляем общие отступы из кода
+            code = removeCommonIndent(code)
             code = runCatching {
                 when (normalizedLang) {
                     "json" -> prettyPrintJson(code)
@@ -511,15 +513,18 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                 }
             }.getOrDefault(code)
             val escaped = if (isJcefMode) {
-                // В JCEF режиме сохраняем переносы строк, экранируем только HTML
+                // В JCEF режиме используем специальный маркер для переносов строк
+                // который будет заменён на \n в JavaScript перед вставкой
                 code.replace("&", "&amp;")
                     .replace("<", "&lt;")
                     .replace(">", "&gt;")
+                    .replace("\n", "&#10;")  // Используем HTML entity для перевода строки
             } else {
                 escapeHtml(code)
             }
+            println("DEBUG: escaped=$escaped")
 
-            val langLabel = if (langRaw.isBlank()) "Текст" else langRaw
+            val langLabel = langRaw.ifBlank { "Текст" }
             val codeId = "code_${System.currentTimeMillis()}_${codeBlocksFound.size}"
 
             finalResult.append("<table class='code-block'>")
@@ -535,15 +540,26 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         if (lastIndex < result.length) {
             val remainingText = result.substring(lastIndex)
             if (isJcefMode) {
-                finalResult.append(escapeHtml(remainingText).replace("\n", "<br/>"))
+                finalResult.append(escapeHtml(remainingText))
             } else {
                 finalResult.append(remainingText)
             }
+//            val remainingText = result.substring(lastIndex).trimStart()
+//            if (remainingText.isNotEmpty()) {
+//                if (isJcefMode) {
+//                    finalResult.append("<br/>").append(escapeHtml(remainingText).replace("\n", "<br/>"))
+//                } else {
+//                    finalResult.append(remainingText)
+//                }
+//            }
         }
 
         if (codeBlocksFound.isNotEmpty()) {
             println("DEBUG: Found ${codeBlocksFound.size} triple backtick code blocks: ${codeBlocksFound.joinToString(", ")}")
         }
+
+        println("DEBUG: codeBlocksFound=$codeBlocksFound")
+        println("DEBUG: finalResult=$finalResult")
 
         result = finalResult.toString()
 
@@ -559,10 +575,11 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
             println("DEBUG: Converting single backtick block: $lang, code: ${code.take(50)}...")
             val normalizedLang = normalizeLanguage(lang)
             val escapedCode = if (isJcefMode) {
-                // В JCEF режиме сохраняем переносы строк, экранируем только HTML
+                // В JCEF режиме используем HTML entity для переносов строк
                 code.replace("&", "&amp;")
                     .replace("<", "&lt;")
                     .replace(">", "&gt;")
+                    .replace("\n", "&#10;")
             } else {
                 escapeHtml(code)
             }
@@ -592,10 +609,11 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                 println("DEBUG: Converting inline code to block: $lang")
                 val normalizedLang = normalizeLanguage(lang)
                 val escapedCode = if (isJcefMode) {
-                    // В JCEF режиме сохраняем переносы строк, экранируем только HTML
+                    // В JCEF режиме используем HTML entity для переносов строк
                     code.replace("&", "&amp;")
                         .replace("<", "&lt;")
                         .replace(">", "&gt;")
+                        .replace("\n", "&#10;")
                 } else {
                     escapeHtml(code)
                 }
@@ -724,6 +742,32 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
             .replace(">", "&gt;")
             .replace("\"", "&quot;")
             .replace("'", "&#39;")
+
+    /**
+     * Удаляет общие начальные отступы из всех строк кода
+     */
+    private fun removeCommonIndent(code: String): String {
+        if (code.isBlank()) return code
+        
+        val lines = code.split("\n")
+        if (lines.isEmpty()) return code
+        
+        // Находим минимальный отступ среди непустых строк
+        val minIndent = lines
+            .filter { it.isNotBlank() }
+            .map { line -> line.takeWhile { it.isWhitespace() }.length }
+            .minOrNull() ?: 0
+        
+        println("DEBUG: removeCommonIndent - minIndent=$minIndent, lines count=${lines.size}")
+        
+        // Удаляем минимальный отступ из всех строк
+        val result = lines.joinToString("\n") { line ->
+            if (line.length >= minIndent) line.substring(minIndent) else line
+        }
+        
+        println("DEBUG: removeCommonIndent - result has ${result.count { it == '\n' }} newlines")
+        return result
+    }
 
     private fun prettyPrintJson(input: String): String {
         val sb = StringBuilder()

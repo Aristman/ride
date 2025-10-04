@@ -30,6 +30,7 @@ class JcefChatView : JPanel(BorderLayout()) {
               console.log('DEBUG: JCEF setBody called with HTML length:', ${html.length});
               const root = document.getElementById('messages');
               root.innerHTML = ${html.toJSString()};
+              
               requestAnimationFrame(()=> { window.scrollTo(0, document.body.scrollHeight); });
               console.log('DEBUG: Calling __ride_initHl and __ride_highlightAll');
               window.__ride_initHl && window.__ride_initHl();
@@ -45,7 +46,11 @@ class JcefChatView : JPanel(BorderLayout()) {
             (function(){
               console.log('DEBUG: JCEF appendHtml called with HTML length:', ${html.length});
               const tmp = document.createElement('div');
-              tmp.innerHTML = ${html.toJSString()};
+              const htmlStr = ${html.toJSString()};
+              console.log('DEBUG: HTML string preview:', htmlStr.substring(0, 200));
+              tmp.innerHTML = htmlStr;
+              console.log('DEBUG: tmp.innerHTML preview:', tmp.innerHTML.substring(0, 200));
+              
               const root = document.getElementById('messages');
               while (tmp.firstChild) root.appendChild(tmp.firstChild);
               requestAnimationFrame(()=> { window.scrollTo(0, document.body.scrollHeight); });
@@ -56,9 +61,11 @@ class JcefChatView : JPanel(BorderLayout()) {
               console.log('DEBUG: Found code blocks:', blocks.length);
               if (window.hljs && blocks.length){
                 const last = blocks[blocks.length - 1];
+                console.log('DEBUG: Code block textContent before highlight:', (last.textContent || '').substring(0, 200));
                 try {
                   console.log('DEBUG: Highlighting new code block');
                   window.hljs.highlightElement(last);
+                  console.log('DEBUG: Code block innerHTML after highlight:', last.innerHTML.substring(0, 200));
                 } catch(_){
                   console.log('DEBUG: Error highlighting code block');
                 }
@@ -104,8 +111,9 @@ class JcefChatView : JPanel(BorderLayout()) {
             td.code-lang { font-size: 12px; color: var(--prefix); padding: 4px 6px; }
             td.code-copy-cell { text-align: right; padding: 4px 6px; }
             a.code-copy-link { color: var(--prefix); text-decoration: none; display:inline-block; width:20px; height:20px; text-align:center; line-height:20px; }
-            pre { background: var(--codeBg); color: var(--codeText); padding:8px; border:1px solid var(--codeBorder); margin:0; overflow:auto; white-space: pre-wrap; }
-            code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; white-space: pre-wrap; }
+            pre { background: var(--codeBg); color: var(--codeText); padding:8px; border:1px solid var(--codeBorder); margin:0; overflow:auto; white-space: pre; }
+            pre code { display: block; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; white-space: pre; }
+            code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
 
             /* Статусные строки для сообщений ассистента */
             .status {
