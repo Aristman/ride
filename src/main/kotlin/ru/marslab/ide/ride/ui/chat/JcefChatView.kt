@@ -169,10 +169,13 @@ class JcefChatView : JPanel(BorderLayout()) {
                 margin: 16px 0;
             }
             ul, ol {
-                margin: 8px 0;
+                margin: 4px 0;
                 padding-left: 20px;
             }
             li {
+                margin: 2px 0;
+            }
+            p {
                 margin: 4px 0;
             }
         """.trimIndent()
@@ -214,19 +217,7 @@ class JcefChatView : JPanel(BorderLayout()) {
             };
         """.trimIndent()
 
-        return """
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <meta charset='utf-8'>
-              <style>${css}</style>
-            </head>
-            <body>
-              <div id="messages"></div>
-              <script>${js}</script>
-            </body>
-            </html>
-        """.trimIndent()
+        return "<!DOCTYPE html><html><head><meta charset='utf-8'><style>${css}</style></head><body><div id=\"messages\"></div><script>${js}</script></body></html>"
     }
 }
 

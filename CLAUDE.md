@@ -117,7 +117,13 @@ src/main/kotlin/ru/marslab/ide/ride/
 ├── model/              # Data models and domain objects
 ├── service/            # Application services
 ├── settings/           # Plugin configuration and persistence
-├── ui/                 # Swing UI components
+├── ui/                 # Refactored UI components with composition pattern
+│   ├── config/         # Configuration and constants (ChatPanelConfig)
+│   ├── processor/      # Content processors (CodeBlockProcessor, MarkdownProcessor)
+│   ├── renderer/       # Content renderers (ChatContentRenderer)
+│   ├── manager/        # UI managers (HtmlDocumentManager, MessageDisplayManager)
+│   ├── builder/        # UI builders (ChatUiBuilder)
+│   └── chat/           # JCEF chat view
 └── actions/            # IntelliJ platform actions
 ```
 
@@ -128,12 +134,36 @@ src/main/kotlin/ru/marslab/ide/ride/
 - **ChatService**: Central service coordinating UI, agents, and message history
 - **MessageHistory**: In-memory storage for chat conversations with role-based messages
 - **PluginSettings**: Persistent configuration using IntelliJ's PersistentStateComponent
+- **ChatPanel**: Main UI component with refactored architecture (235 lines vs 958)
+
+### Refactored UI Architecture (NEW)
+The UI layer has been completely refactored following single responsibility principle:
+
+#### Core UI Components
+- **ChatPanelConfig**: Centralized configuration with constants, texts, icons, and language aliases
+- **CodeBlockProcessor**: Handles code block processing (triple backticks, single backticks, inline code)
+- **MarkdownProcessor**: Converts markdown to HTML (headers, lists, formatting)
+- **ChatContentRenderer**: Unifies content rendering and HTML block creation
+- **HtmlDocumentManager**: Manages HTML documents with JCEF and fallback support
+- **MessageDisplayManager**: Coordinates message display and code block registration
+- **ChatUiBuilder**: Builds UI components and handles input events
+
+#### Component Composition Pattern
+```kotlin
+ChatPanel (coordinator)
+├── ChatUiBuilder (UI components)
+├── HtmlDocumentManager (HTML document)
+├── MessageDisplayManager (message display)
+└── ChatContentRenderer (content rendering)
+    ├── CodeBlockProcessor (code processing)
+    └── MarkdownProcessor (markdown processing)
+```
 
 ## Technology Stack
 
 - **Language**: Kotlin 2.1.0
 - **Platform**: IntelliJ Platform 2025.1.4.1
-- **UI Framework**: Swing (IntelliJ UI components)
+- **UI Framework**: Swing (IntelliJ UI components) with composition pattern
 - **Async**: Kotlin Coroutines
 - **HTTP**: Java HttpClient (JDK 11+) - *Note: Avoid Ktor due to coroutine conflicts*
 - **JSON**: kotlinx.serialization 1.6.2
@@ -152,10 +182,12 @@ src/main/kotlin/ru/marslab/ide/ride/
 2. Use dependency injection for LLM provider
 3. Register in `AgentFactory`
 
-### UI Development
+### UI Development (Post-Refactor)
 - Use IntelliJ UI components (com.intellij.ui.*)
 - Follow Swing threading rules - use `EDT` for UI operations
-- Leverage `CoroutineUtils` for async operations
+- Leverage composition pattern for building UI components
+- Use specialized managers for different UI concerns
+- Follow single responsibility principle for UI components
 
 ### Testing Strategy
 - Unit tests for all core components
@@ -165,6 +197,7 @@ src/main/kotlin/ru/marslab/ide/ride/
 - Uncertainty analysis tests with comprehensive coverage (12 tests)
 - Conversation history validation tests
 - Pattern matching validation for Russian language uncertainty indicators
+- UI component tests for refactored architecture
 
 ## Important Constraints
 
@@ -180,6 +213,7 @@ src/main/kotlin/ru/marslab/ide/ride/
 - Message history is stored in-memory only
 - Consider implementing persistence for chat history
 - Monitor memory usage with long conversations
+- Component composition helps prevent memory leaks
 
 ## Plugin Configuration
 
@@ -241,11 +275,19 @@ Response format is configured per agent through the `setResponseFormat()` method
 - **Provider errors**: Graceful fallback and user-friendly messages
 - **Logging**: Comprehensive logging for debugging and monitoring
 
+### UI Features (Post-Refactor)
+- **Modular Design**: Each UI component has a single responsibility
+- **Code Block Processing**: Advanced markdown and code block rendering with syntax highlighting
+- **JCEF Support**: Enhanced HTML rendering with JCEF integration
+- **Theme System**: Dynamic theme switching with proper CSS variable management
+- **Session Management**: Clean separation of session handling in UI components
+
 ### Extensibility
 - **Plugin architecture**: Easy addition of new formats and providers
 - **Factory pattern**: Simplified extension of parsing and validation logic
 - **Interface-based design**: Clean separation of concerns
 - **Configuration-driven**: Runtime format switching without code changes
+- **Component composition**: Easy to extend UI with new features
 
 ## Feature Roadmaps
 
@@ -265,3 +307,13 @@ if (response.isFinal) {
     displayClarifyingQuestions(questions, response.uncertainty)
 }
 ```
+
+### UI Refactoring Roadmap (COMPLETED)
+UI refactoring was completed in 2025 with the following improvements:
+- **75% reduction in code size**: ChatPanel reduced from 958 to 235 lines
+- **Single Responsibility Principle**: Each class has one clear purpose
+- **Improved Testability**: Smaller, focused components are easier to test
+- **Enhanced Maintainability**: Changes in one area don't affect others
+- **Better Reusability**: Components can be used in other parts of the application
+- **Cleaner Architecture**: Clear separation between UI concerns
+- **Component Composition**: Flexible building block approach for UI development
