@@ -233,6 +233,9 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
 
         // Форматируем контент в зависимости от схемы ответа
         val (formattedContent, actualUncertainty) = if (message.role == MessageRole.ASSISTANT) {
+            // Берем реальную неопределенность из метаданных сообщения
+            val realUncertainty = message.metadata["uncertainty"] as? Double ?: 0.0
+
             // Проверяем, есть ли распарсенный контент в сообщении
             val parsedContent = message.metadata["parsedContent"] as? ru.marslab.ide.ride.model.ParsedResponse
             if (parsedContent != null) {
@@ -241,17 +244,14 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                     success = true,
                     parsedContent = parsedContent,
                     isFinal = message.metadata["isFinal"] as? Boolean ?: true,
-                    uncertainty = message.metadata["uncertainty"] as? Double
+                    uncertainty = realUncertainty
                 )
                 val formatted = ResponseFormatter.extractMainContent(agentResponse)
-                // Извлекаем фактическую неопределенность из форматированного текста
-                val actualUncertainty = extractUncertaintyFromFormattedText(formatted)
-                formatted to actualUncertainty
+                formatted to realUncertainty
             } else {
                 // Если нет распарсенного контента, пытаемся распарсить как XML
                 val formatted = ResponseFormatter.extractMainContent(message.content, message, project, chatService)
-                val actualUncertainty = extractUncertaintyFromFormattedText(formatted)
-                formatted to actualUncertainty
+                formatted to realUncertainty
             }
         } else {
             message.content to (message.metadata["uncertainty"] as? Double ?: 0.0)
@@ -758,14 +758,5 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
     private fun copyCodeToClipboard(code: String) {
         val clipboard = Toolkit.getDefaultToolkit().systemClipboard
         clipboard.setContents(StringSelection(code), null)
-    }
-
-    /**
-     * Извлекает фактическую неопределенность из форматированного текста
-     */
-    private fun extractUncertaintyFromFormattedText(text: String): Double {
-        // Ищем неопределенность в XML формате и устанавливаем 80% для уточняющих вопросов
-        val isUncertain = text.contains("Требуются уточнения") || text.contains("Уточняющие вопросы:")
-        return if (isUncertain) 0.8 else 0.0
     }
 }
