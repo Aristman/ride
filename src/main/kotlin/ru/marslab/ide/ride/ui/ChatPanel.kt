@@ -488,6 +488,13 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         println("DEBUG: JCEF mode: $isJcefMode")
         var result = text
 
+        // Если контент уже представляет собой HTML (например, приходит из форматтера/схемы)
+        // — вставляем как есть без экранирования и конвертации Markdown
+        if (looksLikeHtml(result)) {
+            println("DEBUG: Detected preformatted HTML content, bypassing markdown/escape pipeline")
+            return result
+        }
+
         // Сначала обработаем кодовые блоки, ДО экранирования HTML
         // Обработка кодовых блоков ``` (стандартный markdown)
         val tripleBacktickPattern = Regex("""```([\w#+.-]+)?[ \t]*\n?([\s\S]*?)```""", RegexOption.IGNORE_CASE)
@@ -723,6 +730,17 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         result = processedLines.joinToString(if (isJcefMode) "<br/>" else "\n")
 
         return result
+    }
+
+    /**
+     * Простая эвристика: определяем, что строка уже содержит HTML-теги верхнего уровня
+     */
+    private fun looksLikeHtml(s: String): Boolean {
+        val t = s.trimStart()
+        if (!t.startsWith("<")) return false
+        // Ищем распространённые блочные теги: p, ol, ul, li, h1-6, pre, code, table, div, span
+        val htmlTagPattern = Regex("(?is)<\\s*(p|ol|ul|li|h[1-6]|pre|code|table|thead|tbody|tr|td|th|div|span)\\b")
+        return htmlTagPattern.containsMatchIn(t)
     }
 
     private fun normalizeLanguage(lang: String): String {
