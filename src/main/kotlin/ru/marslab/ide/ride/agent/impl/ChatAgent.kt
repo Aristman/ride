@@ -16,6 +16,7 @@ import ru.marslab.ide.ride.model.Message
 import ru.marslab.ide.ride.model.MessageRole
 import ru.marslab.ide.ride.model.ResponseFormat
 import ru.marslab.ide.ride.model.ResponseSchema
+import ru.marslab.ide.ride.model.UncertaintyResponseSchema
 
 /**
  * Универсальная реализация агента для общения с пользователем
@@ -30,10 +31,10 @@ class ChatAgent(
     private var llmProvider: LLMProvider,
     private val systemPrompt: String = DEFAULT_SYSTEM_PROMPT
 ) : Agent {
-    
-    private var responseFormat: ResponseFormat? = null
-    private var responseSchema: ResponseSchema? = null
-    
+
+    private var responseFormat: ResponseFormat? = ResponseFormat.XML
+    private var responseSchema: ResponseSchema? = UncertaintyResponseSchema.createXmlSchema()
+
     private val logger = Logger.getInstance(ChatAgent::class.java)
     
     override suspend fun processRequest(request: String, context: ChatContext): AgentResponse {

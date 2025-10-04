@@ -12,6 +12,7 @@ import ru.marslab.ide.ride.model.MessageRole
 import ru.marslab.ide.ride.service.ChatService
 import ru.marslab.ide.ride.settings.ChatAppearanceListener
 import ru.marslab.ide.ride.settings.PluginSettings
+import ru.marslab.ide.ride.ui.ResponseFormatter
 import ru.marslab.ide.ride.ui.chat.JcefChatView
 import ru.marslab.ide.ride.theme.ThemeTokens
 
@@ -229,21 +230,50 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
             }
             MessageRole.SYSTEM -> "ℹ️ Система"
         }
-        val bodyHtml = renderContentToHtml(message.content)
+
+        // Форматируем контент в зависимости от схемы ответа
+        val (formattedContent, actualUncertainty) = if (message.role == MessageRole.ASSISTANT) {
+            // Проверяем, есть ли распарсенный контент в сообщении
+            val parsedContent = message.metadata["parsedContent"] as? ru.marslab.ide.ride.model.ParsedResponse
+            if (parsedContent != null) {
+                val agentResponse = ru.marslab.ide.ride.model.AgentResponse(
+                    content = message.content,
+                    success = true,
+                    parsedContent = parsedContent,
+                    isFinal = message.metadata["isFinal"] as? Boolean ?: true,
+                    uncertainty = message.metadata["uncertainty"] as? Double
+                )
+                val formatted = ResponseFormatter.extractMainContent(agentResponse)
+                // Извлекаем фактическую неопределенность из форматированного текста
+                val actualUncertainty = extractUncertaintyFromFormattedText(formatted)
+                formatted to actualUncertainty
+            } else {
+                // Если нет распарсенного контента, пытаемся распарсить как XML
+                val formatted = ResponseFormatter.extractMainContent(message.content, message, project, chatService)
+                val actualUncertainty = extractUncertaintyFromFormattedText(formatted)
+                formatted to actualUncertainty
+            }
+        } else {
+            message.content to (message.metadata["uncertainty"] as? Double ?: 0.0)
+        }
+
+        val bodyHtml = renderContentToHtml(formattedContent)
         val afterSystemClass = if (message.role == MessageRole.USER && lastRole == MessageRole.SYSTEM) " after-system" else ""
 
         // Добавляем статусную строку для сообщений ассистента
         val statusRow = if (message.role == MessageRole.ASSISTANT) {
             val isFinal = message.metadata["isFinal"] as? Boolean ?: true
-            val uncertainty = message.metadata["uncertainty"] as? Double ?: 0.0
+
             val statusText = if (!isFinal) {
-                "Требуются уточнения (неопределенность: ${(uncertainty * 100).toInt()}%)"
-            } else if (uncertainty > 0.05) {
-                "Ответ с низкой уверенностью (неопределенность: ${(uncertainty * 100).toInt()}%)"
+                "Требуются уточнения (неопределенность: ${(actualUncertainty * 100).toInt()}%)"
+            } else if (actualUncertainty > 0.05) {
+                "Ответ с низкой уверенностью (неопределенность: ${(actualUncertainty * 100).toInt()}%)"
             } else {
                 "Окончательный ответ"
             }
-            val statusClass = if (!isFinal) "status-uncertain" else if (uncertainty > 0.05) "status-low-confidence" else "status-final"
+
+            val statusClass = if (!isFinal) "status-uncertain" else if (actualUncertainty > 0.05) "status-low-confidence" else "status-final"
+
             "<div class='status $statusClass'>📊 $statusText</div>"
         } else {
             ""
@@ -435,12 +465,111 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
     }
 
     private fun renderContentToHtml(text: String): String {
+        var result = text
+
+        // Сначала экранируем HTML для безопасности
+        result = escapeHtml(result)
+
+        // Обработка markdown-элементов
+
+        // Жирный текст **текст**
+        result = result.replace(Regex("""\*\*(.*?)\*\*""")) { match ->
+            "<strong>${match.groupValues[1]}</strong>"
+        }
+
+        // Заголовки #, ##, ###
+        result = result.replace(Regex("""^### (.*?)$""", RegexOption.MULTILINE)) { match ->
+            "<h3>${match.groupValues[1]}</h3>"
+        }
+        result = result.replace(Regex("""^## (.*?)$""", RegexOption.MULTILINE)) { match ->
+            "<h2>${match.groupValues[1]}</h2>"
+        }
+        result = result.replace(Regex("""^# (.*?)$""", RegexOption.MULTILINE)) { match ->
+            "<h1>${match.groupValues[1]}</h1>"
+        }
+
+        // Курсив *текст* (только если не жирный)
+        result = result.replace(Regex("""(?<!\*)\*([^*\n]+)\*(?!\*)""")) { match ->
+            "<em>${match.groupValues[1]}</em>"
+        }
+
+        // Курсив _текст_
+        result = result.replace(Regex("""_(.*?)_""")) { match ->
+            "<em>${match.groupValues[1]}</em>"
+        }
+
+        // Инлайн код `текст`
+        result = result.replace(Regex("""`([^`]+)`""")) { match ->
+            "<code>${match.groupValues[1]}</code>"
+        }
+
+        // Горизонтальная черта ---
+        result = result.replace(Regex("""^---$""", RegexOption.MULTILINE), "<hr/>")
+
+        // Списки (нумерованные и маркированные)
+        val lines = result.split("\n").toMutableList()
+        var inList = false
+        var listType = "" // "ul" или "ol"
+        val processedLines = mutableListOf<String>()
+
+        for (i in lines.indices) {
+            val line = lines[i].trim()
+
+            // Нумерованный список
+            if (Regex("""^\d+\.\s+.*""").matches(line)) {
+                if (!inList || listType != "ol") {
+                    if (inList) {
+                        processedLines.add("</$listType>")
+                    }
+                    processedLines.add("<ol>")
+                    inList = true
+                    listType = "ol"
+                }
+                val content = line.replace(Regex("""^\d+\.\s+"""), "")
+                processedLines.add("<li>$content</li>")
+                continue
+            }
+
+            // Маркированный список
+            if (line.startsWith("- ") || line.startsWith("* ")) {
+                if (!inList || listType != "ul") {
+                    if (inList) {
+                        processedLines.add("</$listType>")
+                    }
+                    processedLines.add("<ul>")
+                    inList = true
+                    listType = "ul"
+                }
+                val content = line.replace(Regex("""^[-*]\s+"""), "")
+                processedLines.add("<li>$content</li>")
+                continue
+            }
+
+            // Закрываем список если текущая строка не элемент списка
+            if (inList && line.isNotBlank()) {
+                processedLines.add("</$listType>")
+                inList = false
+                listType = ""
+            }
+
+            processedLines.add(line)
+        }
+
+        // Закрываем список в конце текста
+        if (inList) {
+            processedLines.add("</$listType>")
+        }
+
+        result = processedLines.joinToString("\n")
+
+        // Обработка кодовых блоков ```
         val pattern = Regex("""```([\w#+.-]+)?[ \t]*\n?([\s\S]*?)```""", RegexOption.IGNORE_CASE)
         var lastIndex = 0
-        val result = StringBuilder()
-        pattern.findAll(text).forEach { m ->
-            val pre = text.substring(lastIndex, m.range.first)
-            result.append(escapeHtml(pre).replace("\n", "<br/>"))
+        val finalResult = StringBuilder()
+
+        pattern.findAll(result).forEach { m ->
+            val pre = result.substring(lastIndex, m.range.first)
+            finalResult.append(pre.replace("\n", "<br/>"))
             val langRaw = (m.groups[1]?.value ?: "").trim().lowercase()
             val normalizedLang = normalizeLanguage(langRaw)
             var code = (m.groups[2]?.value ?: "").trim('\n', '\r')
@@ -453,17 +582,18 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
             val escaped = escapeHtml(code)
             val codeId = registerCodeBlock(code)
             val langLabel = normalizedLang.takeUnless { it.isBlank() || it == "text" }?.uppercase() ?: ""
-            result.append("<table class='code-block'>")
-            result.append("<tr><td class='code-lang'>").append(escapeHtml(langLabel)).append("</td>")
-            result.append("<td class='code-copy-cell'><a href='${COPY_LINK_PREFIX}$codeId' class='code-copy-link' title='Скопировать'><span class='code-copy-icon'>&#128203;</span></a></td></tr>")
-            result.append("<tr><td colspan='2'><pre><code class='lang-$normalizedLang'>").append(escaped).append("</code></pre></td></tr>")
-            result.append("</table>")
+            finalResult.append("<table class='code-block'>")
+            finalResult.append("<tr><td class='code-lang'>").append(escapeHtml(langLabel)).append("</td>")
+            finalResult.append("<td class='code-copy-cell'><a href='${COPY_LINK_PREFIX}$codeId' class='code-copy-link' title='Скопировать'><span class='code-copy-icon'>&#128203;</span></a></td></tr>")
+            finalResult.append("<tr><td colspan='2'><pre><code class='lang-$normalizedLang'>").append(escaped).append("</code></pre></td></tr>")
+            finalResult.append("</table>")
             lastIndex = m.range.last + 1
         }
-        if (lastIndex < text.length) {
-            result.append(escapeHtml(text.substring(lastIndex)).replace("\n", "<br/>"))
+        if (lastIndex < result.length) {
+            finalResult.append(result.substring(lastIndex).replace("\n", "<br/>"))
         }
-        return result.toString()
+
+        return finalResult.toString()
     }
 
     private fun normalizeLanguage(lang: String): String {
@@ -628,5 +758,14 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
     private fun copyCodeToClipboard(code: String) {
         val clipboard = Toolkit.getDefaultToolkit().systemClipboard
         clipboard.setContents(StringSelection(code), null)
+    }
+
+    /**
+     * Извлекает фактическую неопределенность из форматированного текста
+     */
+    private fun extractUncertaintyFromFormattedText(text: String): Double {
+        // Ищем неопределенность в XML формате и устанавливаем 80% для уточняющих вопросов
+        val isUncertain = text.contains("Требуются уточнения") || text.contains("Уточняющие вопросы:")
+        return if (isUncertain) 0.8 else 0.0
     }
 }

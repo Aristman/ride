@@ -120,6 +120,36 @@ class JcefChatView : JPanel(BorderLayout()) {
                 border: 1px solid rgba(33, 150, 243, 0.3);
                 color: #90caf9;
             }
+
+            /* Стили для Markdown */
+            h1, h2, h3 {
+                color: var(--textPrimary);
+                margin-top: 16px;
+                margin-bottom: 8px;
+            }
+            h1 { font-size: 1.5em; }
+            h2 { font-size: 1.3em; }
+            h3 { font-size: 1.1em; }
+            strong { font-weight: bold; }
+            em { font-style: italic; }
+            code {
+                background-color: rgba(255, 255, 255, 0.1);
+                padding: 2px 4px;
+                border-radius: 3px;
+                font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            }
+            hr {
+                border: none;
+                border-top: 1px solid rgba(255, 255, 255, 0.2);
+                margin: 16px 0;
+            }
+            ul, ol {
+                margin: 8px 0;
+                padding-left: 20px;
+            }
+            li {
+                margin: 4px 0;
+            }
         """.trimIndent()
 
         val js = """

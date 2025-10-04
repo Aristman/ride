@@ -105,13 +105,22 @@ class ChatService {
                 withContext(Dispatchers.EDT) {
                     if (agentResponse.success) {
                         // Создаем и сохраняем сообщение ассистента с учетом анализа неопределенности
+                        val metadata = agentResponse.metadata + mapOf(
+                            "isFinal" to agentResponse.isFinal,
+                            "uncertainty" to (agentResponse.uncertainty ?: 0.0)
+                        )
+
+                        // Добавляем распарсенный контент в метаданные если он есть
+                        val metadataWithParsed = if (agentResponse.parsedContent != null) {
+                            metadata + mapOf("parsedContent" to agentResponse.parsedContent)
+                        } else {
+                            metadata
+                        }
+
                         val assistantMsg = Message(
                             content = agentResponse.content,
                             role = MessageRole.ASSISTANT,
-                            metadata = agentResponse.metadata + mapOf(
-                                "isFinal" to agentResponse.isFinal,
-                                "uncertainty" to (agentResponse.uncertainty ?: 0.0)
-                            )
+                            metadata = metadataWithParsed
                         )
                         getCurrentHistory().addMessage(assistantMsg)
 
