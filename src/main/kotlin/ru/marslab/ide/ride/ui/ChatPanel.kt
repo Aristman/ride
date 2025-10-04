@@ -382,7 +382,7 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                         .prefix { color: ${t.prefix}; margin-bottom: 4px; }
                         .content { }
                         .msg.user .prefix { color: ${t.prefix}; margin-bottom: 6px; }
-                        .msg.user .content { display: inline-block; background-color: ${t.userBg}; border: 1px solid ${t.userBorder}; padding: 10px 14px; color: inherit; text-align: left; }
+                        .msg.user .content { display: inline-block; background-color: ${t.userBg}; border: 1px solid ${t.userBorder}; padding: 10px 14px; color: inherit; text-align: left; border-radius: 12px; }
                         .msg.user .content table.code-block { margin-top: 12px; }
                         pre { background-color: ${t.codeBg}; color: ${t.codeText}; padding: 8px; border: 1px solid ${t.codeBorder}; margin: 0; white-space: pre-wrap; }
                         pre code { display: block; font-family: monospace; font-size: ${codeFontSize}px; color: ${t.codeText}; white-space: pre-wrap; }

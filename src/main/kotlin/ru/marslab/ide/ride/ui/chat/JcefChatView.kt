@@ -105,7 +105,9 @@ class JcefChatView : JPanel(BorderLayout()) {
             .msg { margin: 8px 8px 12px 8px; }
             .prefix { color: var(--prefix); margin-bottom: 4px; }
             .content { }
-            .msg.user .content { display:inline-block; background: var(--userBg); border:1px solid var(--userBorder); padding:10px 14px; color: inherit; text-align: left; }
+            .msg.user { text-align: right; }
+            .msg.user .prefix { text-align: right; }
+            .msg.user .content { display:inline-block; background: var(--userBg); border:1px solid var(--userBorder); padding:10px 14px; color: inherit; text-align: right; border-radius: 12px; }
             table.code-block { width:100%; border-collapse: collapse; margin-top: 8px; }
             table.code-block td { padding:0; }
             td.code-lang { font-size: 12px; color: var(--prefix); padding: 4px 6px; }
