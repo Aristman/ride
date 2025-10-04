@@ -38,8 +38,7 @@ class ChatAgent(
     private val logger = Logger.getInstance(ChatAgent::class.java)
     
     override suspend fun processRequest(request: String, context: ChatContext): AgentResponse {
-        logger.info("Processing request, length: ${request.length}")
-        
+
         // Проверяем доступность провайдера
         if (!llmProvider.isAvailable()) {
             logger.warn("LLM provider is not available")
@@ -66,43 +65,19 @@ class ChatAgent(
             
             // Проверяем успешность ответа
             if (!llmResponse.success) {
-                logger.warn("LLM provider returned error: ${llmResponse.error}")
                 return AgentResponse.error(
                     error = llmResponse.error ?: "Неизвестная ошибка",
                     content = "Извините, произошла ошибка при обработке запроса."
                 )
             }
-            
-            logger.info("Request processed successfully, tokens used: ${llmResponse.tokensUsed}")
-            
+
             // Парсим ответ если задан формат
             val parsedResponse = if (responseSchema != null) {
                 val parser = ResponseParserFactory.getParser(responseSchema!!)
-                parser.parse(llmResponse.content, responseSchema)
+                val parsed = parser.parse(llmResponse.content, responseSchema)
+                parsed
             } else {
                 null
-            }
-
-            // Если парсинг задан и произошла ошибка — формируем ошибку
-            if (responseSchema != null && parsedResponse is ru.marslab.ide.ride.model.ParsedResponse.ParseError) {
-                logger.warn("Parse error for format ${responseSchema?.format}: ${parsedResponse.error}")
-                return AgentResponse.error(
-                    error = "Ошибка парсинга ответа: ${parsedResponse.error}",
-                    content = llmResponse.content
-                )
-            }
-
-            // Валидация распарсенного ответа по схеме
-            if (responseSchema != null && parsedResponse != null) {
-                val validator = ResponseValidatorFactory.getValidator(responseSchema!!.format)
-                val validationError = validator.validate(parsedResponse, responseSchema!!)
-                if (validationError != null) {
-                    logger.warn("Validation failed: $validationError")
-                    return AgentResponse.error(
-                        error = "Ответ не соответствует схеме: $validationError",
-                        content = llmResponse.content
-                    )
-                }
             }
 
             // Анализируем неопределенность ответа
@@ -124,6 +99,72 @@ class ChatAgent(
             // Добавляем информацию о неопределенности
             baseMetadata["uncertainty"] = uncertainty
             baseMetadata["hasClarifyingQuestions"] = UncertaintyAnalyzer.hasExplicitUncertainty(llmResponse.content)
+
+            // Если парсинг задан и произошла ошибка — формируем ошибку
+            if (responseSchema != null && parsedResponse is ru.marslab.ide.ride.model.ParsedResponse.ParseError) {
+                val errorContent = buildString {
+                    appendLine("⚠️ **Ошибка парсинга ответа:** ${parsedResponse.error}")
+                    appendLine()
+                    appendLine("**Сырой ответ от агента:**")
+                    appendLine("```xml")
+                    appendLine(llmResponse.content)
+                    appendLine("```")
+                }
+                return AgentResponse.error(
+                    error = "Ошибка парсинга ответа: ${parsedResponse.error}",
+                    content = errorContent
+                )
+            }
+
+            // Валидация распарсенного ответа по схеме
+            if (responseSchema != null && parsedResponse != null) {
+                val validator = ResponseValidatorFactory.getValidator(responseSchema!!.format)
+                val validationError = validator.validate(parsedResponse, responseSchema!!)
+                if (validationError != null) {
+
+                    // Если XML невалидный, пробуем обработать его напрямую через ResponseFormatter
+                    if (responseSchema!!.format == ResponseFormat.XML && validationError.contains("XML", ignoreCase = true)) {
+                        try {
+                            // Пробуем извлечь контент напрямую из невалидного XML
+                            val extractedContent = ru.marslab.ide.ride.ui.ResponseFormatter.extractMainContent(
+                                llmResponse.content,
+                                ru.marslab.ide.ride.model.Message(
+                                    content = llmResponse.content,
+                                    role = ru.marslab.ide.ride.model.MessageRole.ASSISTANT
+                                ),
+                                com.intellij.openapi.project.ProjectManager.getInstance().openProjects.firstOrNull()
+                                    ?: com.intellij.openapi.project.ProjectManager.getInstance().defaultProject,
+                                ru.marslab.ide.ride.service.ChatService()
+                            )
+
+                            return AgentResponse.success(
+                                content = extractedContent,
+                                isFinal = isFinal,
+                                uncertainty = uncertainty,
+                                metadata = baseMetadata + mapOf(
+                                    "xmlValidationFailed" to true,
+                                    "extractedFromInvalidXml" to true
+                                )
+                            )
+                        } catch (e: Exception) {
+                            logger.warn("Failed to extract content from invalid XML: ${e.message}")
+                        }
+                    }
+
+                    val errorContent = buildString {
+                        appendLine("⚠️ **Ошибка валидации ответа:** $validationError")
+                        appendLine()
+                        appendLine("**Сырой ответ от агента:**")
+                        appendLine("```xml")
+                        appendLine(llmResponse.content)
+                        appendLine("```")
+                    }
+                    return AgentResponse.error(
+                        error = "Ответ не соответствует схеме: $validationError",
+                        content = errorContent
+                    )
+                }
+            }
 
             // Возвращаем успешный ответ с учетом неопределенности
             if (parsedResponse != null) {
@@ -216,6 +257,30 @@ class ChatAgent(
 Ты - AI-ассистент для разработчиков в IntelliJ IDEA.
 Твоя задача - помогать программистам с их вопросами о коде, отладке и разработке.
 
+ВАЖНО: ФОРМАТ ОТВЕТА - XML СТРОГАЯ СТРУКТУРА
+Твой ответ должен быть валидным XML с ТОЛЬКО ОДНИМ КОРНЕВЫМ ЭЛЕМЕНТОМ.
+
+Структура ответа:
+```xml
+<response>
+  <isFinal>true/false</isFinal>
+  <uncertainty>0.0-1.0</uncertainty>
+  <message>Твоё сообщение здесь</message>
+  <reasoning>Твоё пояснение (если нужно)</reasoning>
+  <clarifyingQuestions>
+    <question>Вопрос 1</question>
+    <question>Вопрос 2</question>
+  </clarifyingQuestions>
+</response>
+```
+
+ПРАВИЛА XML:
+1. Только один корневой элемент <response>
+2. Все теги должны быть парными и правильно вложены
+3. Специальные символы в message должны быть экранированы: &lt; &gt; &amp; &quot; &apos;
+4. Если есть уточняющие вопросы - isFinal=false, нет - isFinal=true
+5. НЕ добавляй текст вне XML структуры
+
 ПРАВИЛО ОЦЕНКИ НЕОПРЕДЕЛЕННОСТИ:
 Прежде чем дать окончательный ответ, оцени свою уверенность в том, что ты полностью понял вопрос и можешь дать исчерпывающий ответ.
 
@@ -230,16 +295,34 @@ class ChatAgent(
 - Неизвестен уровень знаний пользователя (0.1-0.2)
 
 Правила ответов:
-- Если неопределенность > 0.1: начни с "Давайте уточню..." и задай конкретные вопросы
-- Если неопределенность ≤ 0.1: начни с "Окончательный ответ:" и дай полный ответ
-- Используй markdown для кода с указанием языка
+- Если неопределенность > 0.1: isFinal=false и заполни clarifyingQuestions
+- Если неопределенность ≤ 0.1: isFinal=true и дай полный ответ в message
+- В message можно использовать markdown, но спецсимволы HTML должны быть экранированы
 - Будь дружелюбным и профессиональным
 
-Пример уточняющего вопроса:
-"Давайте уточню несколько деталей: какую версию Kotlin вы используете и это веб-приложение или мобильное?"
+Пример ответа с вопросами:
+```xml
+<response>
+  <isFinal>false</isFinal>
+  <uncertainty>0.3</uncertainty>
+  <message>Давайте уточню несколько деталей, чтобы дать точный ответ.</message>
+  <reasoning>Нужно больше информации о технологии и версии</reasoning>
+  <clarifyingQuestions>
+    <question>Какую версию Kotlin вы используете?</question>
+    <question>Это веб-приложение или мобильное?</question>
+  </clarifyingQuestions>
+</response>
+```
 
 Пример окончательного ответа:
-"Окончательный ответ: вот решение вашей проблемы с примером кода..."
+```xml
+<response>
+  <isFinal>true</isFinal>
+  <uncertainty>0.05</uncertainty>
+  <message>Окончательный ответ: вот решение вашей проблемы с примером кода...</message>
+  <reasoning>Достаточно информации для полного ответа</reasoning>
+</response>
+```
 
 Отвечай на русском языке, если пользователь пишет на русском.
         """.trimIndent()

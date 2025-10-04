@@ -233,12 +233,19 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
 
         // Форматируем контент в зависимости от схемы ответа
         val (formattedContent, actualUncertainty) = if (message.role == MessageRole.ASSISTANT) {
+            println("=== DEBUG: ChatPanel formatting START ===")
+            println("Message content length: ${message.content.length}")
+            println("Message content preview: ${message.content.take(200)}...")
+            println("Message metadata: ${message.metadata}")
+
             // Берем реальную неопределенность из метаданных сообщения
             val realUncertainty = message.metadata["uncertainty"] as? Double ?: 0.0
+            println("Real uncertainty: $realUncertainty")
 
             // Проверяем, есть ли распарсенный контент в сообщении
             val parsedContent = message.metadata["parsedContent"] as? ru.marslab.ide.ride.model.ParsedResponse
             if (parsedContent != null) {
+                println("Found parsedContent: ${parsedContent.javaClass.simpleName}")
                 val agentResponse = ru.marslab.ide.ride.model.AgentResponse(
                     content = message.content,
                     success = true,
@@ -247,13 +254,19 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                     uncertainty = realUncertainty
                 )
                 val formatted = ResponseFormatter.extractMainContent(agentResponse)
+                println("Formatted content length: ${formatted.length}")
+                println("Formatted content preview: ${formatted.take(200)}...")
                 formatted to realUncertainty
             } else {
+                println("No parsedContent, trying to parse as XML")
                 // Если нет распарсенного контента, пытаемся распарсить как XML
                 val formatted = ResponseFormatter.extractMainContent(message.content, message, project, chatService)
+                println("XML formatted content length: ${formatted.length}")
+                println("XML formatted content preview: ${formatted.take(200)}...")
                 formatted to realUncertainty
             }
         } else {
+            println("=== DEBUG: Non-assistant message, no formatting ===")
             message.content to (message.metadata["uncertainty"] as? Double ?: 0.0)
         }
 

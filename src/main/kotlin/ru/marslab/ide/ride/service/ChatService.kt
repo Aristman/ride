@@ -124,7 +124,15 @@ class ChatService {
                         )
                         getCurrentHistory().addMessage(assistantMsg)
 
-                        logger.info("Response received successfully, isFinal=${agentResponse.isFinal}, uncertainty=${agentResponse.uncertainty}")
+                        logger.info("=== DEBUG: ChatService response START ===")
+                        logger.info("Agent response success: ${agentResponse.success}")
+                        logger.info("Agent response content length: ${agentResponse.content.length}")
+                        logger.info("Agent response isFinal: ${agentResponse.isFinal}")
+                        logger.info("Agent response uncertainty: ${agentResponse.uncertainty}")
+                        logger.info("Agent response parsedContent type: ${agentResponse.parsedContent?.javaClass?.simpleName}")
+                        logger.info("Assistant message metadata: ${assistantMsg.metadata}")
+                        logger.info("=== DEBUG: ChatService response END ===")
+
                         onResponse(assistantMsg)
                     } else {
                         logger.warn("Agent returned error: ${agentResponse.error}")
