@@ -404,7 +404,12 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                         .code-copy-icon { font-size: ${codeFontSize}px; line-height: 1; font-family: 'Segoe UI Symbol', 'Apple Color Emoji', sans-serif; }
                         .msg.user { text-align: right; }
                         .msg.user .prefix { text-align: right; }
-                        .msg.user .content { text-align: right; }
+                        /* Пузырь справа, но содержимое внутри по левому краю */
+                        .msg.user .content { text-align: left; }
+                        /* Корректные отступы и переносы для списков внутри пользовательского сообщения */
+                        .msg.user .content ul,
+                        .msg.user .content ol { margin: 8px 0; padding-left: 20px; padding-right: 0; list-style-position: outside; }
+                        .msg.user .content li { margin: 4px 0; }
                         .msg.after-system { margin-top: 20px; }
 
                         /* Статусные строки для сообщений ассистента */

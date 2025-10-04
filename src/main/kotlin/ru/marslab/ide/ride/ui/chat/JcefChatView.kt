@@ -107,7 +107,12 @@ class JcefChatView : JPanel(BorderLayout()) {
             .content { }
             .msg.user { text-align: right; }
             .msg.user .prefix { text-align: right; }
-            .msg.user .content { display:inline-block; background: var(--userBg); border:1px solid var(--userBorder); padding:10px 14px; color: inherit; text-align: right; border-radius: 12px; }
+            /* Пузырь справа, содержимое внутри по левому краю */
+            .msg.user .content { display:inline-block; background: var(--userBg); border:1px solid var(--userBorder); padding:10px 14px; color: inherit; text-align: left; border-radius: 12px; }
+            /* Корректные отступы для списков внутри пользовательского сообщения */
+            .msg.user .content ul,
+            .msg.user .content ol { margin: 8px 0; padding-left: 20px; padding-right: 0; list-style-position: outside; }
+            .msg.user .content li { margin: 4px 0; }
             table.code-block { width:100%; border-collapse: collapse; margin-top: 8px; }
             table.code-block td { padding:0; }
             td.code-lang { font-size: 12px; color: var(--prefix); padding: 4px 6px; }
