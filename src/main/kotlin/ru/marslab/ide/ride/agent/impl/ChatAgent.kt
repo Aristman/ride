@@ -111,53 +111,34 @@ class ChatAgent(
             baseMetadata["uncertainty"] = uncertainty
             baseMetadata["hasClarifyingQuestions"] = UncertaintyAnalyzer.hasExplicitUncertainty(llmResponse.content)
 
-            // Проверяем результат парсинга
-            // Если парсинг не удался, пробуем извлечь контент через ResponseFormatter
+            // Если парсинг не удался, возвращаем ошибку
             val currentSchema = responseSchema
             if (currentSchema != null && parsedResponse == null) {
-
-                try {
-                    val extractedContent = ru.marslab.ide.ride.ui.ResponseFormatter.extractMainContent(
-                        llmResponse.content,
-                        ru.marslab.ide.ride.model.Message(
-                            content = llmResponse.content,
-                            role = ru.marslab.ide.ride.model.MessageRole.ASSISTANT
-                        ),
-                        com.intellij.openapi.project.ProjectManager.getInstance().openProjects.firstOrNull()
-                            ?: com.intellij.openapi.project.ProjectManager.getInstance().defaultProject,
-                        ru.marslab.ide.ride.service.ChatService()
-                    )
-
-                    return AgentResponse.success(
-                        content = extractedContent,
-                        isFinal = isFinal,
-                        uncertainty = uncertainty,
-                        metadata = baseMetadata + mapOf(
-                            "parsingFailed" to true,
-                            "extractedFromRawContent" to true
-                        )
-                    )
-                } catch (e: Exception) {
-                    logger.warn("Failed to extract content from raw response: ${e.message}")
-                    val errorContent = buildString {
-                        appendLine("⚠️ **Ошибка парсинга ответа:** Не удалось распарсить ответ в формате ${currentSchema.format}")
-                        appendLine()
-                        appendLine("**Сырой ответ от агента:**")
-                        appendLine("```${currentSchema.format.name.lowercase()}")
-                        appendLine(llmResponse.content)
-                        appendLine("```")
-                    }
-                    AgentResponse.error(
-                        error = "Ошибка парсинга ответа: не удалось распарсировать ${currentSchema.format}",
-                        content = errorContent
-                    )
+                logger.warn("Failed to parse response with format ${currentSchema.format}")
+                val errorContent = buildString {
+                    appendLine("⚠️ **Ошибка парсинга ответа:** Не удалось распарсить ответ в формате ${currentSchema.format}")
+                    appendLine()
+                    appendLine("**Сырой ответ от агента:**")
+                    appendLine("```${currentSchema.format.name.lowercase()}")
+                    appendLine(llmResponse.content)
+                    appendLine("```")
                 }
+                return AgentResponse.error(
+                    error = "Ошибка парсинга ответа: не удалось распарсировать ${currentSchema.format}",
+                    content = errorContent
+                )
             }
 
             // Формируем контент на основе распарсенных данных
             val finalContent = when (val parsed = parsedResponse) {
-                is XmlResponseData -> parsed.message
-                is JsonResponseData -> parsed.message
+                is XmlResponseData -> {
+                    // Используем ResponseFormatter для форматирования с уточняющими вопросами
+                    ru.marslab.ide.ride.ui.ResponseFormatter.formatXmlResponseData(parsed)
+                }
+                is JsonResponseData -> {
+                    // Используем ResponseFormatter для форматирования с уточняющими вопросами
+                    ru.marslab.ide.ride.ui.ResponseFormatter.formatJsonResponseData(parsed)
+                }
                 is TextResponseData -> parsed.content
                 else -> llmResponse.content
             }
@@ -203,6 +184,8 @@ class ChatAgent(
     }
 
     override fun getResponseFormat(): ResponseFormat? = responseFormat
+
+    override fun getResponseSchema(): ResponseSchema? = responseSchema
 
     override fun clearResponseFormat() {
         logger.info("Clearing response format")

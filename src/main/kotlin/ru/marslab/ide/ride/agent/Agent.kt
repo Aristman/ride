@@ -60,10 +60,17 @@ interface Agent {
     
     /**
      * Возвращает текущий формат ответа
-     * 
+     *
      * @return Текущий формат или null если не установлен
      */
     fun getResponseFormat(): ResponseFormat?
+
+    /**
+     * Возвращает текущую схему ответа
+     *
+     * @return Текущая схема или null если не установлена
+     */
+    fun getResponseSchema(): ResponseSchema?
     
     /**
      * Сбрасывает формат ответа к дефолтному (TEXT)

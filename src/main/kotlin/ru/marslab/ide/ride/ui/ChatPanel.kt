@@ -231,33 +231,18 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
             MessageRole.SYSTEM -> "ℹ️ Система"
         }
 
-        // Форматируем контент в зависимости от схемы ответа
-        val (formattedContent, actualUncertainty) = if (message.role == MessageRole.ASSISTANT) {
-
-            // Берем реальную неопределенность из метаданных сообщения
-            val realUncertainty = message.metadata["uncertainty"] as? Double ?: 0.0
-
-            // Проверяем, есть ли распарсенный контент в сообщении
-            val parsedContent = message.metadata["parsedContent"] as? ru.marslab.ide.ride.model.ParsedResponse
-            if (parsedContent != null) {
-                val agentResponse = ru.marslab.ide.ride.model.AgentResponse(
-                    content = message.content,
-                    success = true,
-                    parsedContent = parsedContent,
-                    isFinal = message.metadata["isFinal"] as? Boolean ?: true,
-                    uncertainty = realUncertainty
-                )
-                val formatted = ResponseFormatter.extractMainContent(agentResponse)
-                formatted to realUncertainty
-            } else {
-                println("No parsedContent, trying to parse as XML")
-                // Если нет распарсенного контента, пытаемся распарсить как XML
-                val formatted = ResponseFormatter.extractMainContent(message.content, message, project, chatService)
-                formatted to realUncertainty
+        // Форматируем контент в зависимости от роли сообщения
+        val formattedContent = when (message.role) {
+            MessageRole.USER -> message.content
+            MessageRole.SYSTEM -> message.content
+            MessageRole.ASSISTANT -> {
+                // Для сообщений ассистента используем контент как есть
+                // Форматирование вопросов будет происходить в ChatAgent через XmlResponseData
+                message.content
             }
-        } else {
-            message.content to (message.metadata["uncertainty"] as? Double ?: 0.0)
         }
+
+        val actualUncertainty = message.metadata["uncertainty"] as? Double ?: 0.0
 
         val bodyHtml = renderContentToHtml(formattedContent)
         val afterSystemClass = if (message.role == MessageRole.USER && lastRole == MessageRole.SYSTEM) " after-system" else ""
@@ -265,18 +250,35 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         // Добавляем статусную строку для сообщений ассистента
         val statusRow = if (message.role == MessageRole.ASSISTANT) {
             val isFinal = message.metadata["isFinal"] as? Boolean ?: true
+            val wasParsed = message.metadata["parsedData"] as? Boolean ?: false
+            val hasClarifyingQuestions = message.metadata["hasClarifyingQuestions"] as? Boolean ?: false
 
-            val statusText = if (!isFinal) {
-                "Требуются уточнения (неопределенность: ${(actualUncertainty * 100).toInt()}%)"
-            } else if (actualUncertainty > 0.05) {
-                "Ответ с низкой уверенностью (неопределенность: ${(actualUncertainty * 100).toInt()}%)"
-            } else {
-                "Окончательный ответ"
+            val statusText = when {
+                !isFinal || hasClarifyingQuestions -> {
+                    "Требуются уточнения (неопределенность: ${(actualUncertainty * 100).toInt()}%)"
+                }
+                !wasParsed && actualUncertainty > 0.05 -> {
+                    "Ответ с парсингом (неопределенность: ${(actualUncertainty * 100).toInt()}%)"
+                }
+                actualUncertainty > 0.05 -> {
+                    "Ответ с низкой уверенностью (неопределенность: ${(actualUncertainty * 100).toInt()}%)"
+                }
+                else -> {
+                    "Окончательный ответ"
+                }
             }
 
-            val statusClass = if (!isFinal) "status-uncertain" else if (actualUncertainty > 0.05) "status-low-confidence" else "status-final"
+            val statusClass = when {
+                !isFinal || hasClarifyingQuestions -> "status-uncertain"
+                !wasParsed -> "status-low-confidence"
+                actualUncertainty > 0.05 -> "status-low-confidence"
+                else -> "status-final"
+            }
 
-            "<div class='status $statusClass'>📊 $statusText</div>"
+            // Добавляем иконку в зависимости от статуса парсинга
+            val icon = if (!wasParsed) "⚠️" else "📊"
+
+            "<div class='status $statusClass'>$icon $statusText</div>"
         } else {
             ""
         }
@@ -406,9 +408,9 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                             color: #a5d6a7;
                         }
                         .status-low-confidence {
-                            background-color: rgba(255, 152, 0, 0.2);
-                            border: 1px solid rgba(255, 152, 0, 0.3);
-                            color: #ffcc80;
+                            background-color: rgba(255, 152, 0, 0.15);
+                            border: 1px solid rgba(255, 152, 0, 0.25);
+                            color: #ffb74d;
                         }
                         .status-uncertain {
                             background-color: rgba(33, 150, 243, 0.2);
