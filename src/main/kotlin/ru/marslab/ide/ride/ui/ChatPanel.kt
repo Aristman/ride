@@ -496,7 +496,11 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
 
         tripleBacktickPattern.findAll(result).forEach { m ->
             val pre = result.substring(lastIndex, m.range.first)
-            finalResult.append(pre.replace("\n", "<br/>"))
+            if (isJcefMode) {
+                finalResult.append(escapeHtml(pre).replace("\n", "<br/>"))
+            } else {
+                finalResult.append(pre)
+            }
             val langRaw = (m.groups[1]?.value ?: "").trim().lowercase()
             val normalizedLang = normalizeLanguage(langRaw)
             var code = (m.groups[2]?.value ?: "").trim('\n', '\r')
@@ -507,7 +511,7 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                 }
             }.getOrDefault(code)
             val escaped = if (isJcefMode) {
-                // Для JCEF режима экранируем только HTML, переносы строк сохраняются через CSS white-space
+                // В JCEF режиме сохраняем переносы строк, экранируем только HTML
                 code.replace("&", "&amp;")
                     .replace("<", "&lt;")
                     .replace(">", "&gt;")
@@ -530,7 +534,11 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         // Добавляем оставшийся текст после последнего кодового блока
         if (lastIndex < result.length) {
             val remainingText = result.substring(lastIndex)
-            finalResult.append(if (isJcefMode) remainingText.replace("\n", "<br/>") else remainingText)
+            if (isJcefMode) {
+                finalResult.append(escapeHtml(remainingText).replace("\n", "<br/>"))
+            } else {
+                finalResult.append(remainingText)
+            }
         }
 
         if (codeBlocksFound.isNotEmpty()) {
@@ -551,6 +559,7 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
             println("DEBUG: Converting single backtick block: $lang, code: ${code.take(50)}...")
             val normalizedLang = normalizeLanguage(lang)
             val escapedCode = if (isJcefMode) {
+                // В JCEF режиме сохраняем переносы строк, экранируем только HTML
                 code.replace("&", "&amp;")
                     .replace("<", "&lt;")
                     .replace(">", "&gt;")
@@ -583,10 +592,10 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                 println("DEBUG: Converting inline code to block: $lang")
                 val normalizedLang = normalizeLanguage(lang)
                 val escapedCode = if (isJcefMode) {
+                    // В JCEF режиме сохраняем переносы строк, экранируем только HTML
                     code.replace("&", "&amp;")
                         .replace("<", "&lt;")
                         .replace(">", "&gt;")
-                        .replace("\n", "<br/>")
                 } else {
                     escapeHtml(code)
                 }
