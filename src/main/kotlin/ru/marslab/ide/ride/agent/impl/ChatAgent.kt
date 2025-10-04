@@ -20,6 +20,8 @@ import ru.marslab.ide.ride.model.UncertaintyResponseSchema
 import ru.marslab.ide.ride.model.XmlResponseData
 import ru.marslab.ide.ride.model.JsonResponseData
 import ru.marslab.ide.ride.model.TextResponseData
+import ru.marslab.ide.ride.ui.ResponseFormatter.formatJsonResponseData
+import ru.marslab.ide.ride.ui.ResponseFormatter.formatXmlResponseData
 
 /**
  * Универсальная реализация агента для общения с пользователем
@@ -133,17 +135,18 @@ class ChatAgent(
             val finalContent = when (val parsed = parsedResponse) {
                 is XmlResponseData -> {
                     // Используем ResponseFormatter для форматирования с уточняющими вопросами
-                    ru.marslab.ide.ride.ui.ResponseFormatter.formatXmlResponseData(parsed)
+                    formatXmlResponseData(parsed)
                 }
 
                 is JsonResponseData -> {
                     // Используем ResponseFormatter для форматирования с уточняющими вопросами
-                    ru.marslab.ide.ride.ui.ResponseFormatter.formatJsonResponseData(parsed)
+                    formatJsonResponseData(parsed)
                 }
 
                 is TextResponseData -> parsed.content
                 else -> llmResponse.content
             }
+            println("DEBUG finalContent=$finalContent")
 
             // Возвращаем успешный ответ с учетом неопределенности
             AgentResponse.success(

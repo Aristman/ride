@@ -238,24 +238,15 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                 }
                 "$indicator 🤖 Ассистент"
             }
+
             MessageRole.SYSTEM -> "ℹ️ Система"
         }
 
         // Форматируем контент в зависимости от роли сообщения
-        val formattedContent = when (message.role) {
-            MessageRole.USER -> message.content
-            MessageRole.SYSTEM -> message.content
-            MessageRole.ASSISTANT -> {
-                // Для сообщений ассистента используем контент как есть
-                // Форматирование вопросов будет происходить в ChatAgent через XmlResponseData
-                message.content
-            }
-        }
-
         val actualUncertainty = message.metadata["uncertainty"] as? Double ?: 0.0
-
-        val bodyHtml = renderContentToHtml(formattedContent)
-        val afterSystemClass = if (message.role == MessageRole.USER && lastRole == MessageRole.SYSTEM) " after-system" else ""
+        val bodyHtml = renderContentToHtml(message.content)
+        val afterSystemClass =
+            if (message.role == MessageRole.USER && lastRole == MessageRole.SYSTEM) " after-system" else ""
 
         // Добавляем статусную строку для сообщений ассистента
         val statusRow = if (message.role == MessageRole.ASSISTANT) {
@@ -267,12 +258,15 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                 !isFinal || hasClarifyingQuestions -> {
                     "Требуются уточнения (неопределенность: ${(actualUncertainty * 100).toInt()}%)"
                 }
+
                 !wasParsed && actualUncertainty > isFinalLevel -> {
                     "Ответ с парсингом (неопределенность: ${(actualUncertainty * 100).toInt()}%)"
                 }
+
                 actualUncertainty > isFinalLevel -> {
                     "Ответ с низкой уверенностью (неопределенность: ${(actualUncertainty * 100).toInt()}%)"
                 }
+
                 else -> {
                     "Окончательный ответ"
                 }
@@ -342,6 +336,7 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
     private fun setUIEnabled(enabled: Boolean) {
         inputArea.isEnabled = enabled
         sendButton.isEnabled = enabled
+        inputArea.requestFocus()
     }
 
     /**
@@ -486,8 +481,6 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         var result = text
 
         // Сначала обработаем кодовые блоки, ДО экранирования HTML
-        println("DEBUG: Text before code block processing: ${result.take(300)}...")
-
         // Обработка кодовых блоков ``` (стандартный markdown)
         val tripleBacktickPattern = Regex("""```([\w#+.-]+)?[ \t]*\n?([\s\S]*?)```""", RegexOption.IGNORE_CASE)
         var lastIndex = 0
@@ -530,7 +523,8 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
             finalResult.append("<table class='code-block'>")
             finalResult.append("<tr><td class='code-lang'>").append(escapeHtml(langLabel)).append("</td>")
             finalResult.append("<td class='code-copy-cell'><a href='${COPY_LINK_PREFIX}$codeId' class='code-copy-link' title='Скопировать'><span class='code-copy-icon'>&#128203;</span></a></td></tr>")
-            finalResult.append("<tr><td colspan='2'><pre><code class='language-$normalizedLang'>").append(escaped).append("</code></pre></td></tr>")
+            finalResult.append("<tr><td colspan='2'><pre><code class='language-$normalizedLang'>").append(escaped)
+                .append("</code></pre></td></tr>")
             finalResult.append("</table>")
             codeBlocksFound.add("$normalizedLang: ${code.take(50)}...")
             lastIndex = m.range.last + 1
@@ -544,14 +538,6 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
             } else {
                 finalResult.append(remainingText)
             }
-//            val remainingText = result.substring(lastIndex).trimStart()
-//            if (remainingText.isNotEmpty()) {
-//                if (isJcefMode) {
-//                    finalResult.append("<br/>").append(escapeHtml(remainingText).replace("\n", "<br/>"))
-//                } else {
-//                    finalResult.append(remainingText)
-//                }
-//            }
         }
 
         if (codeBlocksFound.isNotEmpty()) {
@@ -586,10 +572,10 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
             val codeId = "code_${System.currentTimeMillis()}_${codeBlocksFound.size}"
 
             "<table class='code-block'>" +
-            "<tr><td class='code-lang'>${escapeHtml(lang)}</td>" +
-            "<td class='code-copy-cell'><a href='${COPY_LINK_PREFIX}$codeId' class='code-copy-link' title='Скопировать'><span class='code-copy-icon'>&#128203;</span></a></td></tr>" +
-            "<tr><td colspan='2'><pre><code class='language-$normalizedLang'>$escapedCode</code></pre></td></tr>" +
-            "</table>"
+                    "<tr><td class='code-lang'>${escapeHtml(lang)}</td>" +
+                    "<td class='code-copy-cell'><a href='${COPY_LINK_PREFIX}$codeId' class='code-copy-link' title='Скопировать'><span class='code-copy-icon'>&#128203;</span></a></td></tr>" +
+                    "<tr><td colspan='2'><pre><code class='language-$normalizedLang'>$escapedCode</code></pre></td></tr>" +
+                    "</table>"
         }
 
         // Также обработаем случай, когда код написан без переносов
@@ -605,7 +591,8 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
             // Если код содержит точки с запятой, фигурные скобки или ключевое слово function, это точно кодовый блок
             if (code.contains(';') || code.contains('{') || code.contains('}') ||
                 code.contains("fun ") || code.contains("function ") || code.contains("return ") ||
-                code.contains("class ") || code.contains("import ")) {
+                code.contains("class ") || code.contains("import ")
+            ) {
                 println("DEBUG: Converting inline code to block: $lang")
                 val normalizedLang = normalizeLanguage(lang)
                 val escapedCode = if (isJcefMode) {
@@ -620,10 +607,10 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                 val codeId = "code_${System.currentTimeMillis()}_${codeBlocksFound.size}"
 
                 "<table class='code-block'>" +
-                "<tr><td class='code-lang'>${escapeHtml(lang)}</td>" +
-                "<td class='code-copy-cell'><a href='${COPY_LINK_PREFIX}$codeId' class='code-copy-link' title='Скопировать'><span class='code-copy-icon'>&#128203;</span></a></td></tr>" +
-                "<tr><td colspan='2'><pre><code class='language-$normalizedLang'>$escapedCode</code></pre></td></tr>" +
-                "</table>"
+                        "<tr><td class='code-lang'>${escapeHtml(lang)}</td>" +
+                        "<td class='code-copy-cell'><a href='${COPY_LINK_PREFIX}$codeId' class='code-copy-link' title='Скопировать'><span class='code-copy-icon'>&#128203;</span></a></td></tr>" +
+                        "<tr><td colspan='2'><pre><code class='language-$normalizedLang'>$escapedCode</code></pre></td></tr>" +
+                        "</table>"
             } else {
                 // Иначе оставляем как инлайн-код
                 "<code>$code</code>"
@@ -748,23 +735,23 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
      */
     private fun removeCommonIndent(code: String): String {
         if (code.isBlank()) return code
-        
+
         val lines = code.split("\n")
         if (lines.isEmpty()) return code
-        
+
         // Находим минимальный отступ среди непустых строк
         val minIndent = lines
             .filter { it.isNotBlank() }
             .map { line -> line.takeWhile { it.isWhitespace() }.length }
             .minOrNull() ?: 0
-        
+
         println("DEBUG: removeCommonIndent - minIndent=$minIndent, lines count=${lines.size}")
-        
+
         // Удаляем минимальный отступ из всех строк
         val result = lines.joinToString("\n") { line ->
             if (line.length >= minIndent) line.substring(minIndent) else line
         }
-        
+
         println("DEBUG: removeCommonIndent - result has ${result.count { it == '\n' }} newlines")
         return result
     }
@@ -776,9 +763,18 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         var escape = false
         for (ch in input.trim()) {
             when {
-                escape -> { sb.append(ch); escape = false }
-                ch == '\\' && inString -> { sb.append(ch); escape = true }
-                ch == '"' -> { inString = !inString; sb.append(ch) }
+                escape -> {
+                    sb.append(ch); escape = false
+                }
+
+                ch == '\\' && inString -> {
+                    sb.append(ch); escape = true
+                }
+
+                ch == '"' -> {
+                    inString = !inString; sb.append(ch)
+                }
+
                 inString -> sb.append(ch)
                 ch == '{' || ch == '[' -> {
                     sb.append(ch)
@@ -786,19 +782,22 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                     indent++
                     sb.append("  ".repeat(indent))
                 }
+
                 ch == '}' || ch == ']' -> {
                     sb.append('\n')
                     indent = (indent - 1).coerceAtLeast(0)
                     sb.append("  ".repeat(indent))
                     sb.append(ch)
                 }
+
                 ch == ',' -> {
                     sb.append(ch)
                     sb.append('\n')
                     sb.append("  ".repeat(indent))
                 }
+
                 ch == ':' -> sb.append(": ")
-                ch.isWhitespace() -> { }
+                ch.isWhitespace() -> {}
                 else -> sb.append(ch)
             }
         }
