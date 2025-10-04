@@ -27,9 +27,11 @@ class JcefChatView : JPanel(BorderLayout()) {
     fun setBody(html: String) {
         val js = """
             (function(){
+              console.log('DEBUG: JCEF setBody called with HTML length:', ${html.length});
               const root = document.getElementById('messages');
               root.innerHTML = ${html.toJSString()};
               requestAnimationFrame(()=> { window.scrollTo(0, document.body.scrollHeight); });
+              console.log('DEBUG: Calling __ride_initHl and __ride_highlightAll');
               window.__ride_initHl && window.__ride_initHl();
               window.__ride_highlightAll && window.__ride_highlightAll();
             })();
@@ -41,17 +43,25 @@ class JcefChatView : JPanel(BorderLayout()) {
         // Безопасно вставляем как строку: создаём временной контейнер и переносим его детей
         val js = """
             (function(){
+              console.log('DEBUG: JCEF appendHtml called with HTML length:', ${html.length});
               const tmp = document.createElement('div');
               tmp.innerHTML = ${html.toJSString()};
               const root = document.getElementById('messages');
               while (tmp.firstChild) root.appendChild(tmp.firstChild);
               requestAnimationFrame(()=> { window.scrollTo(0, document.body.scrollHeight); });
+              console.log('DEBUG: Calling __ride_initHl and __ride_highlightAll in appendHtml');
               window.__ride_initHl && window.__ride_initHl();
               // Подсвечиваем только новые блоки в конце
               const blocks = root.querySelectorAll('pre code');
+              console.log('DEBUG: Found code blocks:', blocks.length);
               if (window.hljs && blocks.length){
                 const last = blocks[blocks.length - 1];
-                try { window.hljs.highlightElement(last); } catch(_){ }
+                try {
+                  console.log('DEBUG: Highlighting new code block');
+                  window.hljs.highlightElement(last);
+                } catch(_){
+                  console.log('DEBUG: Error highlighting code block');
+                }
               }
             })();
         """.trimIndent()
@@ -94,8 +104,8 @@ class JcefChatView : JPanel(BorderLayout()) {
             td.code-lang { font-size: 12px; color: var(--prefix); padding: 4px 6px; }
             td.code-copy-cell { text-align: right; padding: 4px 6px; }
             a.code-copy-link { color: var(--prefix); text-decoration: none; display:inline-block; width:20px; height:20px; text-align:center; line-height:20px; }
-            pre { background: var(--codeBg); color: var(--codeText); padding:8px; border:1px solid var(--codeBorder); margin:0; overflow:auto; }
-            code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+            pre { background: var(--codeBg); color: var(--codeText); padding:8px; border:1px solid var(--codeBorder); margin:0; overflow:auto; white-space: pre-wrap; }
+            code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; white-space: pre-wrap; }
 
             /* Статусные строки для сообщений ассистента */
             .status {
@@ -167,11 +177,20 @@ class JcefChatView : JPanel(BorderLayout()) {
             // Lazy load highlight.js once
             window.__ride_initHl = function(){
               if (window.__ride_hlLoaded) return;
-              const addCss = (href)=>{ const l = document.createElement('link'); l.rel='stylesheet'; l.href=href; document.head.appendChild(l); };
-              const addJs = (src, onload)=>{ const s = document.createElement('script'); s.src=src; s.onload=onload; document.head.appendChild(s); };
+              console.log('DEBUG: Initializing highlight.js');
+              const addCss = (href)=>{
+                console.log('DEBUG: Adding CSS', href);
+                const l = document.createElement('link'); l.rel='stylesheet'; l.href=href; document.head.appendChild(l);
+              };
+              const addJs = (src, onload)=>{
+                console.log('DEBUG: Adding JS', src);
+                const s = document.createElement('script'); s.src=src; s.onload=onload; document.head.appendChild(s);
+              };
               addCss('https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css');
               addJs('https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js', function(){
+                console.log('DEBUG: highlight.js loaded successfully');
                 window.__ride_hlLoaded = true;
+                window.__ride_highlightAll();
               });
             };
             window.__ride_highlightAll = function(){

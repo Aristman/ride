@@ -31,6 +31,8 @@ import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.actionSystem.ActionToolbar
 import com.intellij.ide.ui.LafManagerListener
 
+private const val isFinalLevel = 0.1
+
 /**
  * Главная панель чата (гибрид Swing + JCEF)
  */
@@ -73,7 +75,15 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
 
     // JCEF (если доступен)
     private val useJcef: Boolean = true
-    private var jcefView: JcefChatView? = runCatching { if (useJcef) JcefChatView() else null }.getOrNull()
+    private var jcefView: JcefChatView? = runCatching {
+        if (useJcef) {
+            val view = JcefChatView()
+            println("DEBUG: JCEF ChatView initialized successfully")
+            view
+        } else null
+    }.getOrNull().also {
+        if (it == null) println("DEBUG: JCEF ChatView initialization failed, using HTML fallback")
+    }
 
     init {
         // Инициализация HTML/темы
@@ -221,7 +231,7 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                 val uncertainty = message.metadata["uncertainty"] as? Double ?: 0.0
                 val indicator = if (!isFinal) {
                     "❓"
-                } else if (uncertainty > 0.05) {
+                } else if (uncertainty > isFinalLevel) {
                     "⚠️"
                 } else {
                     "✅"
@@ -257,10 +267,10 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                 !isFinal || hasClarifyingQuestions -> {
                     "Требуются уточнения (неопределенность: ${(actualUncertainty * 100).toInt()}%)"
                 }
-                !wasParsed && actualUncertainty > 0.05 -> {
+                !wasParsed && actualUncertainty > isFinalLevel -> {
                     "Ответ с парсингом (неопределенность: ${(actualUncertainty * 100).toInt()}%)"
                 }
-                actualUncertainty > 0.05 -> {
+                actualUncertainty > isFinalLevel -> {
                     "Ответ с низкой уверенностью (неопределенность: ${(actualUncertainty * 100).toInt()}%)"
                 }
                 else -> {
@@ -271,7 +281,7 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
             val statusClass = when {
                 !isFinal || hasClarifyingQuestions -> "status-uncertain"
                 !wasParsed -> "status-low-confidence"
-                actualUncertainty > 0.05 -> "status-low-confidence"
+                actualUncertainty > isFinalLevel -> "status-low-confidence"
                 else -> "status-final"
             }
 
@@ -469,10 +479,134 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
     }
 
     private fun renderContentToHtml(text: String): String {
+        println("DEBUG: renderContentToHtml called with text length: ${text.length}")
+        println("DEBUG: Input text preview: ${text.take(200)}...")
+        val isJcefMode = jcefView != null
+        println("DEBUG: JCEF mode: $isJcefMode")
         var result = text
 
-        // Сначала экранируем HTML для безопасности
-        result = escapeHtml(result)
+        // Сначала обработаем кодовые блоки, ДО экранирования HTML
+        println("DEBUG: Text before code block processing: ${result.take(300)}...")
+
+        // Обработка кодовых блоков ``` (стандартный markdown)
+        val tripleBacktickPattern = Regex("""```([\w#+.-]+)?[ \t]*\n?([\s\S]*?)```""", RegexOption.IGNORE_CASE)
+        var lastIndex = 0
+        val finalResult = StringBuilder()
+        val codeBlocksFound = mutableListOf<String>()
+
+        tripleBacktickPattern.findAll(result).forEach { m ->
+            val pre = result.substring(lastIndex, m.range.first)
+            finalResult.append(pre.replace("\n", "<br/>"))
+            val langRaw = (m.groups[1]?.value ?: "").trim().lowercase()
+            val normalizedLang = normalizeLanguage(langRaw)
+            var code = (m.groups[2]?.value ?: "").trim('\n', '\r')
+            code = runCatching {
+                when (normalizedLang) {
+                    "json" -> prettyPrintJson(code)
+                    else -> code
+                }
+            }.getOrDefault(code)
+            val escaped = if (isJcefMode) {
+                // Для JCEF режима экранируем только HTML, переносы строк сохраняются через CSS white-space
+                code.replace("&", "&amp;")
+                    .replace("<", "&lt;")
+                    .replace(">", "&gt;")
+            } else {
+                escapeHtml(code)
+            }
+
+            val langLabel = if (langRaw.isBlank()) "Текст" else langRaw
+            val codeId = "code_${System.currentTimeMillis()}_${codeBlocksFound.size}"
+
+            finalResult.append("<table class='code-block'>")
+            finalResult.append("<tr><td class='code-lang'>").append(escapeHtml(langLabel)).append("</td>")
+            finalResult.append("<td class='code-copy-cell'><a href='${COPY_LINK_PREFIX}$codeId' class='code-copy-link' title='Скопировать'><span class='code-copy-icon'>&#128203;</span></a></td></tr>")
+            finalResult.append("<tr><td colspan='2'><pre><code class='language-$normalizedLang'>").append(escaped).append("</code></pre></td></tr>")
+            finalResult.append("</table>")
+            codeBlocksFound.add("$normalizedLang: ${code.take(50)}...")
+            lastIndex = m.range.last + 1
+        }
+
+        // Добавляем оставшийся текст после последнего кодового блока
+        if (lastIndex < result.length) {
+            val remainingText = result.substring(lastIndex)
+            finalResult.append(if (isJcefMode) remainingText.replace("\n", "<br/>") else remainingText)
+        }
+
+        if (codeBlocksFound.isNotEmpty()) {
+            println("DEBUG: Found ${codeBlocksFound.size} triple backtick code blocks: ${codeBlocksFound.joinToString(", ")}")
+        }
+
+        result = finalResult.toString()
+
+        // Теперь обработаем одинарные обратные кавычки и преобразуем их в тройные
+        val singleBacktickPattern = Regex("""`([^`\s]+)[ \t]*\n?((?:[^\n`]+\n?)+)`""")
+        val singleBacktickMatches = singleBacktickPattern.findAll(result).count()
+        if (singleBacktickMatches > 0) {
+            println("DEBUG: Found $singleBacktickMatches single backtick code blocks, converting to triple backticks")
+        }
+        result = singleBacktickPattern.replace(result) { match ->
+            val lang = match.groupValues[1]
+            val code = match.groupValues[2].trim()
+            println("DEBUG: Converting single backtick block: $lang, code: ${code.take(50)}...")
+            val normalizedLang = normalizeLanguage(lang)
+            val escapedCode = if (isJcefMode) {
+                code.replace("&", "&amp;")
+                    .replace("<", "&lt;")
+                    .replace(">", "&gt;")
+            } else {
+                escapeHtml(code)
+            }
+            val codeId = "code_${System.currentTimeMillis()}_${codeBlocksFound.size}"
+
+            "<table class='code-block'>" +
+            "<tr><td class='code-lang'>${escapeHtml(lang)}</td>" +
+            "<td class='code-copy-cell'><a href='${COPY_LINK_PREFIX}$codeId' class='code-copy-link' title='Скопировать'><span class='code-copy-icon'>&#128203;</span></a></td></tr>" +
+            "<tr><td colspan='2'><pre><code class='language-$normalizedLang'>$escapedCode</code></pre></td></tr>" +
+            "</table>"
+        }
+
+        // Также обработаем случай, когда код написан без переносов
+        val inlineCodePattern = Regex("""`([^`\s]+)[ \t]*([^{`}]+?)`""")
+        val inlineCodeMatches = inlineCodePattern.findAll(result).count()
+        if (inlineCodeMatches > 0) {
+            println("DEBUG: Found $inlineCodeMatches inline code patterns, converting to triple backticks")
+        }
+        result = inlineCodePattern.replace(result) { match ->
+            val lang = match.groupValues[1]
+            val code = match.groupValues[2].trim()
+            println("DEBUG: Processing inline code: $lang, code: ${code.take(50)}...")
+            // Если код содержит точки с запятой, фигурные скобки или ключевое слово function, это точно кодовый блок
+            if (code.contains(';') || code.contains('{') || code.contains('}') ||
+                code.contains("fun ") || code.contains("function ") || code.contains("return ") ||
+                code.contains("class ") || code.contains("import ")) {
+                println("DEBUG: Converting inline code to block: $lang")
+                val normalizedLang = normalizeLanguage(lang)
+                val escapedCode = if (isJcefMode) {
+                    code.replace("&", "&amp;")
+                        .replace("<", "&lt;")
+                        .replace(">", "&gt;")
+                        .replace("\n", "<br/>")
+                } else {
+                    escapeHtml(code)
+                }
+                val codeId = "code_${System.currentTimeMillis()}_${codeBlocksFound.size}"
+
+                "<table class='code-block'>" +
+                "<tr><td class='code-lang'>${escapeHtml(lang)}</td>" +
+                "<td class='code-copy-cell'><a href='${COPY_LINK_PREFIX}$codeId' class='code-copy-link' title='Скопировать'><span class='code-copy-icon'>&#128203;</span></a></td></tr>" +
+                "<tr><td colspan='2'><pre><code class='language-$normalizedLang'>$escapedCode</code></pre></td></tr>" +
+                "</table>"
+            } else {
+                // Иначе оставляем как инлайн-код
+                "<code>$code</code>"
+            }
+        }
+
+        // Экранируем HTML только для не-JCEF режима
+        if (!isJcefMode) {
+            result = escapeHtml(result)
+        }
 
         // Обработка markdown-элементов
 
@@ -564,40 +698,9 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
             processedLines.add("</$listType>")
         }
 
-        result = processedLines.joinToString("\n")
+        result = processedLines.joinToString(if (isJcefMode) "<br/>" else "\n")
 
-        // Обработка кодовых блоков ```
-        val pattern = Regex("""```([\w#+.-]+)?[ \t]*\n?([\s\S]*?)```""", RegexOption.IGNORE_CASE)
-        var lastIndex = 0
-        val finalResult = StringBuilder()
-
-        pattern.findAll(result).forEach { m ->
-            val pre = result.substring(lastIndex, m.range.first)
-            finalResult.append(pre.replace("\n", "<br/>"))
-            val langRaw = (m.groups[1]?.value ?: "").trim().lowercase()
-            val normalizedLang = normalizeLanguage(langRaw)
-            var code = (m.groups[2]?.value ?: "").trim('\n', '\r')
-            code = runCatching {
-                when (normalizedLang) {
-                    "json" -> prettyPrintJson(code)
-                    else -> code
-                }
-            }.getOrDefault(code)
-            val escaped = escapeHtml(code)
-            val codeId = registerCodeBlock(code)
-            val langLabel = normalizedLang.takeUnless { it.isBlank() || it == "text" }?.uppercase() ?: ""
-            finalResult.append("<table class='code-block'>")
-            finalResult.append("<tr><td class='code-lang'>").append(escapeHtml(langLabel)).append("</td>")
-            finalResult.append("<td class='code-copy-cell'><a href='${COPY_LINK_PREFIX}$codeId' class='code-copy-link' title='Скопировать'><span class='code-copy-icon'>&#128203;</span></a></td></tr>")
-            finalResult.append("<tr><td colspan='2'><pre><code class='lang-$normalizedLang'>").append(escaped).append("</code></pre></td></tr>")
-            finalResult.append("</table>")
-            lastIndex = m.range.last + 1
-        }
-        if (lastIndex < result.length) {
-            finalResult.append(result.substring(lastIndex).replace("\n", "<br/>"))
-        }
-
-        return finalResult.toString()
+        return result
     }
 
     private fun normalizeLanguage(lang: String): String {
