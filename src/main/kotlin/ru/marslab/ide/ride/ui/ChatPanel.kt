@@ -214,11 +214,41 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         }
         val prefix = when (message.role) {
             MessageRole.USER -> "👤 Вы"
-            MessageRole.ASSISTANT -> "🤖 Ассистент"
+            MessageRole.ASSISTANT -> {
+                // Добавляем индикатор неопределенности для сообщений ассистента
+                val isFinal = message.metadata["isFinal"] as? Boolean ?: true
+                val uncertainty = message.metadata["uncertainty"] as? Double ?: 0.0
+                val indicator = if (!isFinal) {
+                    "❓"
+                } else if (uncertainty > 0.05) {
+                    "⚠️"
+                } else {
+                    "✅"
+                }
+                "$indicator 🤖 Ассистент"
+            }
             MessageRole.SYSTEM -> "ℹ️ Система"
         }
         val bodyHtml = renderContentToHtml(message.content)
         val afterSystemClass = if (message.role == MessageRole.USER && lastRole == MessageRole.SYSTEM) " after-system" else ""
+
+        // Добавляем статусную строку для сообщений ассистента
+        val statusRow = if (message.role == MessageRole.ASSISTANT) {
+            val isFinal = message.metadata["isFinal"] as? Boolean ?: true
+            val uncertainty = message.metadata["uncertainty"] as? Double ?: 0.0
+            val statusText = if (!isFinal) {
+                "Требуются уточнения (неопределенность: ${(uncertainty * 100).toInt()}%)"
+            } else if (uncertainty > 0.05) {
+                "Ответ с низкой уверенностью (неопределенность: ${(uncertainty * 100).toInt()}%)"
+            } else {
+                "Окончательный ответ"
+            }
+            val statusClass = if (!isFinal) "status-uncertain" else if (uncertainty > 0.05) "status-low-confidence" else "status-final"
+            "<div class='status $statusClass'>📊 $statusText</div>"
+        } else {
+            ""
+        }
+
         val prefixDiv = if (message.role == MessageRole.USER)
             "<div class='prefix' align='right'><b>${escapeHtml(prefix)}</b>:</div>"
         else
@@ -231,6 +261,7 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
             <div class='msg $roleClass$afterSystemClass'>
               $prefixDiv
               $contentDiv
+              $statusRow
             </div>
         """.trimIndent()
         appendHtml(chunk)
@@ -328,6 +359,30 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                         .msg.user .prefix { text-align: right; }
                         .msg.user .content { text-align: right; }
                         .msg.after-system { margin-top: 20px; }
+
+                        /* Статусные строки для сообщений ассистента */
+                        .status {
+                            font-size: ${fontSize - 2}px;
+                            margin-top: 6px;
+                            padding: 4px 8px;
+                            border-radius: 4px;
+                            opacity: 0.8;
+                        }
+                        .status-final {
+                            background-color: rgba(76, 175, 80, 0.2);
+                            border: 1px solid rgba(76, 175, 80, 0.3);
+                            color: #a5d6a7;
+                        }
+                        .status-low-confidence {
+                            background-color: rgba(255, 152, 0, 0.2);
+                            border: 1px solid rgba(255, 152, 0, 0.3);
+                            color: #ffcc80;
+                        }
+                        .status-uncertain {
+                            background-color: rgba(33, 150, 243, 0.2);
+                            border: 1px solid rgba(33, 150, 243, 0.3);
+                            color: #90caf9;
+                        }
                       </style>
                     </head>
                     <body>

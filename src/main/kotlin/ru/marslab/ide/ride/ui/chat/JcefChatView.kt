@@ -96,6 +96,30 @@ class JcefChatView : JPanel(BorderLayout()) {
             a.code-copy-link { color: var(--prefix); text-decoration: none; display:inline-block; width:20px; height:20px; text-align:center; line-height:20px; }
             pre { background: var(--codeBg); color: var(--codeText); padding:8px; border:1px solid var(--codeBorder); margin:0; overflow:auto; }
             code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+
+            /* Статусные строки для сообщений ассистента */
+            .status {
+                font-size: 11px;
+                margin-top: 6px;
+                padding: 4px 8px;
+                border-radius: 4px;
+                opacity: 0.8;
+            }
+            .status-final {
+                background-color: rgba(76, 175, 80, 0.2);
+                border: 1px solid rgba(76, 175, 80, 0.3);
+                color: #a5d6a7;
+            }
+            .status-low-confidence {
+                background-color: rgba(255, 152, 0, 0.2);
+                border: 1px solid rgba(255, 152, 0, 0.3);
+                color: #ffcc80;
+            }
+            .status-uncertain {
+                background-color: rgba(33, 150, 243, 0.2);
+                border: 1px solid rgba(33, 150, 243, 0.3);
+                color: #90caf9;
+            }
         """.trimIndent()
 
         val js = """

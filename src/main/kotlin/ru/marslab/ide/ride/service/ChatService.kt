@@ -104,15 +104,18 @@ class ChatService {
                 // Обрабатываем ответ в UI потоке
                 withContext(Dispatchers.EDT) {
                     if (agentResponse.success) {
-                        // Создаем и сохраняем сообщение ассистента
+                        // Создаем и сохраняем сообщение ассистента с учетом анализа неопределенности
                         val assistantMsg = Message(
                             content = agentResponse.content,
                             role = MessageRole.ASSISTANT,
-                            metadata = agentResponse.metadata
+                            metadata = agentResponse.metadata + mapOf(
+                                "isFinal" to agentResponse.isFinal,
+                                "uncertainty" to (agentResponse.uncertainty ?: 0.0)
+                            )
                         )
                         getCurrentHistory().addMessage(assistantMsg)
-                        
-                        logger.info("Response received successfully")
+
+                        logger.info("Response received successfully, isFinal=${agentResponse.isFinal}, uncertainty=${agentResponse.uncertainty}")
                         onResponse(assistantMsg)
                     } else {
                         logger.warn("Agent returned error: ${agentResponse.error}")
