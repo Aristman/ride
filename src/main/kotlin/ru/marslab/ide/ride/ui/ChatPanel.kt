@@ -336,7 +336,15 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
     private fun setUIEnabled(enabled: Boolean) {
         inputArea.isEnabled = enabled
         sendButton.isEnabled = enabled
-        inputArea.requestFocus()
+        if (enabled) {
+            // Возвращаем фокус в поле ввода и ставим курсор в конец
+            SwingUtilities.invokeLater {
+                inputArea.requestFocusInWindow()
+                inputArea.grabFocus()
+                inputArea.requestFocus()
+                inputArea.caretPosition = inputArea.document.length
+            }
+        }
     }
 
     /**
@@ -849,9 +857,20 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
     }
 
     private fun handleComposerKey(e: KeyEvent) {
-        if (e.keyCode == KeyEvent.VK_ENTER && !e.isShiftDown) {
-            e.consume()
-            sendMessage()
+        if (e.keyCode == KeyEvent.VK_ENTER) {
+            if (e.isShiftDown) {
+                // Вставляем перевод строки вместо отправки
+                e.consume()
+                val caret = inputArea.caretPosition
+                val text = inputArea.text
+                val sb = StringBuilder(text)
+                sb.insert(caret, "\n")
+                inputArea.text = sb.toString()
+                inputArea.caretPosition = caret + 1
+            } else {
+                e.consume()
+                sendMessage()
+            }
         }
     }
 
