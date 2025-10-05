@@ -52,22 +52,31 @@ class JcefChatView : JPanel(BorderLayout()) {
               console.log('DEBUG: tmp.innerHTML preview:', tmp.innerHTML.substring(0, 200));
               
               const root = document.getElementById('messages');
+              
+              // Запоминаем количество блоков кода до добавления
+              const blocksBefore = root.querySelectorAll('pre code').length;
+              
+              // Добавляем новые элементы
               while (tmp.firstChild) root.appendChild(tmp.firstChild);
+              
               requestAnimationFrame(()=> { window.scrollTo(0, document.body.scrollHeight); });
-              console.log('DEBUG: Calling __ride_initHl and __ride_highlightAll in appendHtml');
+              console.log('DEBUG: Calling __ride_initHl in appendHtml');
               window.__ride_initHl && window.__ride_initHl();
-              // Подсвечиваем только новые блоки в конце
-              const blocks = root.querySelectorAll('pre code');
-              console.log('DEBUG: Found code blocks:', blocks.length);
-              if (window.hljs && blocks.length){
-                const last = blocks[blocks.length - 1];
-                console.log('DEBUG: Code block textContent before highlight:', (last.textContent || '').substring(0, 200));
-                try {
-                  console.log('DEBUG: Highlighting new code block');
-                  window.hljs.highlightElement(last);
-                  console.log('DEBUG: Code block innerHTML after highlight:', last.innerHTML.substring(0, 200));
-                } catch(_){
-                  console.log('DEBUG: Error highlighting code block');
+              
+              // Подсвечиваем все новые блоки кода
+              const blocksAfter = root.querySelectorAll('pre code');
+              console.log('DEBUG: Code blocks before:', blocksBefore, 'after:', blocksAfter.length);
+              
+              if (window.hljs && blocksAfter.length > blocksBefore){
+                console.log('DEBUG: Highlighting', (blocksAfter.length - blocksBefore), 'new code blocks');
+                // Подсвечиваем только новые блоки (с индекса blocksBefore до конца)
+                for (let i = blocksBefore; i < blocksAfter.length; i++) {
+                  try {
+                    console.log('DEBUG: Highlighting block', i);
+                    window.hljs.highlightElement(blocksAfter[i]);
+                  } catch(e){
+                    console.log('DEBUG: Error highlighting block', i, e);
+                  }
                 }
               }
             })();
