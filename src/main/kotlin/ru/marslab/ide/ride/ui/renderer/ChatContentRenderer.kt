@@ -28,7 +28,7 @@ class ChatContentRenderer {
             return result
         }
 
-        // 1. Обрабатываем тройные обратные кавычки (```code```)
+        // 1. Обрабатываем тройные обратные кавычки (```code```) - единственный способ создать блок кода
         val tripleBacktickResult = codeBlockProcessor.processTripleBackticks(result, isJcefMode)
         result = tripleBacktickResult.processedText
 
@@ -36,26 +36,12 @@ class ChatContentRenderer {
             println("DEBUG: Found ${tripleBacktickResult.codeBlocksFound.size} triple backtick code blocks: ${tripleBacktickResult.codeBlocksFound.joinToString(", ")}")
         }
 
-        // 2. Обрабатываем одинарные обратные кавычки (`lang code`)
-        val singleBacktickMatches = Regex("""`([^`\s]+)[ \t]*\n?((?:[^\n`]+\n?)+)`""").findAll(result).count()
-        if (singleBacktickMatches > 0) {
-            println("DEBUG: Found $singleBacktickMatches single backtick code blocks, converting to triple backticks")
-        }
-        result = codeBlockProcessor.processSingleBackticks(result, isJcefMode)
-
-        // 3. Обрабатываем инлайн код (`code`)
-        val inlineCodeMatches = Regex("""`([^`\s]+)[ \t]*([^{`}]+?)`""").findAll(result).count()
-        if (inlineCodeMatches > 0) {
-            println("DEBUG: Found $inlineCodeMatches inline code patterns, converting to triple backticks")
-        }
-        result = codeBlockProcessor.processInlineCode(result, isJcefMode)
-
-        // 4. Экранируем HTML только для не-JCEF режима
+        // 2. Экранируем HTML только для не-JCEF режима (до обработки markdown)
         if (!isJcefMode) {
             result = escapeHtml(result)
         }
 
-        // 5. Обрабатываем markdown-элементы
+        // 3. Обрабатываем markdown-элементы (включая инлайн-код `text`)
         result = markdownProcessor.processMarkdown(result, isJcefMode)
 
         println("DEBUG: Final rendered HTML length: ${result.length}")
