@@ -42,7 +42,11 @@ class ChatAgent(
 
     private val logger = Logger.getInstance(ChatAgent::class.java)
 
-    override suspend fun processRequest(request: String, context: ChatContext): AgentResponse {
+    override suspend fun processRequest(
+        request: String, 
+        context: ChatContext, 
+        parameters: LLMParameters
+    ): AgentResponse {
 
         // Проверяем доступность провайдера
         if (!llmProvider.isAvailable()) {
@@ -60,12 +64,12 @@ class ChatAgent(
             // Полная история диалога для контекста
             val conversationHistory = buildConversationHistory(context)
 
-            // Делегируем запрос в LLM провайдер
+            // Делегируем запрос в LLM провайдер с переданными параметрами
             val llmResponse = llmProvider.sendRequest(
                 systemPrompt = systemPromptForRequest,
                 userMessage = request,
                 conversationHistory = conversationHistory,
-                parameters = LLMParameters.DEFAULT
+                parameters = parameters
             )
 
             // Проверяем успешность ответа

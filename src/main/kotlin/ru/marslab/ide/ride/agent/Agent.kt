@@ -3,6 +3,7 @@ package ru.marslab.ide.ride.agent
 import ru.marslab.ide.ride.integration.llm.LLMProvider
 import ru.marslab.ide.ride.model.AgentResponse
 import ru.marslab.ide.ride.model.ChatContext
+import ru.marslab.ide.ride.model.LLMParameters
 import ru.marslab.ide.ride.model.ResponseFormat
 import ru.marslab.ide.ride.model.ResponseSchema
 
@@ -18,9 +19,14 @@ interface Agent {
      * 
      * @param request Текст запроса пользователя
      * @param context Контекст чата (история, проект, файлы)
+     * @param parameters Параметры для LLM (температура, maxTokens и т.д.)
      * @return Ответ агента
      */
-    suspend fun processRequest(request: String, context: ChatContext): AgentResponse
+    suspend fun processRequest(
+        request: String, 
+        context: ChatContext, 
+        parameters: LLMParameters = LLMParameters.DEFAULT
+    ): AgentResponse
     
     /**
      * Возвращает имя агента

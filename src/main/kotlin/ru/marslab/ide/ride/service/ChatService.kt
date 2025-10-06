@@ -2,6 +2,7 @@ package ru.marslab.ide.ride.service
 
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.components.Service
+import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import kotlinx.coroutines.*
@@ -9,6 +10,7 @@ import ru.marslab.ide.ride.agent.Agent
 import ru.marslab.ide.ride.agent.AgentFactory
 import ru.marslab.ide.ride.model.*
 import ru.marslab.ide.ride.model.ChatSession
+import ru.marslab.ide.ride.settings.PluginSettings
 import java.time.Instant
 
 /**
@@ -87,8 +89,15 @@ class ChatService {
                     history = getCurrentHistory().getMessages()
                 )
 
-                // Отправляем запрос агенту
-                val agentResponse = agent.processRequest(userMessage, context)
+                // Получаем параметры из настроек
+                val settings = service<PluginSettings>()
+                val llmParameters = LLMParameters(
+                    temperature = settings.temperature,
+                    maxTokens = settings.maxTokens
+                )
+
+                // Отправляем запрос агенту с параметрами из настроек
+                val agentResponse = agent.processRequest(userMessage, context, llmParameters)
 
                 // Обрабатываем ответ в UI потоке
                 withContext(Dispatchers.EDT) {
