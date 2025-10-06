@@ -43,12 +43,25 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
     private val useJcef: Boolean = true
     private var jcefView: JcefChatView? = runCatching {
         if (useJcef) {
-            val view = JcefChatView()
-            println("DEBUG: JCEF ChatView initialized successfully")
-            view
+            // Проверяем доступность JCEF
+            try {
+                Class.forName("com.intellij.ui.jcef.JBCefBrowser")
+                println("DEBUG: JCEF classes are available")
+                
+                val view = JcefChatView()
+                println("✓ JCEF ChatView initialized successfully - подсветка кода будет доступна")
+                view
+            } catch (e: ClassNotFoundException) {
+                println("✗ JCEF classes not found: ${e.message}")
+                throw e
+            }
         } else null
-    }.getOrNull().also {
-        if (it == null) println("DEBUG: JCEF ChatView initialization failed, using HTML fallback")
+    }.getOrElse { e ->
+        println("✗ JCEF ChatView initialization failed, using HTML fallback")
+        println("  Причина: ${e.javaClass.simpleName}: ${e.message}")
+        println("  Подсветка кода будет недоступна в fallback режиме")
+        e.printStackTrace()
+        null
     }
 
     init {
@@ -103,6 +116,16 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
 
         if (!settings.isConfigured()) {
             messageDisplayManager.displaySystemMessage(ChatPanelConfig.Messages.CONFIGURATION_WARNING)
+        }
+        
+        // Уведомляем о режиме отображения
+        if (jcefView == null) {
+            messageDisplayManager.displaySystemMessage(
+                "⚠️ JCEF недоступен - используется упрощенный режим отображения без подсветки кода. " +
+                "Для полноценной подсветки синтаксиса убедитесь, что используется JetBrains Runtime (JBR)."
+            )
+        } else {
+            messageDisplayManager.displaySystemMessage("✓ JCEF активен - доступна подсветка синтаксиса кода")
         }
     }
 

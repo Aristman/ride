@@ -35,7 +35,10 @@
             <li>Задавайте вопросы и получайте ответы!</li>
         </ol>
         
-        <p><strong>Требования:</strong> IntelliJ IDEA 2025.1.4.1+, JDK 21, Yandex Cloud аккаунт</p>
+        <p><strong>Требования:</strong> IntelliJ IDEA 2024.3+ или Android Studio 2024.3+, JDK 21, Yandex Cloud аккаунт</p>
+        
+        <p><strong>Примечание:</strong> Для подсветки синтаксиса кода требуется JetBrains Runtime (JBR) с поддержкой JCEF. 
+        В Android Studio для активации JCEF перейдите в Settings → Appearance & Behavior → System Settings → HTTP Proxy и убедитесь, что используется встроенный JBR.</p>
         
         <p>Исходный код: <a href="https://github.com/yourusername/ride">GitHub</a></p>
     ]]></description>
