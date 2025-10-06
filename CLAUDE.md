@@ -1,3 +1,4 @@
+
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
@@ -64,17 +65,47 @@ The core agent interface supports:
 - Structured response parsing and validation
 
 ### LLM Provider Abstraction
-The `LLMProvider` interface uses a modern message-based API:
+The `LLMProvider` interface uses a modern message-based API with full dialogue history support:
 ```kotlin
 suspend fun sendRequest(
     systemPrompt: String,
     userMessage: String,
-    assistantHistory: List<String>,
+    conversationHistory: List<ConversationMessage>,
     parameters: LLMParameters
 ): LLMResponse
 ```
 
-This design supports conversation history and multi-turn dialogues.
+This design supports complete conversation history and multi-turn dialogues with role-based message representation.
+
+### Uncertainty Analysis System
+The plugin implements intelligent uncertainty analysis to determine when the AI should ask clarifying questions versus providing final answers:
+
+#### Key Components
+- **UncertaintyAnalyzer**: Pattern-based uncertainty detection with configurable threshold (default: 0.1)
+- **ConversationMessage**: Structured representation of dialogue with roles (USER, ASSISTANT, SYSTEM)
+- **AgentResponse**: Extended with uncertainty scores and final response flags
+- **System Prompts**: Enhanced with uncertainty evaluation rules
+
+#### Uncertainty Detection Logic
+- **Pattern Matching**: Analyzes responses for uncertainty indicators in Russian
+- **Question Detection**: Identifies clarifying questions in responses
+- **Scoring Algorithm**: Normalized uncertainty calculation (0.0 - 1.0)
+- **Threshold Logic**: If uncertainty > 0.1 → ask clarifying questions; ≤ 0.1 → provide final answer
+
+#### Usage Example
+```kotlin
+val agent = AgentFactory.createChatAgent()
+val response = agent.processRequest("Как оптимизировать код?", context)
+
+if (response.isFinal) {
+    // Окончательный ответ с высокой уверенностью
+    println("Окончательный ответ: ${response.content}")
+} else {
+    // Требуются уточняющие вопросы
+    println("Уточняющие вопросы: ${UncertaintyAnalyzer.extractClarifyingQuestions(response.content)}")
+    println("Уровень неопределенности: ${response.uncertainty}")
+}
+```
 
 ## Module Structure
 
@@ -86,22 +117,53 @@ src/main/kotlin/ru/marslab/ide/ride/
 ├── model/              # Data models and domain objects
 ├── service/            # Application services
 ├── settings/           # Plugin configuration and persistence
-├── ui/                 # Swing UI components
+├── ui/                 # Refactored UI components with composition pattern
+│   ├── config/         # Configuration and constants (ChatPanelConfig)
+│   ├── processor/      # Content processors (CodeBlockProcessor, MarkdownProcessor)
+│   ├── renderer/       # Content renderers (ChatContentRenderer)
+│   ├── manager/        # UI managers (HtmlDocumentManager, MessageDisplayManager)
+│   ├── builder/        # UI builders (ChatUiBuilder)
+│   └── chat/           # JCEF chat view
 └── actions/            # IntelliJ platform actions
 ```
 
 ### Key Components
-- **ChatAgent**: Universal agent implementation that works with any LLM provider
-- **YandexGPTProvider**: HTTP client for Yandex GPT API integration
+- **ChatAgent**: Universal agent implementation with uncertainty analysis and full dialogue history
+- **YandexGPTProvider**: HTTP client for Yandex GPT API integration with conversation support
+- **UncertaintyAnalyzer**: Pattern-based uncertainty detection and question extraction
 - **ChatService**: Central service coordinating UI, agents, and message history
-- **MessageHistory**: In-memory storage for chat conversations
+- **MessageHistory**: In-memory storage for chat conversations with role-based messages
 - **PluginSettings**: Persistent configuration using IntelliJ's PersistentStateComponent
+- **ChatPanel**: Main UI component with refactored architecture (235 lines vs 958)
+
+### Refactored UI Architecture (NEW)
+The UI layer has been completely refactored following single responsibility principle:
+
+#### Core UI Components
+- **ChatPanelConfig**: Centralized configuration with constants, texts, icons, and language aliases
+- **CodeBlockProcessor**: Handles code block processing (triple backticks, single backticks, inline code)
+- **MarkdownProcessor**: Converts markdown to HTML (headers, lists, formatting)
+- **ChatContentRenderer**: Unifies content rendering and HTML block creation
+- **HtmlDocumentManager**: Manages HTML documents with JCEF and fallback support
+- **MessageDisplayManager**: Coordinates message display and code block registration
+- **ChatUiBuilder**: Builds UI components and handles input events
+
+#### Component Composition Pattern
+```kotlin
+ChatPanel (coordinator)
+├── ChatUiBuilder (UI components)
+├── HtmlDocumentManager (HTML document)
+├── MessageDisplayManager (message display)
+└── ChatContentRenderer (content rendering)
+    ├── CodeBlockProcessor (code processing)
+    └── MarkdownProcessor (markdown processing)
+```
 
 ## Technology Stack
 
 - **Language**: Kotlin 2.1.0
 - **Platform**: IntelliJ Platform 2025.1.4.1
-- **UI Framework**: Swing (IntelliJ UI components)
+- **UI Framework**: Swing (IntelliJ UI components) with composition pattern
 - **Async**: Kotlin Coroutines
 - **HTTP**: Java HttpClient (JDK 11+) - *Note: Avoid Ktor due to coroutine conflicts*
 - **JSON**: kotlinx.serialization 1.6.2
@@ -120,16 +182,22 @@ src/main/kotlin/ru/marslab/ide/ride/
 2. Use dependency injection for LLM provider
 3. Register in `AgentFactory`
 
-### UI Development
+### UI Development (Post-Refactor)
 - Use IntelliJ UI components (com.intellij.ui.*)
 - Follow Swing threading rules - use `EDT` for UI operations
-- Leverage `CoroutineUtils` for async operations
+- Leverage composition pattern for building UI components
+- Use specialized managers for different UI concerns
+- Follow single responsibility principle for UI components
 
 ### Testing Strategy
 - Unit tests for all core components
 - Mock external dependencies (LLM providers)
 - Integration tests for response formatting and parsing
 - UI tests for critical user interactions
+- Uncertainty analysis tests with comprehensive coverage (12 tests)
+- Conversation history validation tests
+- Pattern matching validation for Russian language uncertainty indicators
+- UI component tests for refactored architecture
 
 ## Important Constraints
 
@@ -145,6 +213,7 @@ src/main/kotlin/ru/marslab/ide/ride/
 - Message history is stored in-memory only
 - Consider implementing persistence for chat history
 - Monitor memory usage with long conversations
+- Component composition helps prevent memory leaks
 
 ## Plugin Configuration
 
@@ -161,4 +230,90 @@ The plugin supports structured responses with validation:
 - **XML**: Schema validation with xmlutil
 - **TEXT**: Plain text responses (default)
 
-Response format is configured per agent through the `setResponseFormat()` method.
+### Core Components
+- **Response Models**: `ResponseFormat`, `ResponseSchema`, `ParsedResponse` (sealed class)
+- **Processing Pipeline**: PromptFormatter → ResponseParser → ResponseValidator
+- **Factory Pattern**: `ResponseParserFactory` and `ResponseValidatorFactory`
+
+### Usage Example
+```kotlin
+val agent = AgentFactory.createChatAgent()
+val schema = ResponseSchema.json(
+    """
+    {
+      "answer": "string",
+      "confidence": 0.0,
+      "sources": ["string"]
+    }
+    """.trimIndent(),
+    description = "Структурируй ответ, добавь confidence и источники"
+)
+
+agent.setResponseFormat(ResponseFormat.JSON, schema)
+val response = agent.processRequest("Что такое Kotlin?", context)
+
+when (val parsed = response.parsedContent) {
+    is ParsedResponse.JsonResponse -> println(parsed.jsonElement)
+    is ParsedResponse.ParseError -> println("Ошибка парсинга: ${parsed.error}")
+    else -> println(response.content)
+}
+```
+
+Response format is configured per agent through the `setResponseFormat()` method with comprehensive error handling for parsing and validation failures.
+
+## Advanced Features
+
+### Response Format Actions
+- **SetResponseFormatAction**: Unified dialog for format selection and schema input
+- **Individual format actions**: Quick access to JSON/XML formats
+- **ClearFormatAction**: Reset to default TEXT format
+- **Integration with ChatService**: Centralized format management
+
+### Error Handling
+- **Parse errors**: Detailed error reporting with original content
+- **Validation errors**: Schema validation with specific error messages
+- **Provider errors**: Graceful fallback and user-friendly messages
+- **Logging**: Comprehensive logging for debugging and monitoring
+
+### UI Features (Post-Refactor)
+- **Modular Design**: Each UI component has a single responsibility
+- **Code Block Processing**: Advanced markdown and code block rendering with syntax highlighting
+- **JCEF Support**: Enhanced HTML rendering with JCEF integration
+- **Theme System**: Dynamic theme switching with proper CSS variable management
+- **Session Management**: Clean separation of session handling in UI components
+
+### Extensibility
+- **Plugin architecture**: Easy addition of new formats and providers
+- **Factory pattern**: Simplified extension of parsing and validation logic
+- **Interface-based design**: Clean separation of concerns
+- **Configuration-driven**: Runtime format switching without code changes
+- **Component composition**: Easy to extend UI with new features
+
+## Feature Roadmaps
+
+### Uncertainty Analysis System
+Документация по реализованной системе анализа неопределенности доступна в файле:
+- **[UNCERTAINTY_ANALYSIS_ROADMAP.md](UNCERTAINTY_ANALYSIS_ROADMAP.md)** - Полный роадмап разработки с техническими деталями
+
+**Краткая справка по использованию:**
+```kotlin
+// Проверка типа ответа
+if (response.isFinal) {
+    // Окончательный ответ - можно визуально выделить в UI
+    displayFinalAnswer(response.content)
+} else {
+    // Уточняющие вопросы - показать индикатор неопределенности
+    val questions = UncertaintyAnalyzer.extractClarifyingQuestions(response.content)
+    displayClarifyingQuestions(questions, response.uncertainty)
+}
+```
+
+### UI Refactoring Roadmap (COMPLETED)
+UI refactoring was completed in 2025 with the following improvements:
+- **75% reduction in code size**: ChatPanel reduced from 958 to 235 lines
+- **Single Responsibility Principle**: Each class has one clear purpose
+- **Improved Testability**: Smaller, focused components are easier to test
+- **Enhanced Maintainability**: Changes in one area don't affect others
+- **Better Reusability**: Components can be used in other parts of the application
+- **Cleaner Architecture**: Clear separation between UI concerns
+- **Component Composition**: Flexible building block approach for UI development

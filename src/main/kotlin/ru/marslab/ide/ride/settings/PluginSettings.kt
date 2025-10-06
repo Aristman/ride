@@ -40,16 +40,7 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
             state.folderId = value
         }
     
-    /**
-     * Системный промпт для агента
-     */
-    var systemPrompt: String
-        get() = state.systemPrompt
-        set(value) {
-            state.systemPrompt = value
-        }
-    
-    /**
+        /**
      * Температура генерации
      */
     var temperature: Double
