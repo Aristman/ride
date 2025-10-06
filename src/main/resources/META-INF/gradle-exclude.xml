@@ -1,0 +1,4 @@
+<!-- Gradle plugin exclusion to avoid Java version parsing issues -->
+<idea-plugin>
+    <!-- This file excludes the problematic Gradle plugin components -->
+</idea-plugin>

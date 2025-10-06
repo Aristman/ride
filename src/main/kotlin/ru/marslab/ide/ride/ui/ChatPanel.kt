@@ -78,7 +78,7 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         htmlDocumentManager = HtmlDocumentManager(settings, jcefView)
         contentRenderer = ChatContentRenderer()
         messageDisplayManager = MessageDisplayManager(htmlDocumentManager, contentRenderer)
-        uiBuilder = ChatUiBuilder(chatService, htmlDocumentManager)
+        uiBuilder = ChatUiBuilder(chatService, htmlDocumentManager) { this }
 
         // Инициализация HTML/темы
         htmlDocumentManager.initialize()
@@ -234,7 +234,7 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
     /**
      * Обновляет внешний вид (перерисовывает сообщения)
      */
-    private fun refreshAppearance() {
+    fun refreshAppearance() {
         val history = chatService.getHistory()
         htmlDocumentManager.updateTheme()
         messageDisplayManager.redrawMessages(history)
