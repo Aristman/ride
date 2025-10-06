@@ -8,18 +8,17 @@ import ru.marslab.ide.ride.service.ChatService
 import com.intellij.openapi.components.service
 
 /**
- * Создание новой сессии чата.
+ * Перезагрузка текущей сессии чата (обновление сообщений).
  */
-class NewSessionAction : AnAction("New Session", "Start a new chat session", com.intellij.icons.AllIcons.General.Add) {
+class ReloadSessionAction : AnAction("Reload", "Reload current chat session", com.intellij.icons.AllIcons.Actions.Refresh) {
     override fun actionPerformed(e: AnActionEvent) {
         val component = e.getData(com.intellij.openapi.actionSystem.PlatformDataKeys.CONTEXT_COMPONENT)
         val panel = component?.let { findChatPanel(it) }
         if (panel != null) {
-            // Создаём новую сессию и обновляем вкладки
-            panel.onNewSession()
+            // Перезагружаем текущую сессию (обновляем сообщения)
+            panel.refreshAppearance()
         } else {
-            // На случай если панель не найдена (редко), создадим сессию через сервис
-            service<ChatService>().createNewSession()
+            // Если панель не найдена, ничего не делаем
         }
     }
 

@@ -87,7 +87,11 @@
             <action id="Ride.NewSessionAction"
                     class="ru.marslab.ide.ride.actions.NewSessionAction"
                     text="New Session"
-                    description="Clear current chat session"/>
+                    description="Start a new chat session"/>
+            <action id="Ride.ReloadSessionAction"
+                    class="ru.marslab.ide.ride.actions.ReloadSessionAction"
+                    text="Reload"
+                    description="Reload current chat session"/>
             <action id="Ride.OpenSettingsAction"
                     class="ru.marslab.ide.ride.actions.OpenSettingsAction"
                     text="Settings"
