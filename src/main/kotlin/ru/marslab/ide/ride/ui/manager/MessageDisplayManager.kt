@@ -143,6 +143,9 @@ class MessageDisplayManager(
      * Создает HTML для статусной строки сообщения ассистента
      */
     private fun createAssistantStatusHtml(message: Message): String {
+        // Проверяем, включен ли анализ неопределенности
+        val enableUncertaintyAnalysis = settings.enableUncertaintyAnalysis
+        
         val isFinal = message.metadata["isFinal"] as? Boolean ?: true
         val uncertainty = message.metadata["uncertainty"] as? Double ?: 0.0
         val wasParsed = message.metadata["parsedData"] as? Boolean ?: false
@@ -156,7 +159,8 @@ class MessageDisplayManager(
             wasParsed = wasParsed,
             hasClarifyingQuestions = hasClarifyingQuestions,
             responseTimeMs = responseTimeMs,
-            tokensUsed = tokensUsed
+            tokensUsed = tokensUsed,
+            showUncertaintyStatus = enableUncertaintyAnalysis
         )
     }
 

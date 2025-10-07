@@ -42,6 +42,15 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
         }
     
     /**
+     * Включить анализ неопределенности в системном промпте
+     */
+    var enableUncertaintyAnalysis: Boolean
+        get() = state.enableUncertaintyAnalysis
+        set(value) {
+            state.enableUncertaintyAnalysis = value
+        }
+    
+    /**
      * Выбранный провайдер LLM
      */
     var selectedProvider: String

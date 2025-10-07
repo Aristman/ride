@@ -19,7 +19,8 @@ data class PluginSettingsState(
     var yandexModelId: String = DEFAULT_YANDEX_MODEL_ID,
     var huggingFaceModelId: String = DEFAULT_HUGGINGFACE_MODEL_ID,
     var selectedProvider: String = DEFAULT_PROVIDER,
-    var showProviderName: Boolean = false
+    var showProviderName: Boolean = false,
+    var enableUncertaintyAnalysis: Boolean = true
 ) {
     companion object {
         const val DEFAULT_CHAT_FONT_SIZE = 9

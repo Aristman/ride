@@ -40,6 +40,7 @@ class SettingsConfigurable : Configurable {
     private lateinit var hfModelSelectorComboBox: ComboBox<String>
     private lateinit var yandexModelSelectorComboBox: ComboBox<String>
     private lateinit var showProviderNameCheck: JBCheckBox
+    private lateinit var enableUncertaintyAnalysisCheck: JBCheckBox
 
     private var panel: DialogPanel? = null
     private var initialApiKey: String = ""
@@ -124,7 +125,8 @@ class SettingsConfigurable : Configurable {
                 selectedTop != expectedTop ||
                 selectedHFModel != settings.huggingFaceModelId ||
                 selectedYandexModel != settings.yandexModelId ||
-                showProviderNameCheck.isSelected != settings.showProviderName
+                showProviderNameCheck.isSelected != settings.showProviderName ||
+                enableUncertaintyAnalysisCheck.isSelected != settings.enableUncertaintyAnalysis
     }
 
     override fun apply() {
@@ -194,6 +196,9 @@ class SettingsConfigurable : Configurable {
 
         // Флаг отображения имени провайдера в чате
         settings.showProviderName = showProviderNameCheck.isSelected
+        
+        // Флаг анализа неопределенности
+        settings.enableUncertaintyAnalysis = enableUncertaintyAnalysisCheck.isSelected
 
         initialApiKey = apiKey
         apiKeyLoaded = true
@@ -254,6 +259,7 @@ class SettingsConfigurable : Configurable {
         chatUserBorderPanel.selectedColor =
             parseColor(settings.chatUserBorderColor, PluginSettingsState.DEFAULT_USER_BORDER_COLOR)
         showProviderNameCheck.isSelected = settings.showProviderName
+        enableUncertaintyAnalysisCheck.isSelected = settings.enableUncertaintyAnalysis
     }
 
     override fun disposeUIResources() {
@@ -496,6 +502,12 @@ class SettingsConfigurable : Configurable {
                 cell(maxTokensField)
                     .columns(10)
                     .comment("Максимальное количество токенов в ответе")
+            }
+            
+            row {
+                enableUncertaintyAnalysisCheck = JBCheckBox("Включить анализ неопределенности")
+                cell(enableUncertaintyAnalysisCheck)
+                    .comment("Если включено, агент будет задавать уточняющие вопросы при неопределенности > 0.1")
             }
         }
     }

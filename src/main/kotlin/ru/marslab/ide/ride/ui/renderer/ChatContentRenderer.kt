@@ -58,8 +58,35 @@ class ChatContentRenderer {
         wasParsed: Boolean,
         hasClarifyingQuestions: Boolean,
         responseTimeMs: Long? = null,
-        tokensUsed: Int? = null
+        tokensUsed: Int? = null,
+        showUncertaintyStatus: Boolean = true
     ): String {
+        // Формируем метрики
+        val metricsHtml = buildString {
+            if (responseTimeMs != null || tokensUsed != null) {
+                append("<span class='metrics'>")
+                if (responseTimeMs != null) {
+                    val timeSeconds = responseTimeMs / 1000.0
+                    append("⏱️ ${String.format("%.2f", timeSeconds)}s")
+                }
+                if (tokensUsed != null && tokensUsed > 0) {
+                    if (responseTimeMs != null) append(" | ")
+                    append("🔢 ${tokensUsed} токенов")
+                }
+                append("</span>")
+            }
+        }
+        
+        // Если анализ неопределенности выключен, показываем только метрики
+        if (!showUncertaintyStatus) {
+            return if (metricsHtml.isNotEmpty()) {
+                "<div class='status status-final'>$metricsHtml</div>"
+            } else {
+                ""
+            }
+        }
+        
+        // Иначе показываем полный статус с неопределенностью
         val actualUncertainty = uncertainty
         val uncertaintyPercent = (actualUncertainty * 100).toInt()
 
@@ -87,22 +114,6 @@ class ChatContentRenderer {
 
         // Добавляем иконку в зависимости от статуса парсинга
         val icon = if (!wasParsed) ChatPanelConfig.Icons.WARNING else ChatPanelConfig.Icons.COPY
-
-        // Формируем метрики
-        val metricsHtml = buildString {
-            if (responseTimeMs != null || tokensUsed != null) {
-                append("<span class='metrics'>")
-                if (responseTimeMs != null) {
-                    val timeSeconds = responseTimeMs / 1000.0
-                    append("⏱️ ${String.format("%.2f", timeSeconds)}s")
-                }
-                if (tokensUsed != null && tokensUsed > 0) {
-                    if (responseTimeMs != null) append(" | ")
-                    append("🔢 ${tokensUsed} токенов")
-                }
-                append("</span>")
-            }
-        }
 
         return "<div class='status $statusClass'>$icon $statusText $metricsHtml</div>"
     }
