@@ -7,14 +7,18 @@ import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.DialogPanel
 import com.intellij.ui.ColorPanel
 import com.intellij.ui.components.JBPasswordField
-import com.intellij.ui.components.JBTabbedPane
+import com.intellij.ui.components.JBTextArea
 import com.intellij.ui.components.JBTextField
+import com.intellij.ui.components.JBTabbedPane
+import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.dsl.builder.*
-import java.awt.CardLayout
+import com.intellij.util.SlowOperations
 import java.awt.Color
+import java.awt.CardLayout
 import javax.swing.JComponent
-import javax.swing.JPanel
 import javax.swing.SwingUtilities
+import javax.swing.JPanel
+import ru.marslab.ide.ride.settings.PluginSettings
 
 /**
  * UI для настроек плагина в IDE Settings
@@ -36,6 +40,7 @@ class SettingsConfigurable : Configurable {
     private lateinit var chatUserBackgroundPanel: ColorPanel
     private lateinit var chatUserBorderPanel: ColorPanel
     private lateinit var modelSelectorComboBox: ComboBox<String>
+    private lateinit var showProviderNameCheck: JBCheckBox
 
     private var panel: DialogPanel? = null
     private var initialApiKey: String = ""
@@ -116,6 +121,7 @@ class SettingsConfigurable : Configurable {
                     PluginSettingsState.DEFAULT_USER_BORDER_COLOR
                 ) != settings.chatUserBorderColor ||
                 selectedTop != expectedTop
+                || showProviderNameCheck.isSelected != settings.showProviderName
     }
 
     override fun apply() {
@@ -172,13 +178,16 @@ class SettingsConfigurable : Configurable {
         settings.chatUserBorderColor =
             colorToHex(chatUserBorderPanel.selectedColor, PluginSettingsState.DEFAULT_USER_BORDER_COLOR)
 
+        // Флаг отображения имени провайдера в чате
+        settings.showProviderName = showProviderNameCheck.isSelected
+
         initialApiKey = apiKey
         apiKeyLoaded = true
         initialHFToken = hfToken
         hfTokenLoaded = true
 
-        // Пересоздаем агента с новыми настройками
-//        service<ru.marslab.ide.ride.service.ChatService>().recreateAgent()
+        // Пересоздаём агента с новыми настройками (моментальная смена LLM в чате)
+        service<ru.marslab.ide.ride.service.ChatService>().recreateAgent()
     }
 
     override fun reset() {
@@ -225,6 +234,7 @@ class SettingsConfigurable : Configurable {
             parseColor(settings.chatUserBackgroundColor, PluginSettingsState.DEFAULT_USER_BACKGROUND_COLOR)
         chatUserBorderPanel.selectedColor =
             parseColor(settings.chatUserBorderColor, PluginSettingsState.DEFAULT_USER_BORDER_COLOR)
+        showProviderNameCheck.isSelected = settings.showProviderName
     }
 
     override fun disposeUIResources() {
@@ -334,6 +344,10 @@ class SettingsConfigurable : Configurable {
         val root = panel {
             row("LLM / Model:") { cell(modelSelectorComboBox) }
             row { cell(cardPanel).align(Align.FILL) }
+            row {
+                showProviderNameCheck = JBCheckBox("Показывать имя модели рядом с Агент")
+                cell(showProviderNameCheck)
+            }
         }
 
         // Инициализируем карточку

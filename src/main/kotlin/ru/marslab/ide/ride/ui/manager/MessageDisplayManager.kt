@@ -2,10 +2,12 @@ package ru.marslab.ide.ride.ui.manager
 
 import ru.marslab.ide.ride.model.Message
 import ru.marslab.ide.ride.model.MessageRole
-import ru.marslab.ide.ride.ui.chat.JcefChatView
 import ru.marslab.ide.ride.ui.config.ChatPanelConfig
 import ru.marslab.ide.ride.ui.renderer.ChatContentRenderer
 import java.util.*
+import com.intellij.openapi.components.service
+import ru.marslab.ide.ride.settings.PluginSettings
+import ru.marslab.ide.ride.service.ChatService
 
 /**
  * Управляет отображением сообщений в чате
@@ -18,6 +20,7 @@ class MessageDisplayManager(
     private var lastRole: MessageRole? = null
     private val codeBlockRegistry = LinkedHashMap<String, String>()
     private val jcefView = htmlDocumentManager.getJcefView()
+    private val settings = service<PluginSettings>()
 
     /**
      * Отображает сообщение в чате
@@ -124,6 +127,7 @@ class MessageDisplayManager(
     private fun createAssistantPrefix(message: Message): String {
         val isFinal = message.metadata["isFinal"] as? Boolean ?: true
         val uncertainty = message.metadata["uncertainty"] as? Double ?: 0.0
+        val providerName = runCatching { service<ChatService>().getCurrentProviderName() }.getOrDefault("")
 
         val indicator = when {
             !isFinal -> ChatPanelConfig.Icons.QUESTION
@@ -131,7 +135,8 @@ class MessageDisplayManager(
             else -> ChatPanelConfig.Icons.SUCCESS
         }
 
-        return "$indicator ${ChatPanelConfig.Icons.ASSISTANT} ${ChatPanelConfig.Prefixes.ASSISTANT}"
+        val providerSuffix = if (settings.showProviderName && providerName.isNotBlank()) " ($providerName)" else ""
+        return "$indicator ${ChatPanelConfig.Icons.ASSISTANT} ${ChatPanelConfig.Prefixes.ASSISTANT}$providerSuffix"
     }
 
     /**

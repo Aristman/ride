@@ -17,7 +17,8 @@ data class PluginSettingsState(
     var chatUserBackgroundColor: String = DEFAULT_USER_BACKGROUND_COLOR,
     var chatUserBorderColor: String = DEFAULT_USER_BORDER_COLOR,
     var yandexModelId: String = DEFAULT_YANDEX_MODEL_ID,
-    var selectedProvider: String = DEFAULT_PROVIDER
+    var selectedProvider: String = DEFAULT_PROVIDER,
+    var showProviderName: Boolean = false
 ) {
     companion object {
         const val DEFAULT_CHAT_FONT_SIZE = 9

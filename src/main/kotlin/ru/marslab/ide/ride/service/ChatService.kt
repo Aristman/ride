@@ -34,8 +34,8 @@ class ChatService {
     private var currentFormat: ResponseFormat? = null
     private var currentSchema: ResponseSchema? = null
 
-    // Агент создается лениво при первом использовании
-    private val agent: Agent by lazy { AgentFactory.createChatAgent() }
+    // Агент создаётся и может быть пересоздан при смене настроек
+    private var agent: Agent = AgentFactory.createChatAgent()
 
     /**
      * Отправляет сообщение пользователя и получает ответ от агента
@@ -149,15 +149,20 @@ class ChatService {
      */
     fun isHistoryEmpty(): Boolean = getCurrentHistory().isEmpty()
 
-//    /**
-//     * Пересоздает агента с новыми настройками
-//     *
-//     * Вызывается после изменения настроек плагина
-//     */
-//    fun recreateAgent() {
-//        logger.info("Recreating agent with new settings")
-//        agent = null
-//    }
+    /**
+     * Пересоздаёт агента с новыми настройками
+     * Вызывается после изменения настроек плагина
+     */
+    fun recreateAgent() {
+        logger.info("Recreating agent with new settings")
+        val previousFormat = currentFormat
+        val previousSchema = currentSchema
+        agent = AgentFactory.createChatAgent()
+        // Восстановим формат ответа, если был задан
+        if (previousFormat != null) {
+            agent.setResponseFormat(previousFormat, previousSchema)
+        }
+    }
 
     /**
      * Устанавливает формат ответа для текущего агента
@@ -221,6 +226,11 @@ class ChatService {
         logger.info("Disposing ChatService")
         scope.cancel()
     }
+
+    /**
+     * Возвращает имя текущего провайдера LLM
+     */
+    fun getCurrentProviderName(): String = agent.getLLMProvider().getProviderName()
 
     // --- Sessions API ---
     fun createNewSession(title: String = "Session"): ChatSession {

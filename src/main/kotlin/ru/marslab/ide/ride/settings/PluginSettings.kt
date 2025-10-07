@@ -32,6 +32,15 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
     }
     
     /**
+     * Показывать ли имя провайдера рядом с "Агент" в сообщениях
+     */
+    var showProviderName: Boolean
+        get() = state.showProviderName
+        set(value) {
+            state.showProviderName = value
+        }
+    
+    /**
      * Выбранный провайдер LLM
      */
     var selectedProvider: String
