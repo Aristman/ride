@@ -16,24 +16,14 @@ import java.net.http.HttpResponse
 import java.time.Duration
 
 /**
- * Конфигурация для Hugging Face DeepSeek R1 Provider
- */
-data class HuggingFaceConfig(
-    val apiKey: String,
-    val model: String = "deepseek-ai/DeepSeek-R1:fireworks-ai",
-    val baseUrl: String = "https://router.huggingface.co/v1/chat/completions",
-    val timeout: Long = 60_000
-)
-
-/**
- * Реализация LLM провайдера для Hugging Face Router (DeepSeek-R1)
+ * Реализация LLM провайдера для Hugging Face Router (DeepSeek-V3.1-Terminus)
  * Совместим с интерфейсом OpenAI Chat Completions
  */
-class HuggingFaceDeepSeekR1Provider(
+class HuggingFaceDeepSeekTerminusProvider(
     private val config: HuggingFaceConfig
 ) : LLMProvider {
 
-    private val logger = Logger.getInstance(HuggingFaceDeepSeekR1Provider::class.java)
+    private val logger = Logger.getInstance(HuggingFaceDeepSeekTerminusProvider::class.java)
 
     private val httpClient = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(10))
@@ -52,7 +42,7 @@ class HuggingFaceDeepSeekR1Provider(
         parameters: LLMParameters
     ): LLMResponse {
         logger.info(
-            "Sending request to Hugging Face DeepSeek R1, systemPrompt length: ${systemPrompt.length}, userMessage length: ${userMessage.length}, conversationHistory size: ${conversationHistory.size}"
+            "Sending request to Hugging Face DeepSeek Terminus, systemPrompt length: ${systemPrompt.length}, userMessage length: ${userMessage.length}, conversationHistory size: ${conversationHistory.size}"
         )
         return try {
             val request = buildRequest(systemPrompt, userMessage, conversationHistory, parameters)
@@ -69,7 +59,7 @@ class HuggingFaceDeepSeekR1Provider(
         return config.apiKey.isNotBlank()
     }
 
-    override fun getProviderName(): String = "HuggingFaceDeepSeekR1"
+    override fun getProviderName(): String = "HuggingFaceDeepSeekTerminus"
 
     private fun buildRequest(
         systemPrompt: String,

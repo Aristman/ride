@@ -7,6 +7,7 @@ import ru.marslab.ide.ride.integration.llm.impl.YandexGPTConfig
 import ru.marslab.ide.ride.integration.llm.impl.YandexGPTProvider
 import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceConfig
 import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceDeepSeekR1Provider
+import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceDeepSeekTerminusProvider
 import ru.marslab.ide.ride.settings.PluginSettings
 import ru.marslab.ide.ride.model.ResponseFormat
 import ru.marslab.ide.ride.model.ResponseSchema
@@ -112,5 +113,33 @@ object AgentFactory {
             model = model
         )
         return HuggingFaceDeepSeekR1Provider(config)
+    }
+
+    /**
+     * Создает провайдер Hugging Face DeepSeek-V3.1-Terminus
+     *
+     * @param apiKey Токен Hugging Face (Bearer)
+     * @param model Идентификатор модели, по умолчанию deepseek-ai/DeepSeek-V3.1-Terminus:novita
+     */
+    fun createHuggingFaceDeepSeekTerminusProvider(
+        apiKey: String,
+        model: String = "deepseek-ai/DeepSeek-V3.1-Terminus:novita"
+    ): LLMProvider {
+        val config = HuggingFaceConfig(
+            apiKey = apiKey,
+            model = model
+        )
+        return HuggingFaceDeepSeekTerminusProvider(config)
+    }
+
+    /**
+     * Создаёт агента с провайдером Hugging Face DeepSeek-V3.1-Terminus
+     * Использует тот же токен Hugging Face, что и для других HF провайдеров.
+     */
+    fun createChatAgentHuggingFaceDeepSeekTerminus(): Agent {
+        val settings = service<PluginSettings>()
+        val hfToken = settings.getHuggingFaceToken()
+        val provider = createHuggingFaceDeepSeekTerminusProvider(hfToken)
+        return ChatAgent(llmProvider = provider)
     }
 }
