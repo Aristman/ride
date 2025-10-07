@@ -8,6 +8,7 @@ import ru.marslab.ide.ride.integration.llm.impl.YandexGPTProvider
 import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceConfig
 import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceDeepSeekR1Provider
 import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceDeepSeekTerminusProvider
+import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceOpenbuddyLlama3Provider
 import ru.marslab.ide.ride.settings.PluginSettings
 import ru.marslab.ide.ride.model.ResponseFormat
 import ru.marslab.ide.ride.model.ResponseSchema
@@ -29,6 +30,14 @@ object AgentFactory {
                 val hfToken = settings.getHuggingFaceToken()
                 // Модель по умолчанию совпадает с UI и провайдером
                 createHuggingFaceDeepSeekR1Provider(hfToken)
+            }
+            PluginSettings.PROVIDER_HF_DEEPSEEK_TERMINUS -> {
+                val hfToken = settings.getHuggingFaceToken()
+                createHuggingFaceDeepSeekTerminusProvider(hfToken)
+            }
+            PluginSettings.PROVIDER_HF_OPENBUDDY_LLAMA3 -> {
+                val hfToken = settings.getHuggingFaceToken()
+                createHuggingFaceOpenbuddyLlama3Provider(hfToken)
             }
             else -> {
                 // Получаем настройки для Yandex GPT
@@ -140,6 +149,34 @@ object AgentFactory {
         val settings = service<PluginSettings>()
         val hfToken = settings.getHuggingFaceToken()
         val provider = createHuggingFaceDeepSeekTerminusProvider(hfToken)
+        return ChatAgent(llmProvider = provider)
+    }
+
+    /**
+     * Создает провайдер Hugging Face OpenBuddy Llama3-8B
+     *
+     * @param apiKey Токен Hugging Face (Bearer)
+     * @param model Идентификатор модели, по умолчанию OpenBuddy/openbuddy-llama3-8b-v21.1-8k:featherless-ai
+     */
+    fun createHuggingFaceOpenbuddyLlama3Provider(
+        apiKey: String,
+        model: String = "OpenBuddy/openbuddy-llama3-8b-v21.1-8k:featherless-ai"
+    ): LLMProvider {
+        val config = HuggingFaceConfig(
+            apiKey = apiKey,
+            model = model
+        )
+        return HuggingFaceOpenbuddyLlama3Provider(config)
+    }
+
+    /**
+     * Создаёт агента с провайдером Hugging Face OpenBuddy Llama3-8B
+     * Использует тот же токен Hugging Face, что и для других HF провайдеров.
+     */
+    fun createChatAgentHuggingFaceOpenbuddyLlama3(): Agent {
+        val settings = service<PluginSettings>()
+        val hfToken = settings.getHuggingFaceToken()
+        val provider = createHuggingFaceOpenbuddyLlama3Provider(hfToken)
         return ChatAgent(llmProvider = provider)
     }
 }

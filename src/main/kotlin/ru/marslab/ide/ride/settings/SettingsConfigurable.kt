@@ -6,19 +6,16 @@ import com.intellij.openapi.options.Configurable
 import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.DialogPanel
 import com.intellij.ui.ColorPanel
-import com.intellij.ui.components.JBPasswordField
-import com.intellij.ui.components.JBTextArea
-import com.intellij.ui.components.JBTextField
-import com.intellij.ui.components.JBTabbedPane
 import com.intellij.ui.components.JBCheckBox
+import com.intellij.ui.components.JBPasswordField
+import com.intellij.ui.components.JBTabbedPane
+import com.intellij.ui.components.JBTextField
 import com.intellij.ui.dsl.builder.*
-import com.intellij.util.SlowOperations
-import java.awt.Color
 import java.awt.CardLayout
+import java.awt.Color
 import javax.swing.JComponent
-import javax.swing.SwingUtilities
 import javax.swing.JPanel
-import ru.marslab.ide.ride.settings.PluginSettings
+import javax.swing.SwingUtilities
 
 /**
  * UI для настроек плагина в IDE Settings
@@ -84,10 +81,11 @@ class SettingsConfigurable : Configurable {
         }
 
         val selectedTop = (modelSelectorComboBox.selectedItem as? String)?.trim().orEmpty()
-        val expectedTop = if (settings.selectedProvider == PluginSettings.PROVIDER_HF_DEEPSEEK) {
-            PluginSettings.PROVIDER_HF_DEEPSEEK
-        } else {
-            settings.yandexModelId
+        val expectedTop = when (settings.selectedProvider) {
+            PluginSettings.PROVIDER_HF_DEEPSEEK -> PluginSettings.PROVIDER_HF_DEEPSEEK
+            PluginSettings.PROVIDER_HF_DEEPSEEK_TERMINUS -> PluginSettings.PROVIDER_HF_DEEPSEEK_TERMINUS
+            PluginSettings.PROVIDER_HF_OPENBUDDY_LLAMA3 -> PluginSettings.PROVIDER_HF_OPENBUDDY_LLAMA3
+            else -> settings.yandexModelId
         }
 
         return apiKeyModified ||
@@ -127,20 +125,34 @@ class SettingsConfigurable : Configurable {
     override fun apply() {
         // Определяем выбранную модель/провайдера сверху и сохраняем
         val selectedTop = modelSelectorComboBox.selectedItem as? String ?: PluginSettings.PROVIDER_YANDEX
-        if (selectedTop == PluginSettings.PROVIDER_HF_DEEPSEEK) {
-            settings.selectedProvider = PluginSettings.PROVIDER_HF_DEEPSEEK
-        } else {
-            settings.selectedProvider = PluginSettings.PROVIDER_YANDEX
-            settings.yandexModelId = selectedTop
+        when (selectedTop) {
+            PluginSettings.PROVIDER_HF_DEEPSEEK -> {
+                settings.selectedProvider = PluginSettings.PROVIDER_HF_DEEPSEEK
+            }
+            PluginSettings.PROVIDER_HF_DEEPSEEK_TERMINUS -> {
+                settings.selectedProvider = PluginSettings.PROVIDER_HF_DEEPSEEK_TERMINUS
+            }
+            PluginSettings.PROVIDER_HF_OPENBUDDY_LLAMA3 -> {
+                settings.selectedProvider = PluginSettings.PROVIDER_HF_OPENBUDDY_LLAMA3
+            }
+            else -> {
+                settings.selectedProvider = PluginSettings.PROVIDER_YANDEX
+                settings.yandexModelId = selectedTop
+            }
         }
 
         // Сохраняем токены в зависимости от провайдера
         val apiKey = apiKeyField.password.concatToString()
         val hfToken = hfTokenField.password.concatToString()
-        if (settings.selectedProvider == PluginSettings.PROVIDER_YANDEX) {
-            if (apiKey.isNotBlank()) settings.saveApiKey(apiKey)
-        } else if (settings.selectedProvider == PluginSettings.PROVIDER_HF_DEEPSEEK) {
-            if (hfToken.isNotBlank()) settings.saveHuggingFaceToken(hfToken)
+        when (settings.selectedProvider) {
+            PluginSettings.PROVIDER_YANDEX -> {
+                if (apiKey.isNotBlank()) settings.saveApiKey(apiKey)
+            }
+            PluginSettings.PROVIDER_HF_DEEPSEEK,
+            PluginSettings.PROVIDER_HF_DEEPSEEK_TERMINUS,
+            PluginSettings.PROVIDER_HF_OPENBUDDY_LLAMA3 -> {
+                if (hfToken.isNotBlank()) settings.saveHuggingFaceToken(hfToken)
+            }
         }
 
         // Сохраняем остальные настройки
@@ -216,9 +228,12 @@ class SettingsConfigurable : Configurable {
         }
         folderIdField.text = settings.folderId
         // Устанавливаем верхний выбор: HF провайдер или конкретная Yandex модель
-        modelSelectorComboBox.selectedItem = if (settings.selectedProvider == PluginSettings.PROVIDER_HF_DEEPSEEK) {
-            PluginSettings.PROVIDER_HF_DEEPSEEK
-        } else settings.yandexModelId
+        modelSelectorComboBox.selectedItem = when (settings.selectedProvider) {
+            PluginSettings.PROVIDER_HF_DEEPSEEK -> PluginSettings.PROVIDER_HF_DEEPSEEK
+            PluginSettings.PROVIDER_HF_DEEPSEEK_TERMINUS -> PluginSettings.PROVIDER_HF_DEEPSEEK_TERMINUS
+            PluginSettings.PROVIDER_HF_OPENBUDDY_LLAMA3 -> PluginSettings.PROVIDER_HF_OPENBUDDY_LLAMA3
+            else -> settings.yandexModelId
+        }
         temperatureField.text = settings.temperature.toString()
         maxTokensField.text = settings.maxTokens.toString()
         chatFontSizeField.text = settings.chatFontSize.toString()
@@ -251,9 +266,11 @@ class SettingsConfigurable : Configurable {
     }
 
     private fun createLlmConfigPanel(): DialogPanel {
-        // Верхний комбобокс: одна запись для HF провайдера + все модели Яндекса
+        // Верхний комбобокс: записи для HF провайдеров + все модели Яндекса
         val topEntries: List<String> = buildList {
             add(PluginSettings.PROVIDER_HF_DEEPSEEK)
+            add(PluginSettings.PROVIDER_HF_DEEPSEEK_TERMINUS)
+            add(PluginSettings.PROVIDER_HF_OPENBUDDY_LLAMA3)
             addAll(PluginSettings.AVAILABLE_YANDEX_MODELS.keys)
         }
         modelSelectorComboBox = ComboBox(topEntries.toTypedArray()).apply {
@@ -269,6 +286,8 @@ class SettingsConfigurable : Configurable {
                     val key = value as? String
                     text = when (key) {
                         PluginSettings.PROVIDER_HF_DEEPSEEK -> PluginSettings.AVAILABLE_PROVIDERS[PluginSettings.PROVIDER_HF_DEEPSEEK]
+                        PluginSettings.PROVIDER_HF_DEEPSEEK_TERMINUS -> PluginSettings.AVAILABLE_PROVIDERS[PluginSettings.PROVIDER_HF_DEEPSEEK_TERMINUS]
+                        PluginSettings.PROVIDER_HF_OPENBUDDY_LLAMA3 -> PluginSettings.AVAILABLE_PROVIDERS[PluginSettings.PROVIDER_HF_OPENBUDDY_LLAMA3]
                         else -> PluginSettings.AVAILABLE_YANDEX_MODELS[key] ?: key.orEmpty()
                     }
                     return component
@@ -332,17 +351,26 @@ class SettingsConfigurable : Configurable {
         fun updateCard() {
             val layout = cardPanel.layout as CardLayout
             val selected = modelSelectorComboBox.selectedItem as? String
-            if (selected == PluginSettings.PROVIDER_HF_DEEPSEEK) {
-                layout.show(cardPanel, CARD_HF)
-            } else {
-                layout.show(cardPanel, CARD_YANDEX)
+            when (selected) {
+                PluginSettings.PROVIDER_HF_DEEPSEEK,
+                PluginSettings.PROVIDER_HF_DEEPSEEK_TERMINUS,
+                PluginSettings.PROVIDER_HF_OPENBUDDY_LLAMA3 -> {
+                    layout.show(cardPanel, CARD_HF)
+                }
+                else -> {
+                    layout.show(cardPanel, CARD_YANDEX)
+                }
             }
         }
         modelSelectorComboBox.addActionListener { updateCard() }
 
         // Основная панель вкладки LlmConfig
         val root = panel {
-            row("LLM / Model:") { cell(modelSelectorComboBox) }
+            row("LLM / Model:") {
+                cell(modelSelectorComboBox)
+                    .align(Align.FILL)
+                    .resizableColumn()
+            }
             row { cell(cardPanel).align(Align.FILL) }
             row {
                 showProviderNameCheck = JBCheckBox("Показывать имя модели рядом с Агент")

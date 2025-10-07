@@ -202,7 +202,9 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
     fun isConfigured(): Boolean {
         return when (selectedProvider) {
             PROVIDER_YANDEX -> getApiKey().isNotBlank() && folderId.isNotBlank()
-            PROVIDER_HF_DEEPSEEK -> getHuggingFaceToken().isNotBlank()
+            PROVIDER_HF_DEEPSEEK,
+            PROVIDER_HF_DEEPSEEK_TERMINUS,
+            PROVIDER_HF_OPENBUDDY_LLAMA3 -> getHuggingFaceToken().isNotBlank()
             else -> false
         }
     }
@@ -238,10 +240,14 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
         )
         val AVAILABLE_PROVIDERS: LinkedHashMap<String, String> = linkedMapOf(
             PROVIDER_YANDEX to "Yandex GPT",
-            PROVIDER_HF_DEEPSEEK to "HuggingFace DeepSeek-R1"
+            PROVIDER_HF_DEEPSEEK to "HuggingFace DeepSeek-R1",
+            PROVIDER_HF_DEEPSEEK_TERMINUS to "HuggingFace DeepSeek-V3-Terminus",
+            PROVIDER_HF_OPENBUDDY_LLAMA3 to "HuggingFace OpenBuddy Llama3-8B"
         )
         const val PROVIDER_YANDEX = "YandexGPT"
         const val PROVIDER_HF_DEEPSEEK = "HuggingFaceDeepSeekR1"
+        const val PROVIDER_HF_DEEPSEEK_TERMINUS = "HuggingFaceDeepSeekTerminus"
+        const val PROVIDER_HF_OPENBUDDY_LLAMA3 = "HuggingFaceOpenbuddyLlama3"
     }
 
     private fun ensureDefaults() {

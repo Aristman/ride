@@ -5,6 +5,10 @@ import kotlinx.coroutines.delay
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import ru.marslab.ide.ride.integration.llm.LLMProvider
+import ru.marslab.ide.ride.integration.llm.model.CompletionOptions
+import ru.marslab.ide.ride.integration.llm.model.YandexGPTRequest
+import ru.marslab.ide.ride.integration.llm.model.YandexGPTResponse
+import ru.marslab.ide.ride.integration.llm.model.YandexMessage
 import ru.marslab.ide.ride.model.LLMParameters
 import ru.marslab.ide.ride.model.LLMResponse
 import ru.marslab.ide.ride.model.ConversationMessage
