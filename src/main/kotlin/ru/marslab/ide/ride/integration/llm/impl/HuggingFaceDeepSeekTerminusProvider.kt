@@ -5,6 +5,9 @@ import kotlinx.coroutines.delay
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import ru.marslab.ide.ride.integration.llm.LLMProvider
+import ru.marslab.ide.ride.integration.llm.model.HFChatCompletionsRequest
+import ru.marslab.ide.ride.integration.llm.model.HFChatCompletionsResponse
+import ru.marslab.ide.ride.integration.llm.model.HFMessage
 import ru.marslab.ide.ride.model.ConversationMessage
 import ru.marslab.ide.ride.model.ConversationRole
 import ru.marslab.ide.ride.model.LLMParameters
