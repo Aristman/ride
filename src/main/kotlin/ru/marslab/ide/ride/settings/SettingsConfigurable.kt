@@ -7,15 +7,14 @@ import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.DialogPanel
 import com.intellij.ui.ColorPanel
 import com.intellij.ui.components.JBPasswordField
-import com.intellij.ui.components.JBTextArea
-import com.intellij.ui.components.JBTextField
 import com.intellij.ui.components.JBTabbedPane
+import com.intellij.ui.components.JBTextField
 import com.intellij.ui.dsl.builder.*
-import com.intellij.util.SlowOperations
+import java.awt.CardLayout
 import java.awt.Color
 import javax.swing.JComponent
-import javax.swing.SwingUtilities
 import javax.swing.JPanel
+import javax.swing.SwingUtilities
 
 /**
  * UI для настроек плагина в IDE Settings
@@ -36,8 +35,7 @@ class SettingsConfigurable : Configurable {
     private lateinit var chatCodeBorderPanel: ColorPanel
     private lateinit var chatUserBackgroundPanel: ColorPanel
     private lateinit var chatUserBorderPanel: ColorPanel
-    private lateinit var modelComboBox: ComboBox<String>
-    private lateinit var providerComboBox: ComboBox<String>
+    private lateinit var modelSelectorComboBox: ComboBox<String>
 
     private var panel: DialogPanel? = null
     private var initialApiKey: String = ""
@@ -80,8 +78,12 @@ class SettingsConfigurable : Configurable {
             false
         }
 
-        val selectedModel = (modelComboBox.selectedItem as? String)?.trim().orEmpty()
-        val selectedProviderUi = (providerComboBox.selectedItem as? String)?.trim().orEmpty()
+        val selectedTop = (modelSelectorComboBox.selectedItem as? String)?.trim().orEmpty()
+        val expectedTop = if (settings.selectedProvider == PluginSettings.PROVIDER_HF_DEEPSEEK) {
+            PluginSettings.PROVIDER_HF_DEEPSEEK
+        } else {
+            settings.yandexModelId
+        }
 
         return apiKeyModified ||
                 hfTokenModified ||
@@ -113,13 +115,18 @@ class SettingsConfigurable : Configurable {
                     chatUserBorderPanel.selectedColor,
                     PluginSettingsState.DEFAULT_USER_BORDER_COLOR
                 ) != settings.chatUserBorderColor ||
-                selectedModel != settings.yandexModelId ||
-                selectedProviderUi != settings.selectedProvider
+                selectedTop != expectedTop
     }
 
     override fun apply() {
-        // Сохраняем выбранного провайдера
-        settings.selectedProvider = providerComboBox.selectedItem as? String ?: PluginSettings.PROVIDER_YANDEX
+        // Определяем выбранную модель/провайдера сверху и сохраняем
+        val selectedTop = modelSelectorComboBox.selectedItem as? String ?: PluginSettings.PROVIDER_YANDEX
+        if (selectedTop == PluginSettings.PROVIDER_HF_DEEPSEEK) {
+            settings.selectedProvider = PluginSettings.PROVIDER_HF_DEEPSEEK
+        } else {
+            settings.selectedProvider = PluginSettings.PROVIDER_YANDEX
+            settings.yandexModelId = selectedTop
+        }
 
         // Сохраняем токены в зависимости от провайдера
         val apiKey = apiKeyField.password.concatToString()
@@ -132,7 +139,6 @@ class SettingsConfigurable : Configurable {
 
         // Сохраняем остальные настройки
         settings.folderId = folderIdField.text.trim()
-        settings.yandexModelId = modelComboBox.selectedItem as? String ?: PluginSettingsState.DEFAULT_YANDEX_MODEL_ID
 
         // Валидация и сохранение числовых параметров
         try {
@@ -200,8 +206,10 @@ class SettingsConfigurable : Configurable {
             }
         }
         folderIdField.text = settings.folderId
-        modelComboBox.selectedItem = settings.yandexModelId
-        providerComboBox.selectedItem = settings.selectedProvider
+        // Устанавливаем верхний выбор: HF провайдер или конкретная Yandex модель
+        modelSelectorComboBox.selectedItem = if (settings.selectedProvider == PluginSettings.PROVIDER_HF_DEEPSEEK) {
+            PluginSettings.PROVIDER_HF_DEEPSEEK
+        } else settings.yandexModelId
         temperatureField.text = settings.temperature.toString()
         maxTokensField.text = settings.maxTokens.toString()
         chatFontSizeField.text = settings.chatFontSize.toString()
@@ -232,31 +240,34 @@ class SettingsConfigurable : Configurable {
         return runCatching { Color.decode(value) }.getOrElse { Color.decode(fallbackHex) }
     }
 
-    private fun createLlmConfigPanel(): DialogPanel = panel {
-        // Выбор провайдера LLM вверху
-        row("LLM Provider:") {
-            providerComboBox = comboBox(PluginSettings.AVAILABLE_PROVIDERS.keys.toList())
-                .applyToComponent {
-                    renderer = object : javax.swing.DefaultListCellRenderer() {
-                        override fun getListCellRendererComponent(
-                            list: javax.swing.JList<*>,
-                            value: Any?,
-                            index: Int,
-                            isSelected: Boolean,
-                            cellHasFocus: Boolean
-                        ): java.awt.Component {
-                            val component = super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus)
-                            val key = value as? String
-                            text = PluginSettings.AVAILABLE_PROVIDERS[key] ?: key.orEmpty()
-                            return component
-                        }
+    private fun createLlmConfigPanel(): DialogPanel {
+        // Верхний комбобокс: одна запись для HF провайдера + все модели Яндекса
+        val topEntries: List<String> = buildList {
+            add(PluginSettings.PROVIDER_HF_DEEPSEEK)
+            addAll(PluginSettings.AVAILABLE_YANDEX_MODELS.keys)
+        }
+        modelSelectorComboBox = ComboBox(topEntries.toTypedArray()).apply {
+            renderer = object : javax.swing.DefaultListCellRenderer() {
+                override fun getListCellRendererComponent(
+                    list: javax.swing.JList<*>,
+                    value: Any?,
+                    index: Int,
+                    isSelected: Boolean,
+                    cellHasFocus: Boolean
+                ): java.awt.Component {
+                    val component = super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus)
+                    val key = value as? String
+                    text = when (key) {
+                        PluginSettings.PROVIDER_HF_DEEPSEEK -> PluginSettings.AVAILABLE_PROVIDERS[PluginSettings.PROVIDER_HF_DEEPSEEK]
+                        else -> PluginSettings.AVAILABLE_YANDEX_MODELS[key] ?: key.orEmpty()
                     }
+                    return component
                 }
-                .component
+            }
         }
 
-        // Контейнер для специфичных настроек провайдеров
-        val yandexPanel = panel {
+        // Подпанель Yandex
+        val yandexSubPanel: DialogPanel = panel {
             row("API Key:") {
                 apiKeyField = JBPasswordField()
                 cell(apiKeyField)
@@ -271,27 +282,6 @@ class SettingsConfigurable : Configurable {
                     .comment("Folder ID из Yandex Cloud")
             }
 
-            row("Model:") {
-                modelComboBox = comboBox(PluginSettings.AVAILABLE_YANDEX_MODELS.keys.toList())
-                    .applyToComponent {
-                        renderer = object : javax.swing.DefaultListCellRenderer() {
-                            override fun getListCellRendererComponent(
-                                list: javax.swing.JList<*>,
-                                value: Any?,
-                                index: Int,
-                                isSelected: Boolean,
-                                cellHasFocus: Boolean
-                            ): java.awt.Component {
-                                val component = super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus)
-                                val key = value as? String
-                                text = PluginSettings.AVAILABLE_YANDEX_MODELS[key] ?: key.orEmpty()
-                                return component
-                            }
-                        }
-                    }
-                    .component
-            }
-
             row {
                 comment(
                     """
@@ -304,7 +294,8 @@ class SettingsConfigurable : Configurable {
             }
         }
 
-        val hfPanel = panel {
+        // Подпанель Hugging Face
+        val hfSubPanel: DialogPanel = panel {
             row("Token:") {
                 hfTokenField = JBPasswordField()
                 cell(hfTokenField)
@@ -321,21 +312,33 @@ class SettingsConfigurable : Configurable {
             }
         }
 
-        // Вставляем панели в основную
-        row { cell(yandexPanel).align(Align.FILL) }
-        row { cell(hfPanel).align(Align.FILL) }
+        // CardLayout со вложенными подпанелями
+        val cardPanel = JPanel(CardLayout())
+        val CARD_YANDEX = PluginSettings.PROVIDER_YANDEX
+        val CARD_HF = PluginSettings.PROVIDER_HF_DEEPSEEK
+        cardPanel.add(yandexSubPanel, CARD_YANDEX)
+        cardPanel.add(hfSubPanel, CARD_HF)
 
-        // Переключатель видимости блоков
-        applyToComponent {
-            fun updateVisibility() {
-                val provider = providerComboBox.selectedItem as? String ?: PluginSettings.PROVIDER_YANDEX
-                val isYandex = provider == PluginSettings.PROVIDER_YANDEX
-                yandexPanel.isVisible = isYandex
-                hfPanel.isVisible = !isYandex
+        fun updateCard() {
+            val layout = cardPanel.layout as CardLayout
+            val selected = modelSelectorComboBox.selectedItem as? String
+            if (selected == PluginSettings.PROVIDER_HF_DEEPSEEK) {
+                layout.show(cardPanel, CARD_HF)
+            } else {
+                layout.show(cardPanel, CARD_YANDEX)
             }
-            providerComboBox.addActionListener { updateVisibility() }
-            updateVisibility()
         }
+        modelSelectorComboBox.addActionListener { updateCard() }
+
+        // Основная панель вкладки LlmConfig
+        val root = panel {
+            row("LLM / Model:") { cell(modelSelectorComboBox) }
+            row { cell(cardPanel).align(Align.FILL) }
+        }
+
+        // Инициализируем карточку
+        SwingUtilities.invokeLater { updateCard() }
+        return root
     }
 
     private fun createChatAppearancePanel(): DialogPanel = panel {
