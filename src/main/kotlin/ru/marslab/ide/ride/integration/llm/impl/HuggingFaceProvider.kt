@@ -96,6 +96,13 @@ class HuggingFaceProvider(
 
     override fun getProviderName(): String = "HuggingFace"
 
+    /**
+     * Возвращает отображаемое имя модели для UI
+     */
+    fun getModelDisplayName(): String {
+        return HuggingFaceModel.entries.find { it.modelId == config.model }?.displayName ?: config.model
+    }
+
     private fun buildRequest(
         systemPrompt: String,
         userMessage: String,

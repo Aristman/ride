@@ -8,6 +8,7 @@ import com.intellij.openapi.project.Project
 import kotlinx.coroutines.*
 import ru.marslab.ide.ride.agent.Agent
 import ru.marslab.ide.ride.agent.AgentFactory
+import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceProvider
 import ru.marslab.ide.ride.model.*
 import ru.marslab.ide.ride.model.ChatSession
 import ru.marslab.ide.ride.settings.PluginSettings
@@ -229,8 +230,15 @@ class ChatService {
 
     /**
      * Возвращает имя текущего провайдера LLM
+     * Для HuggingFace возвращает имя модели вместо общего имени провайдера
      */
-    fun getCurrentProviderName(): String = agent.getLLMProvider().getProviderName()
+    fun getCurrentProviderName(): String {
+        val provider = agent.getLLMProvider()
+        return when (provider) {
+            is HuggingFaceProvider -> provider.getModelDisplayName()
+            else -> provider.getProviderName()
+        }
+    }
 
     // --- Sessions API ---
     fun createNewSession(title: String = "Session"): ChatSession {
