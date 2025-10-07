@@ -100,7 +100,7 @@ class YandexGPTProvider(
         return config.apiKey.isNotBlank() && config.folderId.isNotBlank()
     }
     
-    override fun getProviderName(): String = "Yandex GPT"
+    override fun getProviderName(): String = "Yandex"
 
     /**
      * Возвращает отображаемое имя модели для UI

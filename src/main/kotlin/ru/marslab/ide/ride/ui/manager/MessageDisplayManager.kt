@@ -43,8 +43,7 @@ class MessageDisplayManager(
         val htmlContent = contentRenderer.createSystemMessageHtml(text, isLoading)
 
         if (isLoading) {
-            val range = htmlDocumentManager.appendHtmlWithRange(htmlContent)
-            // В будущем можно добавить отслеживание диапазона для удаления
+            htmlDocumentManager.appendHtmlWithRange(htmlContent)
         } else {
             htmlDocumentManager.appendHtml(htmlContent)
         }

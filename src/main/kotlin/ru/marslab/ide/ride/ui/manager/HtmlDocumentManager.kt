@@ -64,20 +64,20 @@ class HtmlDocumentManager(
      */
     fun appendHtmlWithRange(chunk: String): Pair<Int, Int> {
         if (jcefView != null) {
-            val start = htmlBuffer.length
+            loadingStart = htmlBuffer.length
             htmlBuffer.append("\n").append(chunk)
-            val end = htmlBuffer.length
+            loadingEnd = htmlBuffer.length
             jcefView.appendHtml(chunk)
-            return start to end
+            return loadingStart to loadingEnd
         } else {
             val closing = "</body>\n</html>"
             val idx = htmlBuffer.indexOf(closing)
             if (idx != -1) htmlBuffer.delete(idx, htmlBuffer.length)
-            val start = htmlBuffer.length
+            loadingStart = htmlBuffer.length
             htmlBuffer.append("\n").append(chunk)
-            val end = htmlBuffer.length
+            loadingEnd = htmlBuffer.length
             refreshEditor()
-            return start to end
+            return loadingStart to loadingEnd
         }
     }
 
