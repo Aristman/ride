@@ -32,6 +32,15 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
     }
     
     /**
+     * Выбранный провайдер LLM
+     */
+    var selectedProvider: String
+        get() = state.selectedProvider
+        set(value) {
+            state.selectedProvider = value
+        }
+    
+    /**
      * Folder ID для Yandex GPT
      */
     var folderId: String
@@ -152,6 +161,23 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
     }
     
     /**
+     * Сохраняет токен Hugging Face в безопасном хранилище
+     */
+    fun saveHuggingFaceToken(token: String) {
+        val attributes = createHFCredentialAttributes()
+        val credentials = Credentials(HF_TOKEN_USERNAME, token)
+        PasswordSafe.instance.set(attributes, credentials)
+    }
+
+    /**
+     * Получает токен Hugging Face из безопасного хранилища
+     */
+    fun getHuggingFaceToken(): String {
+        val attributes = createHFCredentialAttributes()
+        return PasswordSafe.instance.getPassword(attributes) ?: ""
+    }
+
+    /**
      * Удаляет API ключ из хранилища
      */
     fun clearApiKey() {
@@ -162,10 +188,14 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
     /**
      * Проверяет, настроен ли плагин
      * 
-     * @return true если API ключ и Folder ID заданы
+     * @return true если требуемые поля для выбранного провайдера заданы
      */
     fun isConfigured(): Boolean {
-        return getApiKey().isNotBlank() && folderId.isNotBlank()
+        return when (selectedProvider) {
+            PROVIDER_YANDEX -> getApiKey().isNotBlank() && folderId.isNotBlank()
+            PROVIDER_HF_DEEPSEEK -> getHuggingFaceToken().isNotBlank()
+            else -> false
+        }
     }
     
     /**
@@ -177,10 +207,18 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
             userName = API_KEY_USERNAME
         )
     }
+    private fun createHFCredentialAttributes(): CredentialAttributes {
+        return CredentialAttributes(
+            serviceName = HF_SERVICE_NAME,
+            userName = HF_TOKEN_USERNAME
+        )
+    }
     
     companion object {
         private const val SERVICE_NAME = "ru.marslab.ide.ride.yandexgpt"
         private const val API_KEY_USERNAME = "api_key"
+        private const val HF_SERVICE_NAME = "ru.marslab.ide.ride.huggingface"
+        private const val HF_TOKEN_USERNAME = "hf_token"
         private val COLOR_REGEX = Regex("^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
         val AVAILABLE_YANDEX_MODELS: LinkedHashMap<String, String> = linkedMapOf(
             "yandexgpt-lite" to "YandexGPT Lite",
@@ -189,6 +227,12 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
 //            "gpt-oss-120b" to "GPT-OSS 120B",
 //            "gpt-oss-20b" to "GPT-OSS 20B"
         )
+        val AVAILABLE_PROVIDERS: LinkedHashMap<String, String> = linkedMapOf(
+            PROVIDER_YANDEX to "Yandex GPT",
+            PROVIDER_HF_DEEPSEEK to "HuggingFace DeepSeek-R1"
+        )
+        const val PROVIDER_YANDEX = "YandexGPT"
+        const val PROVIDER_HF_DEEPSEEK = "HuggingFaceDeepSeekR1"
     }
 
     private fun ensureDefaults() {
@@ -200,6 +244,9 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
         state.chatUserBackgroundColor = normalizeColor(state.chatUserBackgroundColor, PluginSettingsState.DEFAULT_USER_BACKGROUND_COLOR)
         state.chatUserBorderColor = normalizeColor(state.chatUserBorderColor, PluginSettingsState.DEFAULT_USER_BORDER_COLOR)
         state.yandexModelId = normalizeModelId(state.yandexModelId)
+        if (!AVAILABLE_PROVIDERS.containsKey(state.selectedProvider)) {
+            state.selectedProvider = PluginSettingsState.DEFAULT_PROVIDER
+        }
     }
 
     private fun normalizeColor(value: String?, default: String): String {

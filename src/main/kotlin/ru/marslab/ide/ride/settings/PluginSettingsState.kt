@@ -16,7 +16,8 @@ data class PluginSettingsState(
     var chatCodeBorderColor: String = DEFAULT_CODE_BORDER_COLOR,
     var chatUserBackgroundColor: String = DEFAULT_USER_BACKGROUND_COLOR,
     var chatUserBorderColor: String = DEFAULT_USER_BORDER_COLOR,
-    var yandexModelId: String = DEFAULT_YANDEX_MODEL_ID
+    var yandexModelId: String = DEFAULT_YANDEX_MODEL_ID,
+    var selectedProvider: String = DEFAULT_PROVIDER
 ) {
     companion object {
         const val DEFAULT_CHAT_FONT_SIZE = 9
@@ -27,5 +28,6 @@ data class PluginSettingsState(
         const val DEFAULT_USER_BACKGROUND_COLOR = "#28292D"
         const val DEFAULT_USER_BORDER_COLOR = "#6d8fd8"
         const val DEFAULT_YANDEX_MODEL_ID = "yandexgpt"
+        const val DEFAULT_PROVIDER = "YandexGPT"
     }
 }

@@ -5,6 +5,8 @@ import ru.marslab.ide.ride.agent.impl.ChatAgent
 import ru.marslab.ide.ride.integration.llm.LLMProvider
 import ru.marslab.ide.ride.integration.llm.impl.YandexGPTConfig
 import ru.marslab.ide.ride.integration.llm.impl.YandexGPTProvider
+import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceConfig
+import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceDeepSeekR1Provider
 import ru.marslab.ide.ride.settings.PluginSettings
 import ru.marslab.ide.ride.model.ResponseFormat
 import ru.marslab.ide.ride.model.ResponseSchema
@@ -21,15 +23,21 @@ object AgentFactory {
      */
     fun createChatAgent(): Agent {
         val settings = service<PluginSettings>()
-        
-        // Получаем настройки для Yandex GPT
-        val apiKey = settings.getApiKey()
-        val folderId = settings.folderId
-        val modelId = settings.yandexModelId
-        
-        // Создаем провайдер
-        val llmProvider = createYandexGPTProvider(apiKey, folderId, modelId)
-        
+        val llmProvider: LLMProvider = when (settings.selectedProvider) {
+            PluginSettings.PROVIDER_HF_DEEPSEEK -> {
+                val hfToken = settings.getHuggingFaceToken()
+                // Модель по умолчанию совпадает с UI и провайдером
+                createHuggingFaceDeepSeekR1Provider(hfToken)
+            }
+            else -> {
+                // Получаем настройки для Yandex GPT
+                val apiKey = settings.getApiKey()
+                val folderId = settings.folderId
+                val modelId = settings.yandexModelId
+                createYandexGPTProvider(apiKey, folderId, modelId)
+            }
+        }
+
         // Создаем агента с провайдером
         return ChatAgent(
             llmProvider = llmProvider,
@@ -87,5 +95,22 @@ object AgentFactory {
             modelId = modelId
         )
         return YandexGPTProvider(config)
+    }
+
+    /**
+     * Создает провайдер Hugging Face DeepSeek-R1
+     *
+     * @param apiKey Токен Hugging Face (Bearer)
+     * @param model Идентификатор модели, по умолчанию deepseek-ai/DeepSeek-R1:fireworks-ai
+     */
+    fun createHuggingFaceDeepSeekR1Provider(
+        apiKey: String,
+        model: String = "deepseek-ai/DeepSeek-R1:fireworks-ai"
+    ): LLMProvider {
+        val config = HuggingFaceConfig(
+            apiKey = apiKey,
+            model = model
+        )
+        return HuggingFaceDeepSeekR1Provider(config)
     }
 }
