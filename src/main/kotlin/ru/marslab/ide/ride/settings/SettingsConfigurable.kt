@@ -37,6 +37,7 @@ class SettingsConfigurable : Configurable {
     private lateinit var chatUserBackgroundPanel: ColorPanel
     private lateinit var chatUserBorderPanel: ColorPanel
     private lateinit var modelSelectorComboBox: ComboBox<String>
+    private lateinit var hfModelSelectorComboBox: ComboBox<String>
     private lateinit var showProviderNameCheck: JBCheckBox
 
     private var panel: DialogPanel? = null
@@ -82,11 +83,10 @@ class SettingsConfigurable : Configurable {
 
         val selectedTop = (modelSelectorComboBox.selectedItem as? String)?.trim().orEmpty()
         val expectedTop = when (settings.selectedProvider) {
-            PluginSettings.PROVIDER_HF_DEEPSEEK -> PluginSettings.PROVIDER_HF_DEEPSEEK
-            PluginSettings.PROVIDER_HF_DEEPSEEK_TERMINUS -> PluginSettings.PROVIDER_HF_DEEPSEEK_TERMINUS
-            PluginSettings.PROVIDER_HF_OPENBUDDY_LLAMA3 -> PluginSettings.PROVIDER_HF_OPENBUDDY_LLAMA3
+            PluginSettings.PROVIDER_HUGGINGFACE -> PluginSettings.PROVIDER_HUGGINGFACE
             else -> settings.yandexModelId
         }
+        val selectedHFModel = (hfModelSelectorComboBox.selectedItem as? String)?.trim().orEmpty()
 
         return apiKeyModified ||
                 hfTokenModified ||
@@ -118,22 +118,18 @@ class SettingsConfigurable : Configurable {
                     chatUserBorderPanel.selectedColor,
                     PluginSettingsState.DEFAULT_USER_BORDER_COLOR
                 ) != settings.chatUserBorderColor ||
-                selectedTop != expectedTop
-                || showProviderNameCheck.isSelected != settings.showProviderName
+                selectedTop != expectedTop ||
+                selectedHFModel != settings.huggingFaceModelId ||
+                showProviderNameCheck.isSelected != settings.showProviderName
     }
 
     override fun apply() {
-        // Определяем выбранную модель/провайдера сверху и сохраняем
+        // Определяем выбранную модель/провайдер сверху и сохраняем
         val selectedTop = modelSelectorComboBox.selectedItem as? String ?: PluginSettings.PROVIDER_YANDEX
         when (selectedTop) {
-            PluginSettings.PROVIDER_HF_DEEPSEEK -> {
-                settings.selectedProvider = PluginSettings.PROVIDER_HF_DEEPSEEK
-            }
-            PluginSettings.PROVIDER_HF_DEEPSEEK_TERMINUS -> {
-                settings.selectedProvider = PluginSettings.PROVIDER_HF_DEEPSEEK_TERMINUS
-            }
-            PluginSettings.PROVIDER_HF_OPENBUDDY_LLAMA3 -> {
-                settings.selectedProvider = PluginSettings.PROVIDER_HF_OPENBUDDY_LLAMA3
+            PluginSettings.PROVIDER_HUGGINGFACE -> {
+                settings.selectedProvider = PluginSettings.PROVIDER_HUGGINGFACE
+                settings.huggingFaceModelId = hfModelSelectorComboBox.selectedItem as? String ?: PluginSettingsState.DEFAULT_HUGGINGFACE_MODEL_ID
             }
             else -> {
                 settings.selectedProvider = PluginSettings.PROVIDER_YANDEX
@@ -148,9 +144,7 @@ class SettingsConfigurable : Configurable {
             PluginSettings.PROVIDER_YANDEX -> {
                 if (apiKey.isNotBlank()) settings.saveApiKey(apiKey)
             }
-            PluginSettings.PROVIDER_HF_DEEPSEEK,
-            PluginSettings.PROVIDER_HF_DEEPSEEK_TERMINUS,
-            PluginSettings.PROVIDER_HF_OPENBUDDY_LLAMA3 -> {
+            PluginSettings.PROVIDER_HUGGINGFACE -> {
                 if (hfToken.isNotBlank()) settings.saveHuggingFaceToken(hfToken)
             }
         }
@@ -229,11 +223,11 @@ class SettingsConfigurable : Configurable {
         folderIdField.text = settings.folderId
         // Устанавливаем верхний выбор: HF провайдер или конкретная Yandex модель
         modelSelectorComboBox.selectedItem = when (settings.selectedProvider) {
-            PluginSettings.PROVIDER_HF_DEEPSEEK -> PluginSettings.PROVIDER_HF_DEEPSEEK
-            PluginSettings.PROVIDER_HF_DEEPSEEK_TERMINUS -> PluginSettings.PROVIDER_HF_DEEPSEEK_TERMINUS
-            PluginSettings.PROVIDER_HF_OPENBUDDY_LLAMA3 -> PluginSettings.PROVIDER_HF_OPENBUDDY_LLAMA3
+            PluginSettings.PROVIDER_HUGGINGFACE -> PluginSettings.PROVIDER_HUGGINGFACE
             else -> settings.yandexModelId
         }
+        // Устанавливаем модель HuggingFace
+        hfModelSelectorComboBox.selectedItem = settings.huggingFaceModelId
         temperatureField.text = settings.temperature.toString()
         maxTokensField.text = settings.maxTokens.toString()
         chatFontSizeField.text = settings.chatFontSize.toString()
@@ -266,11 +260,9 @@ class SettingsConfigurable : Configurable {
     }
 
     private fun createLlmConfigPanel(): DialogPanel {
-        // Верхний комбобокс: записи для HF провайдеров + все модели Яндекса
+        // Верхний комбобокс: провайдеры + модели Яндекса
         val topEntries: List<String> = buildList {
-            add(PluginSettings.PROVIDER_HF_DEEPSEEK)
-            add(PluginSettings.PROVIDER_HF_DEEPSEEK_TERMINUS)
-            add(PluginSettings.PROVIDER_HF_OPENBUDDY_LLAMA3)
+            add(PluginSettings.PROVIDER_HUGGINGFACE)
             addAll(PluginSettings.AVAILABLE_YANDEX_MODELS.keys)
         }
         modelSelectorComboBox = ComboBox(topEntries.toTypedArray()).apply {
@@ -285,11 +277,27 @@ class SettingsConfigurable : Configurable {
                     val component = super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus)
                     val key = value as? String
                     text = when (key) {
-                        PluginSettings.PROVIDER_HF_DEEPSEEK -> PluginSettings.AVAILABLE_PROVIDERS[PluginSettings.PROVIDER_HF_DEEPSEEK]
-                        PluginSettings.PROVIDER_HF_DEEPSEEK_TERMINUS -> PluginSettings.AVAILABLE_PROVIDERS[PluginSettings.PROVIDER_HF_DEEPSEEK_TERMINUS]
-                        PluginSettings.PROVIDER_HF_OPENBUDDY_LLAMA3 -> PluginSettings.AVAILABLE_PROVIDERS[PluginSettings.PROVIDER_HF_OPENBUDDY_LLAMA3]
+                        PluginSettings.PROVIDER_HUGGINGFACE -> PluginSettings.AVAILABLE_PROVIDERS[PluginSettings.PROVIDER_HUGGINGFACE]
                         else -> PluginSettings.AVAILABLE_YANDEX_MODELS[key] ?: key.orEmpty()
                     }
+                    return component
+                }
+            }
+        }
+
+        // Комбобокс для выбора моделей HuggingFace
+        hfModelSelectorComboBox = ComboBox(PluginSettings.AVAILABLE_HUGGINGFACE_MODELS.keys.toTypedArray()).apply {
+            renderer = object : javax.swing.DefaultListCellRenderer() {
+                override fun getListCellRendererComponent(
+                    list: javax.swing.JList<*>,
+                    value: Any?,
+                    index: Int,
+                    isSelected: Boolean,
+                    cellHasFocus: Boolean
+                ): java.awt.Component {
+                    val component = super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus)
+                    val key = value as? String
+                    text = PluginSettings.AVAILABLE_HUGGINGFACE_MODELS[key] ?: key.orEmpty()
                     return component
                 }
             }
@@ -331,11 +339,17 @@ class SettingsConfigurable : Configurable {
                     .columns(COLUMNS_LARGE)
                     .comment("Токен Hugging Face (Settings -> Access Tokens -> New token)")
             }
+            row("Model:") {
+                cell(hfModelSelectorComboBox)
+                    .align(Align.FILL)
+                    .resizableColumn()
+                    .comment("Выберите модель HuggingFace")
+            }
             row {
                 comment(
                     """
                     Подсказка: используйте токен Hugging Face с правами access inference API.
-                    Модель по умолчанию: deepseek-ai/DeepSeek-R1:fireworks-ai
+                    Все модели доступны через HuggingFace Router API.
                 """.trimIndent()
                 )
             }
@@ -344,7 +358,7 @@ class SettingsConfigurable : Configurable {
         // CardLayout со вложенными подпанелями
         val cardPanel = JPanel(CardLayout())
         val CARD_YANDEX = PluginSettings.PROVIDER_YANDEX
-        val CARD_HF = PluginSettings.PROVIDER_HF_DEEPSEEK
+        val CARD_HF = PluginSettings.PROVIDER_HUGGINGFACE
         cardPanel.add(yandexSubPanel, CARD_YANDEX)
         cardPanel.add(hfSubPanel, CARD_HF)
 
@@ -352,9 +366,7 @@ class SettingsConfigurable : Configurable {
             val layout = cardPanel.layout as CardLayout
             val selected = modelSelectorComboBox.selectedItem as? String
             when (selected) {
-                PluginSettings.PROVIDER_HF_DEEPSEEK,
-                PluginSettings.PROVIDER_HF_DEEPSEEK_TERMINUS,
-                PluginSettings.PROVIDER_HF_OPENBUDDY_LLAMA3 -> {
+                PluginSettings.PROVIDER_HUGGINGFACE -> {
                     layout.show(cardPanel, CARD_HF)
                 }
                 else -> {
@@ -366,7 +378,7 @@ class SettingsConfigurable : Configurable {
 
         // Основная панель вкладки LlmConfig
         val root = panel {
-            row("LLM / Model:") {
+            row("Provider / Model:") {
                 cell(modelSelectorComboBox)
                     .align(Align.FILL)
                     .resizableColumn()

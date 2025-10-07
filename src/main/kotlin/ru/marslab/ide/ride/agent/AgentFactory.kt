@@ -6,9 +6,8 @@ import ru.marslab.ide.ride.integration.llm.LLMProvider
 import ru.marslab.ide.ride.integration.llm.impl.YandexGPTConfig
 import ru.marslab.ide.ride.integration.llm.impl.YandexGPTProvider
 import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceConfig
-import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceDeepSeekR1Provider
-import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceDeepSeekTerminusProvider
-import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceOpenbuddyLlama3Provider
+import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceProvider
+import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceModel
 import ru.marslab.ide.ride.settings.PluginSettings
 import ru.marslab.ide.ride.model.ResponseFormat
 import ru.marslab.ide.ride.model.ResponseSchema
@@ -26,18 +25,10 @@ object AgentFactory {
     fun createChatAgent(): Agent {
         val settings = service<PluginSettings>()
         val llmProvider: LLMProvider = when (settings.selectedProvider) {
-            PluginSettings.PROVIDER_HF_DEEPSEEK -> {
+            PluginSettings.PROVIDER_HUGGINGFACE -> {
                 val hfToken = settings.getHuggingFaceToken()
-                // Модель по умолчанию совпадает с UI и провайдером
-                createHuggingFaceDeepSeekR1Provider(hfToken)
-            }
-            PluginSettings.PROVIDER_HF_DEEPSEEK_TERMINUS -> {
-                val hfToken = settings.getHuggingFaceToken()
-                createHuggingFaceDeepSeekTerminusProvider(hfToken)
-            }
-            PluginSettings.PROVIDER_HF_OPENBUDDY_LLAMA3 -> {
-                val hfToken = settings.getHuggingFaceToken()
-                createHuggingFaceOpenbuddyLlama3Provider(hfToken)
+                val modelId = settings.huggingFaceModelId
+                createHuggingFaceProvider(hfToken, modelId)
             }
             else -> {
                 // Получаем настройки для Yandex GPT
@@ -108,75 +99,44 @@ object AgentFactory {
     }
 
     /**
-     * Создает провайдер Hugging Face DeepSeek-R1
+     * Создает провайдер Hugging Face с указанной моделью
      *
      * @param apiKey Токен Hugging Face (Bearer)
-     * @param model Идентификатор модели, по умолчанию deepseek-ai/DeepSeek-R1:fireworks-ai
+     * @param modelId Идентификатор модели. Если не указан, используется модель по умолчанию
      */
-    fun createHuggingFaceDeepSeekR1Provider(
+    fun createHuggingFaceProvider(
         apiKey: String,
-        model: String = "deepseek-ai/DeepSeek-R1:fireworks-ai"
+        modelId: String = HuggingFaceModel.DEEPSEEK_R1.modelId
     ): LLMProvider {
         val config = HuggingFaceConfig(
             apiKey = apiKey,
-            model = model
+            model = modelId
         )
-        return HuggingFaceDeepSeekR1Provider(config)
+        return HuggingFaceProvider(config)
     }
 
     /**
-     * Создает провайдер Hugging Face DeepSeek-V3.1-Terminus
+     * Создает провайдер Hugging Face с использованием enum модели
      *
      * @param apiKey Токен Hugging Face (Bearer)
-     * @param model Идентификатор модели, по умолчанию deepseek-ai/DeepSeek-V3.1-Terminus:novita
+     * @param model Модель из перечисления HuggingFaceModel
      */
-    fun createHuggingFaceDeepSeekTerminusProvider(
+    fun createHuggingFaceProvider(
         apiKey: String,
-        model: String = "deepseek-ai/DeepSeek-V3.1-Terminus:novita"
+        model: HuggingFaceModel
     ): LLMProvider {
-        val config = HuggingFaceConfig(
-            apiKey = apiKey,
-            model = model
-        )
-        return HuggingFaceDeepSeekTerminusProvider(config)
+        return createHuggingFaceProvider(apiKey, model.modelId)
     }
 
     /**
-     * Создаёт агента с провайдером Hugging Face DeepSeek-V3.1-Terminus
-     * Использует тот же токен Hugging Face, что и для других HF провайдеров.
+     * Создаёт агента с провайдером Hugging Face
+     * Использует токен и модель из настроек плагина
      */
-    fun createChatAgentHuggingFaceDeepSeekTerminus(): Agent {
+    fun createChatAgentHuggingFace(): Agent {
         val settings = service<PluginSettings>()
         val hfToken = settings.getHuggingFaceToken()
-        val provider = createHuggingFaceDeepSeekTerminusProvider(hfToken)
-        return ChatAgent(llmProvider = provider)
-    }
-
-    /**
-     * Создает провайдер Hugging Face OpenBuddy Llama3-8B
-     *
-     * @param apiKey Токен Hugging Face (Bearer)
-     * @param model Идентификатор модели, по умолчанию OpenBuddy/openbuddy-llama3-8b-v21.1-8k:featherless-ai
-     */
-    fun createHuggingFaceOpenbuddyLlama3Provider(
-        apiKey: String,
-        model: String = "OpenBuddy/openbuddy-llama3-8b-v21.1-8k:featherless-ai"
-    ): LLMProvider {
-        val config = HuggingFaceConfig(
-            apiKey = apiKey,
-            model = model
-        )
-        return HuggingFaceOpenbuddyLlama3Provider(config)
-    }
-
-    /**
-     * Создаёт агента с провайдером Hugging Face OpenBuddy Llama3-8B
-     * Использует тот же токен Hugging Face, что и для других HF провайдеров.
-     */
-    fun createChatAgentHuggingFaceOpenbuddyLlama3(): Agent {
-        val settings = service<PluginSettings>()
-        val hfToken = settings.getHuggingFaceToken()
-        val provider = createHuggingFaceOpenbuddyLlama3Provider(hfToken)
+        val modelId = settings.huggingFaceModelId
+        val provider = createHuggingFaceProvider(hfToken, modelId)
         return ChatAgent(llmProvider = provider)
     }
 }

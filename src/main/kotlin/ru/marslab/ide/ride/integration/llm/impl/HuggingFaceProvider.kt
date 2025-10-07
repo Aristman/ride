@@ -19,24 +19,46 @@ import java.net.http.HttpResponse
 import java.time.Duration
 
 /**
- * Конфигурация для Hugging Face DeepSeek R1 Provider
+ * Конфигурация для Hugging Face Provider
  */
 data class HuggingFaceConfig(
     val apiKey: String,
-    val model: String = "deepseek-ai/DeepSeek-R1:fireworks-ai",
+    val model: String,
     val baseUrl: String = "https://router.huggingface.co/v1/chat/completions",
     val timeout: Long = 60_000
 )
 
 /**
- * Реализация LLM провайдера для Hugging Face Router (DeepSeek-R1)
- * Совместим с интерфейсом OpenAI Chat Completions
+ * Доступные модели HuggingFace
  */
-class HuggingFaceDeepSeekR1Provider(
+enum class HuggingFaceModel(
+    val modelId: String,
+    val displayName: String
+) {
+    DEEPSEEK_R1(
+        modelId = "deepseek-ai/DeepSeek-R1:fireworks-ai",
+        displayName = "DeepSeek-R1"
+    ),
+    DEEPSEEK_TERMINUS(
+        modelId = "deepseek-ai/DeepSeek-V3.1-Terminus:novita",
+        displayName = "DeepSeek-V3.1-Terminus"
+    ),
+    OPENBUDDY_LLAMA3(
+        modelId = "OpenBuddy/openbuddy-llama3-8b-v21.1-8k:featherless-ai",
+        displayName = "OpenBuddy Llama3-8B"
+    )
+}
+
+/**
+ * Единый LLM провайдер для Hugging Face Router
+ * Совместим с интерфейсом OpenAI Chat Completions
+ * Поддерживает все доступные модели через выбор в конфигурации
+ */
+class HuggingFaceProvider(
     private val config: HuggingFaceConfig
 ) : LLMProvider {
 
-    private val logger = Logger.getInstance(HuggingFaceDeepSeekR1Provider::class.java)
+    private val logger = Logger.getInstance(HuggingFaceProvider::class.java)
 
     private val httpClient = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(10))
@@ -55,7 +77,7 @@ class HuggingFaceDeepSeekR1Provider(
         parameters: LLMParameters
     ): LLMResponse {
         logger.info(
-            "Sending request to Hugging Face DeepSeek R1, systemPrompt length: ${systemPrompt.length}, userMessage length: ${userMessage.length}, conversationHistory size: ${conversationHistory.size}"
+            "Sending request to Hugging Face (${config.model}), systemPrompt length: ${systemPrompt.length}, userMessage length: ${userMessage.length}, conversationHistory size: ${conversationHistory.size}"
         )
         return try {
             val request = buildRequest(systemPrompt, userMessage, conversationHistory, parameters)
@@ -72,7 +94,7 @@ class HuggingFaceDeepSeekR1Provider(
         return config.apiKey.isNotBlank()
     }
 
-    override fun getProviderName(): String = "HuggingFaceDeepSeekR1"
+    override fun getProviderName(): String = "HuggingFace"
 
     private fun buildRequest(
         systemPrompt: String,
