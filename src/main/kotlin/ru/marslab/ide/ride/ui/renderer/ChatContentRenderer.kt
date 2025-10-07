@@ -77,13 +77,9 @@ class ChatContentRenderer {
             }
         }
         
-        // Если анализ неопределенности выключен, показываем только метрики
+        // Если анализ неопределенности выключен, показываем только метрики с пробелом для сохранения высоты
         if (!showUncertaintyStatus) {
-            return if (metricsHtml.isNotEmpty()) {
-                "<div class='status status-final'>$metricsHtml</div>"
-            } else {
-                ""
-            }
+            return "<div class='status status-final'>&nbsp;$metricsHtml</div>"
         }
         
         // Иначе показываем полный статус с неопределенностью
