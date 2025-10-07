@@ -217,6 +217,12 @@ class HtmlDocumentManager(
                         border: 1px solid rgba(33, 150, 243, 0.3);
                         color: #90caf9;
                     }
+                    .status .metrics {
+                        float: right;
+                        font-size: ${fontSize - 4}px;
+                        opacity: 0.7;
+                        margin-left: 10px;
+                    }
                   </style>
                 </head>
                 <body>

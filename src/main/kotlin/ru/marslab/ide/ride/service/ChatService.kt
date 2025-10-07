@@ -13,6 +13,7 @@ import ru.marslab.ide.ride.integration.llm.impl.YandexGPTProvider
 import ru.marslab.ide.ride.model.*
 import ru.marslab.ide.ride.model.ChatSession
 import ru.marslab.ide.ride.settings.PluginSettings
+import ru.marslab.ide.ride.util.TokenEstimator
 import java.time.Instant
 
 /**
@@ -98,16 +99,29 @@ class ChatService {
                     maxTokens = settings.maxTokens
                 )
 
-                // Отправляем запрос агенту с параметрами из настроек
+                // Измеряем время выполнения запроса к LLM
+                val startTime = System.currentTimeMillis()
                 val agentResponse = agent.processRequest(userMessage, context, llmParameters)
+                val responseTime = System.currentTimeMillis() - startTime
 
                 // Обрабатываем ответ в UI потоке
                 withContext(Dispatchers.EDT) {
                     if (agentResponse.success) {
+                        // Получаем количество токенов из ответа или оцениваем приблизительно
+                        val tokensFromResponse = agentResponse.metadata["tokensUsed"] as? Int ?: 0
+                        val tokensUsed = if (tokensFromResponse > 0) {
+                            tokensFromResponse
+                        } else {
+                            // Оцениваем токены по размеру запроса и ответа
+                            TokenEstimator.estimateTotalTokens(userMessage, agentResponse.content)
+                        }
+                        
                         // Создаем и сохраняем сообщение ассистента с учетом анализа неопределенности
                         val metadata = agentResponse.metadata + mapOf(
                             "isFinal" to agentResponse.isFinal,
-                            "uncertainty" to (agentResponse.uncertainty ?: 0.0)
+                            "uncertainty" to (agentResponse.uncertainty ?: 0.0),
+                            "responseTimeMs" to responseTime,
+                            "tokensUsed" to tokensUsed
                         )
 
                         val assistantMsg = Message(

@@ -154,6 +154,12 @@ class JcefChatView : JPanel(BorderLayout()) {
                 border: 1px solid rgba(33, 150, 243, 0.3);
                 color: #90caf9;
             }
+            .status .metrics {
+                float: right;
+                font-size: 10px;
+                opacity: 0.7;
+                margin-left: 10px;
+            }
 
             /* Стили для Markdown */
             h1, h2, h3 {

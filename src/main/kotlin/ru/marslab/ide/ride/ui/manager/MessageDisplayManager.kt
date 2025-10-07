@@ -147,12 +147,16 @@ class MessageDisplayManager(
         val uncertainty = message.metadata["uncertainty"] as? Double ?: 0.0
         val wasParsed = message.metadata["parsedData"] as? Boolean ?: false
         val hasClarifyingQuestions = message.metadata["hasClarifyingQuestions"] as? Boolean ?: false
+        val responseTimeMs = message.metadata["responseTimeMs"] as? Long
+        val tokensUsed = message.metadata["tokensUsed"] as? Int
 
         return contentRenderer.createStatusHtml(
             isFinal = isFinal,
             uncertainty = uncertainty,
             wasParsed = wasParsed,
-            hasClarifyingQuestions = hasClarifyingQuestions
+            hasClarifyingQuestions = hasClarifyingQuestions,
+            responseTimeMs = responseTimeMs,
+            tokensUsed = tokensUsed
         )
     }
 
