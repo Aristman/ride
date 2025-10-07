@@ -239,13 +239,13 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
         private const val HF_SERVICE_NAME = "ru.marslab.ide.ride.huggingface"
         private const val HF_TOKEN_USERNAME = "hf_token"
         private val COLOR_REGEX = Regex("^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
+        val AVAILABLE_PROVIDERS: LinkedHashMap<String, String> = linkedMapOf(
+            PROVIDER_YANDEX to "Yandex",
+            PROVIDER_HUGGINGFACE to "HuggingFace"
+        )
         val AVAILABLE_YANDEX_MODELS: LinkedHashMap<String, String> = linkedMapOf(
             "yandexgpt-lite" to "YandexGPT Lite",
             "yandexgpt" to "YandexGPT",
-        )
-        val AVAILABLE_PROVIDERS: LinkedHashMap<String, String> = linkedMapOf(
-            PROVIDER_YANDEX to "Yandex GPT",
-            PROVIDER_HUGGINGFACE to "HuggingFace"
         )
         val AVAILABLE_HUGGINGFACE_MODELS: LinkedHashMap<String, String> = linkedMapOf(
             HuggingFaceModel.DEEPSEEK_R1.modelId to HuggingFaceModel.DEEPSEEK_R1.displayName,

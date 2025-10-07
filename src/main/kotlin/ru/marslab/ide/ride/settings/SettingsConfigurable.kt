@@ -38,6 +38,7 @@ class SettingsConfigurable : Configurable {
     private lateinit var chatUserBorderPanel: ColorPanel
     private lateinit var modelSelectorComboBox: ComboBox<String>
     private lateinit var hfModelSelectorComboBox: ComboBox<String>
+    private lateinit var yandexModelSelectorComboBox: ComboBox<String>
     private lateinit var showProviderNameCheck: JBCheckBox
 
     private var panel: DialogPanel? = null
@@ -83,10 +84,12 @@ class SettingsConfigurable : Configurable {
 
         val selectedTop = (modelSelectorComboBox.selectedItem as? String)?.trim().orEmpty()
         val expectedTop = when (settings.selectedProvider) {
+            PluginSettings.PROVIDER_YANDEX -> PluginSettings.PROVIDER_YANDEX
             PluginSettings.PROVIDER_HUGGINGFACE -> PluginSettings.PROVIDER_HUGGINGFACE
-            else -> settings.yandexModelId
+            else -> PluginSettings.PROVIDER_YANDEX
         }
         val selectedHFModel = (hfModelSelectorComboBox.selectedItem as? String)?.trim().orEmpty()
+        val selectedYandexModel = (yandexModelSelectorComboBox.selectedItem as? String)?.trim().orEmpty()
 
         return apiKeyModified ||
                 hfTokenModified ||
@@ -120,6 +123,7 @@ class SettingsConfigurable : Configurable {
                 ) != settings.chatUserBorderColor ||
                 selectedTop != expectedTop ||
                 selectedHFModel != settings.huggingFaceModelId ||
+                selectedYandexModel != settings.yandexModelId ||
                 showProviderNameCheck.isSelected != settings.showProviderName
     }
 
@@ -127,13 +131,17 @@ class SettingsConfigurable : Configurable {
         // Определяем выбранную модель/провайдер сверху и сохраняем
         val selectedTop = modelSelectorComboBox.selectedItem as? String ?: PluginSettings.PROVIDER_YANDEX
         when (selectedTop) {
+            PluginSettings.PROVIDER_YANDEX -> {
+                settings.selectedProvider = PluginSettings.PROVIDER_YANDEX
+                settings.yandexModelId = yandexModelSelectorComboBox.selectedItem as? String ?: PluginSettingsState.DEFAULT_YANDEX_MODEL_ID
+            }
             PluginSettings.PROVIDER_HUGGINGFACE -> {
                 settings.selectedProvider = PluginSettings.PROVIDER_HUGGINGFACE
                 settings.huggingFaceModelId = hfModelSelectorComboBox.selectedItem as? String ?: PluginSettingsState.DEFAULT_HUGGINGFACE_MODEL_ID
             }
             else -> {
                 settings.selectedProvider = PluginSettings.PROVIDER_YANDEX
-                settings.yandexModelId = selectedTop
+                settings.yandexModelId = yandexModelSelectorComboBox.selectedItem as? String ?: PluginSettingsState.DEFAULT_YANDEX_MODEL_ID
             }
         }
 
@@ -221,13 +229,15 @@ class SettingsConfigurable : Configurable {
             }
         }
         folderIdField.text = settings.folderId
-        // Устанавливаем верхний выбор: HF провайдер или конкретная Yandex модель
+        // Устанавливаем верхний выбор: провайдер
         modelSelectorComboBox.selectedItem = when (settings.selectedProvider) {
+            PluginSettings.PROVIDER_YANDEX -> PluginSettings.PROVIDER_YANDEX
             PluginSettings.PROVIDER_HUGGINGFACE -> PluginSettings.PROVIDER_HUGGINGFACE
-            else -> settings.yandexModelId
+            else -> PluginSettings.PROVIDER_YANDEX
         }
-        // Устанавливаем модель HuggingFace
+        // Устанавливаем модели
         hfModelSelectorComboBox.selectedItem = settings.huggingFaceModelId
+        yandexModelSelectorComboBox.selectedItem = settings.yandexModelId
         temperatureField.text = settings.temperature.toString()
         maxTokensField.text = settings.maxTokens.toString()
         chatFontSizeField.text = settings.chatFontSize.toString()
@@ -260,10 +270,10 @@ class SettingsConfigurable : Configurable {
     }
 
     private fun createLlmConfigPanel(): DialogPanel {
-        // Верхний комбобокс: провайдеры + модели Яндекса
+        // Верхний комбобокс: только провайдеры
         val topEntries: List<String> = buildList {
+            add(PluginSettings.PROVIDER_YANDEX)
             add(PluginSettings.PROVIDER_HUGGINGFACE)
-            addAll(PluginSettings.AVAILABLE_YANDEX_MODELS.keys)
         }
         modelSelectorComboBox = ComboBox(topEntries.toTypedArray()).apply {
             renderer = object : javax.swing.DefaultListCellRenderer() {
@@ -276,10 +286,7 @@ class SettingsConfigurable : Configurable {
                 ): java.awt.Component {
                     val component = super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus)
                     val key = value as? String
-                    text = when (key) {
-                        PluginSettings.PROVIDER_HUGGINGFACE -> PluginSettings.AVAILABLE_PROVIDERS[PluginSettings.PROVIDER_HUGGINGFACE]
-                        else -> PluginSettings.AVAILABLE_YANDEX_MODELS[key] ?: key.orEmpty()
-                    }
+                    text = PluginSettings.AVAILABLE_PROVIDERS[key] ?: key.orEmpty()
                     return component
                 }
             }
@@ -303,6 +310,24 @@ class SettingsConfigurable : Configurable {
             }
         }
 
+        // Комбобокс для выбора моделей Yandex
+        yandexModelSelectorComboBox = ComboBox(PluginSettings.AVAILABLE_YANDEX_MODELS.keys.toTypedArray()).apply {
+            renderer = object : javax.swing.DefaultListCellRenderer() {
+                override fun getListCellRendererComponent(
+                    list: javax.swing.JList<*>,
+                    value: Any?,
+                    index: Int,
+                    isSelected: Boolean,
+                    cellHasFocus: Boolean
+                ): java.awt.Component {
+                    val component = super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus)
+                    val key = value as? String
+                    text = PluginSettings.AVAILABLE_YANDEX_MODELS[key] ?: key.orEmpty()
+                    return component
+                }
+            }
+        }
+
         // Подпанель Yandex
         val yandexSubPanel: DialogPanel = panel {
             row("API Key:") {
@@ -317,6 +342,13 @@ class SettingsConfigurable : Configurable {
                 cell(folderIdField)
                     .columns(COLUMNS_LARGE)
                     .comment("Folder ID из Yandex Cloud")
+            }
+
+            row("Model:") {
+                cell(yandexModelSelectorComboBox)
+                    .align(Align.FILL)
+                    .resizableColumn()
+                    .comment("Выберите модель Yandex GPT")
             }
 
             row {
@@ -366,6 +398,9 @@ class SettingsConfigurable : Configurable {
             val layout = cardPanel.layout as CardLayout
             val selected = modelSelectorComboBox.selectedItem as? String
             when (selected) {
+                PluginSettings.PROVIDER_YANDEX -> {
+                    layout.show(cardPanel, CARD_YANDEX)
+                }
                 PluginSettings.PROVIDER_HUGGINGFACE -> {
                     layout.show(cardPanel, CARD_HF)
                 }

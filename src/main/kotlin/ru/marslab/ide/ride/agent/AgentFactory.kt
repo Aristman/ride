@@ -25,13 +25,19 @@ object AgentFactory {
     fun createChatAgent(): Agent {
         val settings = service<PluginSettings>()
         val llmProvider: LLMProvider = when (settings.selectedProvider) {
+            PluginSettings.PROVIDER_YANDEX -> {
+                val apiKey = settings.getApiKey()
+                val folderId = settings.folderId
+                val modelId = settings.yandexModelId
+                createYandexGPTProvider(apiKey, folderId, modelId)
+            }
             PluginSettings.PROVIDER_HUGGINGFACE -> {
                 val hfToken = settings.getHuggingFaceToken()
                 val modelId = settings.huggingFaceModelId
                 createHuggingFaceProvider(hfToken, modelId)
             }
             else -> {
-                // Получаем настройки для Yandex GPT
+                // По умолчанию Yandex
                 val apiKey = settings.getApiKey()
                 val folderId = settings.folderId
                 val modelId = settings.yandexModelId

@@ -20,12 +20,37 @@ import java.net.http.HttpResponse
 import java.time.Duration
 
 /**
+ * Доступные модели Yandex GPT
+ */
+enum class YandexModel(
+    val modelId: String,
+    val displayName: String
+) {
+    YANDEXGPT_LITE(
+        modelId = "yandexgpt-lite",
+        displayName = "YandexGPT Lite"
+    ),
+    YANDEXGPT(
+        modelId = "yandexgpt",
+        displayName = "YandexGPT"
+    );
+
+    companion object {
+        fun fromModelId(modelId: String): YandexModel? {
+            return entries.find { it.modelId == modelId }
+        }
+
+        fun getAll(): List<YandexModel> = entries.toList()
+    }
+}
+
+/**
  * Конфигурация для Yandex GPT Provider
  */
 data class YandexGPTConfig(
     val apiKey: String,
     val folderId: String,
-    val modelId: String = "yandexgpt-lite",
+    val modelId: String = YandexModel.YANDEXGPT_LITE.modelId,
     val modelUri: String = "gpt://$folderId/${modelId}/latest",
     val timeout: Long = 60000 // 60 секунд
 )
@@ -76,6 +101,13 @@ class YandexGPTProvider(
     }
     
     override fun getProviderName(): String = "Yandex GPT"
+
+    /**
+     * Возвращает отображаемое имя модели для UI
+     */
+    fun getModelDisplayName(): String {
+        return YandexModel.fromModelId(config.modelId)?.displayName ?: config.modelId
+    }
     
     /**
      * Строит запрос к Yandex GPT API
