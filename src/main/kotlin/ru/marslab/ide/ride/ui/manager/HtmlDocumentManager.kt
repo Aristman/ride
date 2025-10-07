@@ -95,18 +95,27 @@ class HtmlDocumentManager(
     }
 
     /**
-     * Удаляет последний системный блок (например, индикатор загрузки)
+     * Удаляет последний системный блок (например, индикатор загрузки) с fade-out анимацией
      */
     fun removeLastSystemMessage() {
-        if (loadingStart != -1 && loadingEnd != -1 &&
-            loadingStart < loadingEnd && loadingEnd <= htmlBuffer.length) {
-            htmlBuffer.delete(loadingStart, loadingEnd)
-            loadingStart = -1
-            loadingEnd = -1
-
-            if (jcefView != null) {
-                jcefView.setBody(htmlBuffer.toString())
-            } else {
+        if (jcefView != null) {
+            // Для JCEF используем fade-out анимацию через JavaScript
+            // Селектор ищет .msg.system который содержит маркер загрузки
+            jcefView.removeElementWithFade(".msg.system")
+            // Очищаем буфер (JavaScript сам удалит элемент через 300мс)
+            if (loadingStart != -1 && loadingEnd != -1 &&
+                loadingStart < loadingEnd && loadingEnd <= htmlBuffer.length) {
+                htmlBuffer.delete(loadingStart, loadingEnd)
+                loadingStart = -1
+                loadingEnd = -1
+            }
+        } else {
+            // Для fallback режима удаляем сразу
+            if (loadingStart != -1 && loadingEnd != -1 &&
+                loadingStart < loadingEnd && loadingEnd <= htmlBuffer.length) {
+                htmlBuffer.delete(loadingStart, loadingEnd)
+                loadingStart = -1
+                loadingEnd = -1
                 refreshEditor()
             }
         }
@@ -222,6 +231,42 @@ class HtmlDocumentManager(
                         font-size: ${fontSize - 4}px;
                         opacity: 0.7;
                         margin-left: 10px;
+                    }
+                    
+                    /* Анимации fade-in/fade-out */
+                    @keyframes fadeIn {
+                        from {
+                            opacity: 0;
+                            transform: translateY(10px);
+                        }
+                        to {
+                            opacity: 1;
+                            transform: translateY(0);
+                        }
+                    }
+                    
+                    @keyframes fadeOut {
+                        from {
+                            opacity: 1;
+                            transform: translateY(0);
+                        }
+                        to {
+                            opacity: 0;
+                            transform: translateY(-10px);
+                        }
+                    }
+                    
+                    .fade-in {
+                        animation: fadeIn 0.3s ease-out;
+                    }
+                    
+                    .fade-out {
+                        animation: fadeOut 0.3s ease-out;
+                        opacity: 0;
+                    }
+                    
+                    .msg.assistant {
+                        animation: fadeIn 0.4s ease-out;
                     }
                   </style>
                 </head>

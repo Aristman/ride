@@ -90,6 +90,13 @@ class JcefChatView : JPanel(BorderLayout()) {
         }
         exec(setLines)
     }
+    
+    /**
+     * Удаляет элементы с fade-out анимацией
+     */
+    fun removeElementWithFade(selector: String) {
+        exec("window.removeElementWithFade && window.removeElementWithFade('$selector');")
+    }
 
     private fun exec(script: String) {
         browser.cefBrowser.executeJavaScript(script, browser.cefBrowser.url, 0)
@@ -161,6 +168,42 @@ class JcefChatView : JPanel(BorderLayout()) {
                 margin-left: 10px;
             }
 
+            /* Анимации fade-in/fade-out */
+            @keyframes fadeIn {
+                from {
+                    opacity: 0;
+                    transform: translateY(10px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+            
+            @keyframes fadeOut {
+                from {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+                to {
+                    opacity: 0;
+                    transform: translateY(-10px);
+                }
+            }
+            
+            .fade-in {
+                animation: fadeIn 0.3s ease-out;
+            }
+            
+            .fade-out {
+                animation: fadeOut 0.3s ease-out;
+                opacity: 0;
+            }
+            
+            .msg.assistant {
+                animation: fadeIn 0.4s ease-out;
+            }
+
             /* Стили для Markdown */
             h1, h2, h3 {
                 color: var(--textPrimary);
@@ -196,6 +239,17 @@ class JcefChatView : JPanel(BorderLayout()) {
         """.trimIndent()
 
         val js = """
+            // Функция для удаления элемента с fade-out анимацией
+            window.removeElementWithFade = function(selector) {
+                const elements = document.querySelectorAll(selector);
+                elements.forEach(el => {
+                    el.classList.add('fade-out');
+                    setTimeout(() => {
+                        el.remove();
+                    }, 300); // Длительность анимации
+                });
+            };
+            
             document.addEventListener('click', (e)=>{
               const a = e.target.closest('a.code-copy-link');
               if (!a) return;
