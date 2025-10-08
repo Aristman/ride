@@ -64,20 +64,20 @@ class HtmlDocumentManager(
      */
     fun appendHtmlWithRange(chunk: String): Pair<Int, Int> {
         if (jcefView != null) {
-            val start = htmlBuffer.length
+            loadingStart = htmlBuffer.length
             htmlBuffer.append("\n").append(chunk)
-            val end = htmlBuffer.length
+            loadingEnd = htmlBuffer.length
             jcefView.appendHtml(chunk)
-            return start to end
+            return loadingStart to loadingEnd
         } else {
             val closing = "</body>\n</html>"
             val idx = htmlBuffer.indexOf(closing)
             if (idx != -1) htmlBuffer.delete(idx, htmlBuffer.length)
-            val start = htmlBuffer.length
+            loadingStart = htmlBuffer.length
             htmlBuffer.append("\n").append(chunk)
-            val end = htmlBuffer.length
+            loadingEnd = htmlBuffer.length
             refreshEditor()
-            return start to end
+            return loadingStart to loadingEnd
         }
     }
 
@@ -95,18 +95,27 @@ class HtmlDocumentManager(
     }
 
     /**
-     * Удаляет последний системный блок (например, индикатор загрузки)
+     * Удаляет последний системный блок (например, индикатор загрузки) с fade-out анимацией
      */
     fun removeLastSystemMessage() {
-        if (loadingStart != -1 && loadingEnd != -1 &&
-            loadingStart < loadingEnd && loadingEnd <= htmlBuffer.length) {
-            htmlBuffer.delete(loadingStart, loadingEnd)
-            loadingStart = -1
-            loadingEnd = -1
-
-            if (jcefView != null) {
-                jcefView.setBody(htmlBuffer.toString())
-            } else {
+        if (jcefView != null) {
+            // Для JCEF используем fade-out анимацию через JavaScript
+            // Селектор ищет .msg.system который содержит маркер загрузки
+            jcefView.removeElementWithFade(".msg.system")
+            // Очищаем буфер (JavaScript сам удалит элемент через 300мс)
+            if (loadingStart != -1 && loadingEnd != -1 &&
+                loadingStart < loadingEnd && loadingEnd <= htmlBuffer.length) {
+                htmlBuffer.delete(loadingStart, loadingEnd)
+                loadingStart = -1
+                loadingEnd = -1
+            }
+        } else {
+            // Для fallback режима удаляем сразу
+            if (loadingStart != -1 && loadingEnd != -1 &&
+                loadingStart < loadingEnd && loadingEnd <= htmlBuffer.length) {
+                htmlBuffer.delete(loadingStart, loadingEnd)
+                loadingStart = -1
+                loadingEnd = -1
                 refreshEditor()
             }
         }
@@ -216,6 +225,48 @@ class HtmlDocumentManager(
                         background-color: rgba(33, 150, 243, 0.2);
                         border: 1px solid rgba(33, 150, 243, 0.3);
                         color: #90caf9;
+                    }
+                    .status .metrics {
+                        float: right;
+                        font-size: ${fontSize - 4}px;
+                        opacity: 0.7;
+                        margin-left: 10px;
+                    }
+                    
+                    /* Анимации fade-in/fade-out */
+                    @keyframes fadeIn {
+                        from {
+                            opacity: 0;
+                            transform: translateY(10px);
+                        }
+                        to {
+                            opacity: 1;
+                            transform: translateY(0);
+                        }
+                    }
+                    
+                    @keyframes fadeOut {
+                        from {
+                            opacity: 1;
+                            transform: translateY(0);
+                        }
+                        to {
+                            opacity: 0;
+                            transform: translateY(-10px);
+                        }
+                    }
+                    
+                    .fade-in {
+                        animation: fadeIn 0.3s ease-out;
+                    }
+                    
+                    .fade-out {
+                        animation: fadeOut 0.3s ease-out;
+                        opacity: 0;
+                    }
+                    
+                    .msg.assistant {
+                        animation: fadeIn 0.4s ease-out;
                     }
                   </style>
                 </head>

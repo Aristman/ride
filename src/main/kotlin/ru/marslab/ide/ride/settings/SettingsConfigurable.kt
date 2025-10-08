@@ -6,14 +6,15 @@ import com.intellij.openapi.options.Configurable
 import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.DialogPanel
 import com.intellij.ui.ColorPanel
+import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.components.JBPasswordField
-import com.intellij.ui.components.JBTextArea
-import com.intellij.ui.components.JBTextField
 import com.intellij.ui.components.JBTabbedPane
+import com.intellij.ui.components.JBTextField
 import com.intellij.ui.dsl.builder.*
-import com.intellij.util.SlowOperations
+import java.awt.CardLayout
 import java.awt.Color
 import javax.swing.JComponent
+import javax.swing.JPanel
 import javax.swing.SwingUtilities
 
 /**
@@ -24,6 +25,7 @@ class SettingsConfigurable : Configurable {
     private val settings = service<PluginSettings>()
 
     private lateinit var apiKeyField: JBPasswordField
+    private lateinit var hfTokenField: JBPasswordField
     private lateinit var folderIdField: JBTextField
       private lateinit var temperatureField: JBTextField
     private lateinit var maxTokensField: JBTextField
@@ -34,11 +36,17 @@ class SettingsConfigurable : Configurable {
     private lateinit var chatCodeBorderPanel: ColorPanel
     private lateinit var chatUserBackgroundPanel: ColorPanel
     private lateinit var chatUserBorderPanel: ColorPanel
-    private lateinit var modelComboBox: ComboBox<String>
+    private lateinit var modelSelectorComboBox: ComboBox<String>
+    private lateinit var hfModelSelectorComboBox: ComboBox<String>
+    private lateinit var yandexModelSelectorComboBox: ComboBox<String>
+    private lateinit var showProviderNameCheck: JBCheckBox
+    private lateinit var enableUncertaintyAnalysisCheck: JBCheckBox
 
     private var panel: DialogPanel? = null
     private var initialApiKey: String = ""
     private var apiKeyLoaded = false
+    private var initialHFToken: String = ""
+    private var hfTokenLoaded = false
 
     override fun getDisplayName(): String = "Ride"
 
@@ -69,10 +77,23 @@ class SettingsConfigurable : Configurable {
         } else {
             false
         }
+        val hfTokenModified = if (hfTokenLoaded) {
+            hfTokenField.password.concatToString() != initialHFToken
+        } else {
+            false
+        }
 
-        val selectedModel = (modelComboBox.selectedItem as? String)?.trim().orEmpty()
+        val selectedTop = (modelSelectorComboBox.selectedItem as? String)?.trim().orEmpty()
+        val expectedTop = when (settings.selectedProvider) {
+            PluginSettings.PROVIDER_YANDEX -> PluginSettings.PROVIDER_YANDEX
+            PluginSettings.PROVIDER_HUGGINGFACE -> PluginSettings.PROVIDER_HUGGINGFACE
+            else -> PluginSettings.PROVIDER_YANDEX
+        }
+        val selectedHFModel = (hfModelSelectorComboBox.selectedItem as? String)?.trim().orEmpty()
+        val selectedYandexModel = (yandexModelSelectorComboBox.selectedItem as? String)?.trim().orEmpty()
 
         return apiKeyModified ||
+                hfTokenModified ||
                 folderIdField.text != settings.folderId ||
                 temperatureField.text != settings.temperature.toString() ||
                 maxTokensField.text != settings.maxTokens.toString() ||
@@ -101,19 +122,45 @@ class SettingsConfigurable : Configurable {
                     chatUserBorderPanel.selectedColor,
                     PluginSettingsState.DEFAULT_USER_BORDER_COLOR
                 ) != settings.chatUserBorderColor ||
-                selectedModel != settings.yandexModelId
+                selectedTop != expectedTop ||
+                selectedHFModel != settings.huggingFaceModelId ||
+                selectedYandexModel != settings.yandexModelId ||
+                showProviderNameCheck.isSelected != settings.showProviderName ||
+                enableUncertaintyAnalysisCheck.isSelected != settings.enableUncertaintyAnalysis
     }
 
     override fun apply() {
-        // Сохраняем API ключ
+        // Определяем выбранную модель/провайдер сверху и сохраняем
+        val selectedTop = modelSelectorComboBox.selectedItem as? String ?: PluginSettings.PROVIDER_YANDEX
+        when (selectedTop) {
+            PluginSettings.PROVIDER_YANDEX -> {
+                settings.selectedProvider = PluginSettings.PROVIDER_YANDEX
+                settings.yandexModelId = yandexModelSelectorComboBox.selectedItem as? String ?: PluginSettingsState.DEFAULT_YANDEX_MODEL_ID
+            }
+            PluginSettings.PROVIDER_HUGGINGFACE -> {
+                settings.selectedProvider = PluginSettings.PROVIDER_HUGGINGFACE
+                settings.huggingFaceModelId = hfModelSelectorComboBox.selectedItem as? String ?: PluginSettingsState.DEFAULT_HUGGINGFACE_MODEL_ID
+            }
+            else -> {
+                settings.selectedProvider = PluginSettings.PROVIDER_YANDEX
+                settings.yandexModelId = yandexModelSelectorComboBox.selectedItem as? String ?: PluginSettingsState.DEFAULT_YANDEX_MODEL_ID
+            }
+        }
+
+        // Сохраняем токены в зависимости от провайдера
         val apiKey = apiKeyField.password.concatToString()
-        if (apiKey.isNotBlank()) {
-            settings.saveApiKey(apiKey)
+        val hfToken = hfTokenField.password.concatToString()
+        when (settings.selectedProvider) {
+            PluginSettings.PROVIDER_YANDEX -> {
+                if (apiKey.isNotBlank()) settings.saveApiKey(apiKey)
+            }
+            PluginSettings.PROVIDER_HUGGINGFACE -> {
+                if (hfToken.isNotBlank()) settings.saveHuggingFaceToken(hfToken)
+            }
         }
 
         // Сохраняем остальные настройки
         settings.folderId = folderIdField.text.trim()
-        settings.yandexModelId = modelComboBox.selectedItem as? String ?: PluginSettingsState.DEFAULT_YANDEX_MODEL_ID
 
         // Валидация и сохранение числовых параметров
         try {
@@ -147,11 +194,19 @@ class SettingsConfigurable : Configurable {
         settings.chatUserBorderColor =
             colorToHex(chatUserBorderPanel.selectedColor, PluginSettingsState.DEFAULT_USER_BORDER_COLOR)
 
+        // Флаг отображения имени провайдера в чате
+        settings.showProviderName = showProviderNameCheck.isSelected
+        
+        // Флаг анализа неопределенности
+        settings.enableUncertaintyAnalysis = enableUncertaintyAnalysisCheck.isSelected
+
         initialApiKey = apiKey
         apiKeyLoaded = true
+        initialHFToken = hfToken
+        hfTokenLoaded = true
 
-        // Пересоздаем агента с новыми настройками
-//        service<ru.marslab.ide.ride.service.ChatService>().recreateAgent()
+        // Пересоздаём агента с новыми настройками (моментальная смена LLM в чате)
+        service<ru.marslab.ide.ride.service.ChatService>().recreateAgent()
     }
 
     override fun reset() {
@@ -159,6 +214,9 @@ class SettingsConfigurable : Configurable {
         apiKeyLoaded = false
         initialApiKey = ""
         apiKeyField.text = ""
+        hfTokenLoaded = false
+        initialHFToken = ""
+        hfTokenField.text = ""
         ApplicationManager.getApplication().executeOnPooledThread {
             val key = settings.getApiKey()
             SwingUtilities.invokeLater {
@@ -167,8 +225,24 @@ class SettingsConfigurable : Configurable {
                 apiKeyField.text = key
             }
         }
+        ApplicationManager.getApplication().executeOnPooledThread {
+            val token = settings.getHuggingFaceToken()
+            SwingUtilities.invokeLater {
+                initialHFToken = token
+                hfTokenLoaded = true
+                hfTokenField.text = token
+            }
+        }
         folderIdField.text = settings.folderId
-        modelComboBox.selectedItem = settings.yandexModelId
+        // Устанавливаем верхний выбор: провайдер
+        modelSelectorComboBox.selectedItem = when (settings.selectedProvider) {
+            PluginSettings.PROVIDER_YANDEX -> PluginSettings.PROVIDER_YANDEX
+            PluginSettings.PROVIDER_HUGGINGFACE -> PluginSettings.PROVIDER_HUGGINGFACE
+            else -> PluginSettings.PROVIDER_YANDEX
+        }
+        // Устанавливаем модели
+        hfModelSelectorComboBox.selectedItem = settings.huggingFaceModelId
+        yandexModelSelectorComboBox.selectedItem = settings.yandexModelId
         temperatureField.text = settings.temperature.toString()
         maxTokensField.text = settings.maxTokens.toString()
         chatFontSizeField.text = settings.chatFontSize.toString()
@@ -184,6 +258,8 @@ class SettingsConfigurable : Configurable {
             parseColor(settings.chatUserBackgroundColor, PluginSettingsState.DEFAULT_USER_BACKGROUND_COLOR)
         chatUserBorderPanel.selectedColor =
             parseColor(settings.chatUserBorderColor, PluginSettingsState.DEFAULT_USER_BORDER_COLOR)
+        showProviderNameCheck.isSelected = settings.showProviderName
+        enableUncertaintyAnalysisCheck.isSelected = settings.enableUncertaintyAnalysis
     }
 
     override fun disposeUIResources() {
@@ -199,8 +275,67 @@ class SettingsConfigurable : Configurable {
         return runCatching { Color.decode(value) }.getOrElse { Color.decode(fallbackHex) }
     }
 
-    private fun createLlmConfigPanel(): DialogPanel = panel {
-        group("Yandex GPT Configuration") {
+    private fun createLlmConfigPanel(): DialogPanel {
+        // Верхний комбобокс: только провайдеры
+        val topEntries: List<String> = buildList {
+            add(PluginSettings.PROVIDER_YANDEX)
+            add(PluginSettings.PROVIDER_HUGGINGFACE)
+        }
+        modelSelectorComboBox = ComboBox(topEntries.toTypedArray()).apply {
+            renderer = object : javax.swing.DefaultListCellRenderer() {
+                override fun getListCellRendererComponent(
+                    list: javax.swing.JList<*>,
+                    value: Any?,
+                    index: Int,
+                    isSelected: Boolean,
+                    cellHasFocus: Boolean
+                ): java.awt.Component {
+                    val component = super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus)
+                    val key = value as? String
+                    text = PluginSettings.AVAILABLE_PROVIDERS[key] ?: key.orEmpty()
+                    return component
+                }
+            }
+        }
+
+        // Комбобокс для выбора моделей HuggingFace
+        hfModelSelectorComboBox = ComboBox(PluginSettings.AVAILABLE_HUGGINGFACE_MODELS.keys.toTypedArray()).apply {
+            renderer = object : javax.swing.DefaultListCellRenderer() {
+                override fun getListCellRendererComponent(
+                    list: javax.swing.JList<*>,
+                    value: Any?,
+                    index: Int,
+                    isSelected: Boolean,
+                    cellHasFocus: Boolean
+                ): java.awt.Component {
+                    val component = super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus)
+                    val key = value as? String
+                    text = PluginSettings.AVAILABLE_HUGGINGFACE_MODELS[key] ?: key.orEmpty()
+                    return component
+                }
+            }
+        }
+
+        // Комбобокс для выбора моделей Yandex
+        yandexModelSelectorComboBox = ComboBox(PluginSettings.AVAILABLE_YANDEX_MODELS.keys.toTypedArray()).apply {
+            renderer = object : javax.swing.DefaultListCellRenderer() {
+                override fun getListCellRendererComponent(
+                    list: javax.swing.JList<*>,
+                    value: Any?,
+                    index: Int,
+                    isSelected: Boolean,
+                    cellHasFocus: Boolean
+                ): java.awt.Component {
+                    val component = super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus)
+                    val key = value as? String
+                    text = PluginSettings.AVAILABLE_YANDEX_MODELS[key] ?: key.orEmpty()
+                    return component
+                }
+            }
+        }
+
+        // Подпанель Yandex
+        val yandexSubPanel: DialogPanel = panel {
             row("API Key:") {
                 apiKeyField = JBPasswordField()
                 cell(apiKeyField)
@@ -216,37 +351,89 @@ class SettingsConfigurable : Configurable {
             }
 
             row("Model:") {
-                modelComboBox = comboBox(PluginSettings.AVAILABLE_YANDEX_MODELS.keys.toList())
-                    .applyToComponent {
-                        renderer = object : javax.swing.DefaultListCellRenderer() {
-                            override fun getListCellRendererComponent(
-                                list: javax.swing.JList<*>,
-                                value: Any?,
-                                index: Int,
-                                isSelected: Boolean,
-                                cellHasFocus: Boolean
-                            ): java.awt.Component {
-                                val component = super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus)
-                                val key = value as? String
-                                text = PluginSettings.AVAILABLE_YANDEX_MODELS[key] ?: key.orEmpty()
-                                return component
-                            }
-                        }
-                    }
-                    .component
+                cell(yandexModelSelectorComboBox)
+                    .align(Align.FILL)
+                    .resizableColumn()
+                    .comment("Выберите модель Yandex GPT")
+            }
+
+            row {
+                comment(
+                    """
+                    Как получить API ключ:
+                    1. Перейдите в Yandex Cloud Console
+                    2. Создайте API ключ в разделе "Сервисные аккаунты"
+                    3. Скопируйте Folder ID из настроек проекта
+                """.trimIndent()
+                )
             }
         }
 
-        row {
-            comment(
-                """
-                Как получить API ключ:
-                1. Перейдите в Yandex Cloud Console
-                2. Создайте API ключ в разделе "Сервисные аккаунты"
-                3. Скопируйте Folder ID из настроек проекта
-            """.trimIndent()
-            )
+        // Подпанель Hugging Face
+        val hfSubPanel: DialogPanel = panel {
+            row("Token:") {
+                hfTokenField = JBPasswordField()
+                cell(hfTokenField)
+                    .columns(COLUMNS_LARGE)
+                    .comment("Токен Hugging Face (Settings -> Access Tokens -> New token)")
+            }
+            row("Model:") {
+                cell(hfModelSelectorComboBox)
+                    .align(Align.FILL)
+                    .resizableColumn()
+                    .comment("Выберите модель HuggingFace")
+            }
+            row {
+                comment(
+                    """
+                    Подсказка: используйте токен Hugging Face с правами access inference API.
+                    Все модели доступны через HuggingFace Router API.
+                """.trimIndent()
+                )
+            }
         }
+
+        // CardLayout со вложенными подпанелями
+        val cardPanel = JPanel(CardLayout())
+        val CARD_YANDEX = PluginSettings.PROVIDER_YANDEX
+        val CARD_HF = PluginSettings.PROVIDER_HUGGINGFACE
+        cardPanel.add(yandexSubPanel, CARD_YANDEX)
+        cardPanel.add(hfSubPanel, CARD_HF)
+
+        fun updateCard() {
+            val layout = cardPanel.layout as CardLayout
+            val selected = modelSelectorComboBox.selectedItem as? String
+            when (selected) {
+                PluginSettings.PROVIDER_YANDEX -> {
+                    layout.show(cardPanel, CARD_YANDEX)
+                }
+                PluginSettings.PROVIDER_HUGGINGFACE -> {
+                    layout.show(cardPanel, CARD_HF)
+                }
+                else -> {
+                    layout.show(cardPanel, CARD_YANDEX)
+                }
+            }
+        }
+        modelSelectorComboBox.addActionListener { updateCard() }
+
+        // Основная панель вкладки LlmConfig
+        val root = panel {
+            row("Provider / Model:") {
+                cell(modelSelectorComboBox)
+                    .align(Align.FILL)
+                    .resizableColumn()
+            }
+            row { cell(cardPanel).align(Align.FILL) }
+            row {
+                showProviderNameCheck = JBCheckBox("Показывать имя модели рядом с Агент")
+                cell(showProviderNameCheck)
+            }
+        }
+
+        // Инициализируем карточку
+        SwingUtilities.invokeLater { updateCard() }
+        return root
     }
 
     private fun createChatAppearancePanel(): DialogPanel = panel {
@@ -315,6 +502,12 @@ class SettingsConfigurable : Configurable {
                 cell(maxTokensField)
                     .columns(10)
                     .comment("Максимальное количество токенов в ответе")
+            }
+            
+            row {
+                enableUncertaintyAnalysisCheck = JBCheckBox("Включить анализ неопределенности")
+                cell(enableUncertaintyAnalysisCheck)
+                    .comment("Если включено, агент будет задавать уточняющие вопросы при неопределенности > 0.1")
             }
         }
     }

@@ -4,6 +4,7 @@ import com.intellij.credentialStore.CredentialAttributes
 import com.intellij.credentialStore.Credentials
 import com.intellij.ide.passwordSafe.PasswordSafe
 import com.intellij.openapi.components.*
+import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceModel
 import java.util.LinkedHashMap
 
 /**
@@ -30,6 +31,33 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
         this.state = state
         ensureDefaults()
     }
+    
+    /**
+     * Показывать ли имя провайдера рядом с "Агент" в сообщениях
+     */
+    var showProviderName: Boolean
+        get() = state.showProviderName
+        set(value) {
+            state.showProviderName = value
+        }
+    
+    /**
+     * Включить анализ неопределенности в системном промпте
+     */
+    var enableUncertaintyAnalysis: Boolean
+        get() = state.enableUncertaintyAnalysis
+        set(value) {
+            state.enableUncertaintyAnalysis = value
+        }
+    
+    /**
+     * Выбранный провайдер LLM
+     */
+    var selectedProvider: String
+        get() = state.selectedProvider
+        set(value) {
+            state.selectedProvider = value
+        }
     
     /**
      * Folder ID для Yandex GPT
@@ -129,6 +157,15 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
         set(value) {
             state.yandexModelId = normalizeModelId(value)
         }
+
+    /**
+     * Текущий идентификатор модели HuggingFace для генерации
+     */
+    var huggingFaceModelId: String
+        get() = state.huggingFaceModelId
+        set(value) {
+            state.huggingFaceModelId = normalizeHuggingFaceModelId(value)
+        }
     
     /**
      * Сохраняет API ключ в безопасном хранилище
@@ -152,6 +189,23 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
     }
     
     /**
+     * Сохраняет токен Hugging Face в безопасном хранилище
+     */
+    fun saveHuggingFaceToken(token: String) {
+        val attributes = createHFCredentialAttributes()
+        val credentials = Credentials(HF_TOKEN_USERNAME, token)
+        PasswordSafe.instance.set(attributes, credentials)
+    }
+
+    /**
+     * Получает токен Hugging Face из безопасного хранилища
+     */
+    fun getHuggingFaceToken(): String {
+        val attributes = createHFCredentialAttributes()
+        return PasswordSafe.instance.getPassword(attributes) ?: ""
+    }
+
+    /**
      * Удаляет API ключ из хранилища
      */
     fun clearApiKey() {
@@ -162,10 +216,14 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
     /**
      * Проверяет, настроен ли плагин
      * 
-     * @return true если API ключ и Folder ID заданы
+     * @return true если требуемые поля для выбранного провайдера заданы
      */
     fun isConfigured(): Boolean {
-        return getApiKey().isNotBlank() && folderId.isNotBlank()
+        return when (selectedProvider) {
+            PROVIDER_YANDEX -> getApiKey().isNotBlank() && folderId.isNotBlank()
+            PROVIDER_HUGGINGFACE -> getHuggingFaceToken().isNotBlank()
+            else -> false
+        }
     }
     
     /**
@@ -177,18 +235,34 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
             userName = API_KEY_USERNAME
         )
     }
+    private fun createHFCredentialAttributes(): CredentialAttributes {
+        return CredentialAttributes(
+            serviceName = HF_SERVICE_NAME,
+            userName = HF_TOKEN_USERNAME
+        )
+    }
     
     companion object {
         private const val SERVICE_NAME = "ru.marslab.ide.ride.yandexgpt"
         private const val API_KEY_USERNAME = "api_key"
+        private const val HF_SERVICE_NAME = "ru.marslab.ide.ride.huggingface"
+        private const val HF_TOKEN_USERNAME = "hf_token"
         private val COLOR_REGEX = Regex("^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
+        val AVAILABLE_PROVIDERS: LinkedHashMap<String, String> = linkedMapOf(
+            PROVIDER_YANDEX to "Yandex",
+            PROVIDER_HUGGINGFACE to "HuggingFace"
+        )
         val AVAILABLE_YANDEX_MODELS: LinkedHashMap<String, String> = linkedMapOf(
             "yandexgpt-lite" to "YandexGPT Lite",
             "yandexgpt" to "YandexGPT",
-//            "qwen3-235b-a22b-fp8" to "Qwen3 235B (fp8)",
-//            "gpt-oss-120b" to "GPT-OSS 120B",
-//            "gpt-oss-20b" to "GPT-OSS 20B"
         )
+        val AVAILABLE_HUGGINGFACE_MODELS: LinkedHashMap<String, String> = linkedMapOf(
+            HuggingFaceModel.DEEPSEEK_R1.modelId to HuggingFaceModel.DEEPSEEK_R1.displayName,
+            HuggingFaceModel.DEEPSEEK_TERMINUS.modelId to HuggingFaceModel.DEEPSEEK_TERMINUS.displayName,
+            HuggingFaceModel.OPENBUDDY_LLAMA3.modelId to HuggingFaceModel.OPENBUDDY_LLAMA3.displayName
+        )
+        const val PROVIDER_YANDEX = "YandexGPT"
+        const val PROVIDER_HUGGINGFACE = "HuggingFace"
     }
 
     private fun ensureDefaults() {
@@ -200,6 +274,10 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
         state.chatUserBackgroundColor = normalizeColor(state.chatUserBackgroundColor, PluginSettingsState.DEFAULT_USER_BACKGROUND_COLOR)
         state.chatUserBorderColor = normalizeColor(state.chatUserBorderColor, PluginSettingsState.DEFAULT_USER_BORDER_COLOR)
         state.yandexModelId = normalizeModelId(state.yandexModelId)
+        state.huggingFaceModelId = normalizeHuggingFaceModelId(state.huggingFaceModelId)
+        if (!AVAILABLE_PROVIDERS.containsKey(state.selectedProvider)) {
+            state.selectedProvider = PluginSettingsState.DEFAULT_PROVIDER
+        }
     }
 
     private fun normalizeColor(value: String?, default: String): String {
@@ -210,5 +288,10 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
     private fun normalizeModelId(value: String?): String {
         val normalized = value?.trim().orEmpty()
         return if (AVAILABLE_YANDEX_MODELS.containsKey(normalized)) normalized else PluginSettingsState.DEFAULT_YANDEX_MODEL_ID
+    }
+
+    private fun normalizeHuggingFaceModelId(value: String?): String {
+        val normalized = value?.trim().orEmpty()
+        return if (AVAILABLE_HUGGINGFACE_MODELS.containsKey(normalized)) normalized else PluginSettingsState.DEFAULT_HUGGINGFACE_MODEL_ID
     }
 }

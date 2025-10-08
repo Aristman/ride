@@ -10,6 +10,7 @@ import com.intellij.util.ui.JBUI
 import ru.marslab.ide.ride.service.ChatService
 import ru.marslab.ide.ride.ui.config.ChatPanelConfig
 import ru.marslab.ide.ride.ui.manager.HtmlDocumentManager
+import ru.marslab.ide.ride.ui.ChatPanel
 import java.awt.BorderLayout
 import java.awt.Dimension
 import java.awt.event.KeyAdapter
@@ -21,7 +22,8 @@ import javax.swing.*
  */
 class ChatUiBuilder(
     private val chatService: ChatService,
-    private val htmlDocumentManager: HtmlDocumentManager
+    private val htmlDocumentManager: HtmlDocumentManager,
+    private var chatPanel: (() -> ChatPanel)? = null
 ) {
 
     /**
@@ -39,7 +41,8 @@ class ChatUiBuilder(
             val sessions = chatService.getSessions()
             if (idx in sessions.indices) {
                 if (chatService.switchSession(sessions[idx].id)) {
-                    // В будущем можно добавить обновление внешнего вида
+                    // Обновляем отображение сообщений для новой сессии
+                    chatPanel?.invoke()?.refreshAppearance()
                 }
             }
         }

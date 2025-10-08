@@ -1,4 +1,4 @@
-package ru.marslab.ide.ride.integration.llm.impl
+package ru.marslab.ide.ride.integration.llm.model
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable

@@ -21,21 +21,29 @@ dependencies {
     intellijPlatform {
         create("IC", "2024.3")
         testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Platform)
-        
+
         // Добавляем JetBrains Runtime с JCEF поддержкой
         jetbrainsRuntime()
 
         // Add necessary plugin dependencies for compilation here, example:
         // bundledPlugin("com.intellij.java")
+
+        // Отключаем проблемные плагины для избежания конфликта версий Java
+        // excludePlugin не поддерживается в этой версии, используем другой подход
     }
-    
+
+    // Временно исключаем Gradle plugin для обхода ошибки
+    // implementation("org.jetbrains.plugins.gradle:org.jetbrains.plugins.gradle.gradle-java-extensions.gradle") {
+    //     exclude(group = "org.jetbrains.plugins.gradle", module = "gradle-jvm-compatibility")
+    // }
+
     // Kotlinx Serialization (для JSON, БЕЗ Ktor)
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.2")
 
     // XML serialization via xmlutil (kotlinx-serialization-xml)
     implementation("io.github.pdvrieze.xmlutil:core:0.86.3")
     implementation("io.github.pdvrieze.xmlutil:serialization:0.86.3")
-    
+
     // Testing
     testImplementation("org.jetbrains.kotlin:kotlin-test")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
@@ -62,6 +70,13 @@ tasks {
     withType<JavaCompile> {
         sourceCompatibility = "21"
         targetCompatibility = "21"
+    }
+
+    // Add system properties to workaround Gradle JVM compatibility issue
+    runIde {
+        jvmArgs("-Didea.ignore.disabled.plugins=true",
+                "-Dgradle-jvm-compatibility.disabled=true",
+                "-Dcom.intellij.gradle.jvm.support.skip=true")
     }
 }
 

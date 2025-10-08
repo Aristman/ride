@@ -47,6 +47,9 @@
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-compatibility.html -->
     <depends>com.intellij.modules.platform</depends>
 
+    <!-- Exclude problematic plugins that cause startup issues -->
+    <depends optional="true" config-file="gradle-exclude.xml">com.intellij.gradle</depends>
+
     <!-- Extension points defined by the plugin.
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-extension-points.html -->
     <extensions defaultExtensionNs="com.intellij">
@@ -84,7 +87,11 @@
             <action id="Ride.NewSessionAction"
                     class="ru.marslab.ide.ride.actions.NewSessionAction"
                     text="New Session"
-                    description="Clear current chat session"/>
+                    description="Start a new chat session"/>
+            <action id="Ride.ReloadSessionAction"
+                    class="ru.marslab.ide.ride.actions.ReloadSessionAction"
+                    text="Reload"
+                    description="Reload current chat session"/>
             <action id="Ride.OpenSettingsAction"
                     class="ru.marslab.ide.ride.actions.OpenSettingsAction"
                     text="Settings"

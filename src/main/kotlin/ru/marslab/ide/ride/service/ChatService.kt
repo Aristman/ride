@@ -2,13 +2,18 @@ package ru.marslab.ide.ride.service
 
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.components.Service
+import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import kotlinx.coroutines.*
 import ru.marslab.ide.ride.agent.Agent
 import ru.marslab.ide.ride.agent.AgentFactory
+import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceProvider
+import ru.marslab.ide.ride.integration.llm.impl.YandexGPTProvider
 import ru.marslab.ide.ride.model.*
 import ru.marslab.ide.ride.model.ChatSession
+import ru.marslab.ide.ride.settings.PluginSettings
+import ru.marslab.ide.ride.util.TokenEstimator
 import java.time.Instant
 
 /**
@@ -32,8 +37,8 @@ class ChatService {
     private var currentFormat: ResponseFormat? = null
     private var currentSchema: ResponseSchema? = null
 
-    // Агент создается лениво при первом использовании
-    private val agent: Agent by lazy { AgentFactory.createChatAgent() }
+    // Агент создаётся и может быть пересоздан при смене настроек
+    private var agent: Agent = AgentFactory.createChatAgent()
 
     /**
      * Отправляет сообщение пользователя и получает ответ от агента
@@ -87,16 +92,36 @@ class ChatService {
                     history = getCurrentHistory().getMessages()
                 )
 
-                // Отправляем запрос агенту
-                val agentResponse = agent.processRequest(userMessage, context)
+                // Получаем параметры из настроек
+                val settings = service<PluginSettings>()
+                val llmParameters = LLMParameters(
+                    temperature = settings.temperature,
+                    maxTokens = settings.maxTokens
+                )
+
+                // Измеряем время выполнения запроса к LLM
+                val startTime = System.currentTimeMillis()
+                val agentResponse = agent.processRequest(userMessage, context, llmParameters)
+                val responseTime = System.currentTimeMillis() - startTime
 
                 // Обрабатываем ответ в UI потоке
                 withContext(Dispatchers.EDT) {
                     if (agentResponse.success) {
+                        // Получаем количество токенов из ответа или оцениваем приблизительно
+                        val tokensFromResponse = agentResponse.metadata["tokensUsed"] as? Int ?: 0
+                        val tokensUsed = if (tokensFromResponse > 0) {
+                            tokensFromResponse
+                        } else {
+                            // Оцениваем токены по размеру запроса и ответа
+                            TokenEstimator.estimateTotalTokens(userMessage, agentResponse.content)
+                        }
+                        
                         // Создаем и сохраняем сообщение ассистента с учетом анализа неопределенности
                         val metadata = agentResponse.metadata + mapOf(
                             "isFinal" to agentResponse.isFinal,
-                            "uncertainty" to (agentResponse.uncertainty ?: 0.0)
+                            "uncertainty" to (agentResponse.uncertainty ?: 0.0),
+                            "responseTimeMs" to responseTime,
+                            "tokensUsed" to tokensUsed
                         )
 
                         val assistantMsg = Message(
@@ -140,15 +165,20 @@ class ChatService {
      */
     fun isHistoryEmpty(): Boolean = getCurrentHistory().isEmpty()
 
-//    /**
-//     * Пересоздает агента с новыми настройками
-//     *
-//     * Вызывается после изменения настроек плагина
-//     */
-//    fun recreateAgent() {
-//        logger.info("Recreating agent with new settings")
-//        agent = null
-//    }
+    /**
+     * Пересоздаёт агента с новыми настройками
+     * Вызывается после изменения настроек плагина
+     */
+    fun recreateAgent() {
+        logger.info("Recreating agent with new settings")
+        val previousFormat = currentFormat
+        val previousSchema = currentSchema
+        agent = AgentFactory.createChatAgent()
+        // Восстановим формат ответа, если был задан
+        if (previousFormat != null) {
+            agent.setResponseFormat(previousFormat, previousSchema)
+        }
+    }
 
     /**
      * Устанавливает формат ответа для текущего агента
@@ -211,6 +241,19 @@ class ChatService {
     fun dispose() {
         logger.info("Disposing ChatService")
         scope.cancel()
+    }
+
+    /**
+     * Возвращает имя текущего провайдера LLM
+     * Для HuggingFace возвращает имя модели, для Yandex - "Yandex GPT (имя модели)"
+     */
+    fun getCurrentProviderName(): String {
+        val provider = agent.getLLMProvider()
+        return when (provider) {
+            is HuggingFaceProvider -> provider.getModelDisplayName()
+            is YandexGPTProvider -> "${provider.getProviderName()} (${provider.getModelDisplayName()})"
+            else -> provider.getProviderName()
+        }
     }
 
     // --- Sessions API ---

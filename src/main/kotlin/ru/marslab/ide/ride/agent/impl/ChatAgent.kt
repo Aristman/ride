@@ -1,5 +1,6 @@
 package ru.marslab.ide.ride.agent.impl
 
+import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.Logger
 import ru.marslab.ide.ride.agent.Agent
 import ru.marslab.ide.ride.agent.UncertaintyAnalyzer
@@ -20,6 +21,7 @@ import ru.marslab.ide.ride.model.UncertaintyResponseSchema
 import ru.marslab.ide.ride.model.XmlResponseData
 import ru.marslab.ide.ride.model.JsonResponseData
 import ru.marslab.ide.ride.model.TextResponseData
+import ru.marslab.ide.ride.settings.PluginSettings
 import ru.marslab.ide.ride.ui.ResponseFormatter.formatJsonResponseData
 import ru.marslab.ide.ride.ui.ResponseFormatter.formatXmlResponseData
 
@@ -42,7 +44,11 @@ class ChatAgent(
 
     private val logger = Logger.getInstance(ChatAgent::class.java)
 
-    override suspend fun processRequest(request: String, context: ChatContext): AgentResponse {
+    override suspend fun processRequest(
+        request: String, 
+        context: ChatContext, 
+        parameters: LLMParameters
+    ): AgentResponse {
 
         // Проверяем доступность провайдера
         if (!llmProvider.isAvailable()) {
@@ -54,18 +60,20 @@ class ChatAgent(
         }
 
         return try {
+            val settings = service<PluginSettings>()
+            
             // Системный промпт (опционально расширяем инструкциями формата)
             val systemPromptForRequest = buildSystemPrompt()
 
             // Полная история диалога для контекста
             val conversationHistory = buildConversationHistory(context)
 
-            // Делегируем запрос в LLM провайдер
+            // Делегируем запрос в LLM провайдер с переданными параметрами
             val llmResponse = llmProvider.sendRequest(
                 systemPrompt = systemPromptForRequest,
                 userMessage = request,
                 conversationHistory = conversationHistory,
-                parameters = LLMParameters.DEFAULT
+                parameters = parameters
             )
 
             // Проверяем успешность ответа
@@ -76,27 +84,36 @@ class ChatAgent(
                 )
             }
 
-            // Парсим ответ если задан формат
-            val parsedResponse = responseSchema?.parseResponse(llmResponse.content)
+            // Парсим ответ если задан формат и включен анализ неопределенности
+            val parsedResponse = if (settings.enableUncertaintyAnalysis) {
+                responseSchema?.parseResponse(llmResponse.content)
+            } else {
+                null
+            }
 
             // Анализируем неопределенность ответа из распарсенных данных или из сырого текста
-            val (uncertainty, isFinal) = when (val parsed = parsedResponse) {
-                is XmlResponseData -> {
-                    // Берем данные из распарсенного XML
-                    Pair(parsed.uncertainty, parsed.isFinal)
-                }
+            val (uncertainty, isFinal) = if (settings.enableUncertaintyAnalysis) {
+                when (val parsed = parsedResponse) {
+                    is XmlResponseData -> {
+                        // Берем данные из распарсенного XML
+                        Pair(parsed.uncertainty, parsed.isFinal)
+                    }
 
-                is JsonResponseData -> {
-                    // Берем данные из распарсенного JSON
-                    Pair(parsed.uncertainty, parsed.isFinal)
-                }
+                    is JsonResponseData -> {
+                        // Берем данные из распарсенного JSON
+                        Pair(parsed.uncertainty, parsed.isFinal)
+                    }
 
-                else -> {
-                    // Анализируем из сырого текста
-                    val uncertainty = UncertaintyAnalyzer.analyzeUncertainty(llmResponse.content, context)
-                    val isFinal = UncertaintyAnalyzer.isFinalResponse(uncertainty)
-                    Pair(uncertainty, isFinal)
+                    else -> {
+                        // Анализируем из сырого текста
+                        val uncertainty = UncertaintyAnalyzer.analyzeUncertainty(llmResponse.content, context)
+                        val isFinal = UncertaintyAnalyzer.isFinalResponse(uncertainty)
+                        Pair(uncertainty, isFinal)
+                    }
                 }
+            } else {
+                // Без анализа неопределенности - всегда финальный ответ с нулевой неопределенностью
+                Pair(0.0, true)
             }
 
             // Собираем метаданные ответа
@@ -111,11 +128,13 @@ class ChatAgent(
 
             // Добавляем информацию о неопределенности
             baseMetadata["uncertainty"] = uncertainty
-            baseMetadata["hasClarifyingQuestions"] = UncertaintyAnalyzer.hasExplicitUncertainty(llmResponse.content)
+            if (settings.enableUncertaintyAnalysis) {
+                baseMetadata["hasClarifyingQuestions"] = UncertaintyAnalyzer.hasExplicitUncertainty(llmResponse.content)
+            }
 
-            // Если парсинг не удался, возвращаем ошибку
+            // Если парсинг не удался (только при включенном анализе неопределенности), возвращаем ошибку
             val currentSchema = responseSchema
-            if (currentSchema != null && parsedResponse == null) {
+            if (settings.enableUncertaintyAnalysis && currentSchema != null && parsedResponse == null) {
                 logger.warn("Failed to parse response with format ${currentSchema.format}")
                 val errorContent = buildString {
                     appendLine("⚠️ **Ошибка парсинга ответа:** Не удалось распарсить ответ в формате ${currentSchema.format}")
@@ -203,8 +222,13 @@ class ChatAgent(
      * добавляет инструкции по формату в системный промпт.
      */
     private fun buildSystemPrompt(): String {
-        val base = systemPrompt
-        return if (responseSchema != null) {
+        val settings = service<PluginSettings>()
+        val base = if (settings.enableUncertaintyAnalysis) {
+            systemPrompt
+        } else {
+            SIMPLE_SYSTEM_PROMPT
+        }
+        return if (responseSchema != null && settings.enableUncertaintyAnalysis) {
             PromptFormatter.formatPrompt(base, responseSchema)
         } else base
     }
@@ -227,6 +251,9 @@ class ChatAgent(
     companion object {
         private const val HISTORY_LIMIT = 5
 
+        /**
+         * Системный промпт с анализом неопределенности
+         */
         private val DEFAULT_SYSTEM_PROMPT = """
 Ты - AI-ассистент для разработчиков в IntelliJ IDEA.
 Твоя задача - помогать программистам с их вопросами о коде, отладке и разработке.
@@ -249,6 +276,18 @@ class ChatAgent(
 - Если неопределенность ≤ 0.1: isFinal=true и дай полный ответ в message
 - В message можно использовать markdown, но спецсимволы HTML должны быть экранированы
 - Будь дружелюбным и профессиональным
+     """.trimIndent()
+        
+        /**
+         * Упрощенный системный промпт без анализа неопределенности
+         */
+        private val SIMPLE_SYSTEM_PROMPT = """
+Ты - AI-ассистент для разработчиков в IntelliJ IDEA.
+Твоя задача - помогать программистам с их вопросами о коде, отладке и разработке.
+
+Отвечай четко и по существу, без лишних рассуждений.
+Используй markdown для форматирования, но экранируй спецсимволы HTML.
+Будь дружелюбным и профессиональным.
      """.trimIndent()
     }
 }

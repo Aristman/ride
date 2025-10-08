@@ -2,10 +2,12 @@ package ru.marslab.ide.ride.ui.manager
 
 import ru.marslab.ide.ride.model.Message
 import ru.marslab.ide.ride.model.MessageRole
-import ru.marslab.ide.ride.ui.chat.JcefChatView
 import ru.marslab.ide.ride.ui.config.ChatPanelConfig
 import ru.marslab.ide.ride.ui.renderer.ChatContentRenderer
 import java.util.*
+import com.intellij.openapi.components.service
+import ru.marslab.ide.ride.settings.PluginSettings
+import ru.marslab.ide.ride.service.ChatService
 
 /**
  * Управляет отображением сообщений в чате
@@ -18,6 +20,7 @@ class MessageDisplayManager(
     private var lastRole: MessageRole? = null
     private val codeBlockRegistry = LinkedHashMap<String, String>()
     private val jcefView = htmlDocumentManager.getJcefView()
+    private val settings = service<PluginSettings>()
 
     /**
      * Отображает сообщение в чате
@@ -40,8 +43,7 @@ class MessageDisplayManager(
         val htmlContent = contentRenderer.createSystemMessageHtml(text, isLoading)
 
         if (isLoading) {
-            val range = htmlDocumentManager.appendHtmlWithRange(htmlContent)
-            // В будущем можно добавить отслеживание диапазона для удаления
+            htmlDocumentManager.appendHtmlWithRange(htmlContent)
         } else {
             htmlDocumentManager.appendHtml(htmlContent)
         }
@@ -124,6 +126,7 @@ class MessageDisplayManager(
     private fun createAssistantPrefix(message: Message): String {
         val isFinal = message.metadata["isFinal"] as? Boolean ?: true
         val uncertainty = message.metadata["uncertainty"] as? Double ?: 0.0
+        val providerName = runCatching { service<ChatService>().getCurrentProviderName() }.getOrDefault("")
 
         val indicator = when {
             !isFinal -> ChatPanelConfig.Icons.QUESTION
@@ -131,23 +134,32 @@ class MessageDisplayManager(
             else -> ChatPanelConfig.Icons.SUCCESS
         }
 
-        return "$indicator ${ChatPanelConfig.Icons.ASSISTANT} ${ChatPanelConfig.Prefixes.ASSISTANT}"
+        val providerSuffix = if (settings.showProviderName && providerName.isNotBlank()) " ($providerName)" else ""
+        return "$indicator ${ChatPanelConfig.Icons.ASSISTANT} ${ChatPanelConfig.Prefixes.ASSISTANT}$providerSuffix"
     }
 
     /**
      * Создает HTML для статусной строки сообщения ассистента
      */
     private fun createAssistantStatusHtml(message: Message): String {
+        // Проверяем, включен ли анализ неопределенности
+        val enableUncertaintyAnalysis = settings.enableUncertaintyAnalysis
+        
         val isFinal = message.metadata["isFinal"] as? Boolean ?: true
         val uncertainty = message.metadata["uncertainty"] as? Double ?: 0.0
         val wasParsed = message.metadata["parsedData"] as? Boolean ?: false
         val hasClarifyingQuestions = message.metadata["hasClarifyingQuestions"] as? Boolean ?: false
+        val responseTimeMs = message.metadata["responseTimeMs"] as? Long
+        val tokensUsed = message.metadata["tokensUsed"] as? Int
 
         return contentRenderer.createStatusHtml(
             isFinal = isFinal,
             uncertainty = uncertainty,
             wasParsed = wasParsed,
-            hasClarifyingQuestions = hasClarifyingQuestions
+            hasClarifyingQuestions = hasClarifyingQuestions,
+            responseTimeMs = responseTimeMs,
+            tokensUsed = tokensUsed,
+            showUncertaintyStatus = enableUncertaintyAnalysis
         )
     }
 

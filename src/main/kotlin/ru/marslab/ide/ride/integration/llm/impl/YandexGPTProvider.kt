@@ -5,6 +5,10 @@ import kotlinx.coroutines.delay
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import ru.marslab.ide.ride.integration.llm.LLMProvider
+import ru.marslab.ide.ride.integration.llm.model.CompletionOptions
+import ru.marslab.ide.ride.integration.llm.model.YandexGPTRequest
+import ru.marslab.ide.ride.integration.llm.model.YandexGPTResponse
+import ru.marslab.ide.ride.integration.llm.model.YandexMessage
 import ru.marslab.ide.ride.model.LLMParameters
 import ru.marslab.ide.ride.model.LLMResponse
 import ru.marslab.ide.ride.model.ConversationMessage
@@ -16,12 +20,37 @@ import java.net.http.HttpResponse
 import java.time.Duration
 
 /**
+ * Доступные модели Yandex GPT
+ */
+enum class YandexModel(
+    val modelId: String,
+    val displayName: String
+) {
+    YANDEXGPT_LITE(
+        modelId = "yandexgpt-lite",
+        displayName = "YandexGPT Lite"
+    ),
+    YANDEXGPT(
+        modelId = "yandexgpt",
+        displayName = "YandexGPT"
+    );
+
+    companion object {
+        fun fromModelId(modelId: String): YandexModel? {
+            return entries.find { it.modelId == modelId }
+        }
+
+        fun getAll(): List<YandexModel> = entries.toList()
+    }
+}
+
+/**
  * Конфигурация для Yandex GPT Provider
  */
 data class YandexGPTConfig(
     val apiKey: String,
     val folderId: String,
-    val modelId: String = "yandexgpt-lite",
+    val modelId: String = YandexModel.YANDEXGPT_LITE.modelId,
     val modelUri: String = "gpt://$folderId/${modelId}/latest",
     val timeout: Long = 60000 // 60 секунд
 )
@@ -71,7 +100,14 @@ class YandexGPTProvider(
         return config.apiKey.isNotBlank() && config.folderId.isNotBlank()
     }
     
-    override fun getProviderName(): String = "Yandex GPT"
+    override fun getProviderName(): String = "Yandex"
+
+    /**
+     * Возвращает отображаемое имя модели для UI
+     */
+    fun getModelDisplayName(): String {
+        return YandexModel.fromModelId(config.modelId)?.displayName ?: config.modelId
+    }
     
     /**
      * Строит запрос к Yandex GPT API

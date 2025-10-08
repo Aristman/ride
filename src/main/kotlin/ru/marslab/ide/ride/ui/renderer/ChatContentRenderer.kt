@@ -44,7 +44,6 @@ class ChatContentRenderer {
         // 3. Обрабатываем markdown-элементы (включая инлайн-код `text`)
         result = markdownProcessor.processMarkdown(result, isJcefMode)
 
-        println("DEBUG: Final rendered HTML length: ${result.length}")
         println("DEBUG: Final rendered HTML preview: ${result.take(300)}...")
 
         return result
@@ -57,8 +56,33 @@ class ChatContentRenderer {
         isFinal: Boolean,
         uncertainty: Double,
         wasParsed: Boolean,
-        hasClarifyingQuestions: Boolean
+        hasClarifyingQuestions: Boolean,
+        responseTimeMs: Long? = null,
+        tokensUsed: Int? = null,
+        showUncertaintyStatus: Boolean = true
     ): String {
+        // Формируем метрики
+        val metricsHtml = buildString {
+            if (responseTimeMs != null || tokensUsed != null) {
+                append("<span class='metrics'>")
+                if (responseTimeMs != null) {
+                    val timeSeconds = responseTimeMs / 1000.0
+                    append("⏱️ ${String.format("%.2f", timeSeconds)}s")
+                }
+                if (tokensUsed != null && tokensUsed > 0) {
+                    if (responseTimeMs != null) append(" | ")
+                    append("🔢 ${tokensUsed} токенов")
+                }
+                append("</span>")
+            }
+        }
+        
+        // Если анализ неопределенности выключен, показываем только метрики с пробелом для сохранения высоты
+        if (!showUncertaintyStatus) {
+            return "<div class='status status-final'>&nbsp;$metricsHtml</div>"
+        }
+        
+        // Иначе показываем полный статус с неопределенностью
         val actualUncertainty = uncertainty
         val uncertaintyPercent = (actualUncertainty * 100).toInt()
 
@@ -87,7 +111,7 @@ class ChatContentRenderer {
         // Добавляем иконку в зависимости от статуса парсинга
         val icon = if (!wasParsed) ChatPanelConfig.Icons.WARNING else ChatPanelConfig.Icons.COPY
 
-        return "<div class='status $statusClass'>$icon $statusText</div>"
+        return "<div class='status $statusClass'>$icon $statusText $metricsHtml</div>"
     }
 
     /**
