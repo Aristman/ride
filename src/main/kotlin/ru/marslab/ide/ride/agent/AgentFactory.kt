@@ -9,6 +9,7 @@ import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceConfig
 import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceProvider
 import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceModel
 import ru.marslab.ide.ride.settings.PluginSettings
+import ru.marslab.ide.ride.model.AgentSettings
 import ru.marslab.ide.ride.model.ResponseFormat
 import ru.marslab.ide.ride.model.ResponseSchema
 
@@ -46,10 +47,20 @@ object AgentFactory {
         }
 
         // Создаем агента с провайдером
-        return ChatAgent(
-            llmProvider = llmProvider,
+        val agent = ChatAgent(
+            initialProvider = llmProvider,
 //            systemPrompt = settings.systemPrompt
         )
+        
+        // Применяем настройки
+        val agentSettings = AgentSettings(
+            llmProvider = llmProvider.getProviderName(),
+            defaultResponseFormat = ResponseFormat.XML,
+            mcpEnabled = false
+        )
+        agent.updateSettings(agentSettings)
+        
+        return agent
     }
     
     /**
@@ -61,7 +72,7 @@ object AgentFactory {
      * @return Агент с указанным провайдером
      */
     fun createChatAgent(llmProvider: LLMProvider): Agent {
-        return ChatAgent(llmProvider = llmProvider)
+        return ChatAgent(initialProvider = llmProvider)
     }
 
     /**
@@ -74,7 +85,7 @@ object AgentFactory {
         format: ResponseFormat,
         schema: ResponseSchema? = null
     ): Agent {
-        val agent = createChatAgent()
+        val agent = createChatAgent() as ChatAgent
         agent.setResponseFormat(format, schema)
         return agent
     }
@@ -87,7 +98,7 @@ object AgentFactory {
         format: ResponseFormat,
         schema: ResponseSchema? = null
     ): Agent {
-        val agent = ChatAgent(llmProvider = llmProvider)
+        val agent = ChatAgent(initialProvider = llmProvider)
         agent.setResponseFormat(format, schema)
         return agent
     }
@@ -143,6 +154,6 @@ object AgentFactory {
         val hfToken = settings.getHuggingFaceToken()
         val modelId = settings.huggingFaceModelId
         val provider = createHuggingFaceProvider(hfToken, modelId)
-        return ChatAgent(llmProvider = provider)
+        return ChatAgent(initialProvider = provider)
     }
 }
