@@ -224,40 +224,10 @@ class ChatAgent(
         // Освобождаем ресурсы если необходимо
     }
 
-    // Legacy методы для обратной совместимости
-    fun getName(): String = "Chat Agent"
-
-    fun getDescription(): String =
-        "Универсальный агент для общения с пользователем через ${llmProvider.getProviderName()}"
-
-    fun setLLMProvider(provider: LLMProvider) {
-        logger.info("Changing LLM provider from ${llmProvider.getProviderName()} to ${provider.getProviderName()}")
-        llmProvider = provider
-        updateSettings(settings.copy(llmProvider = provider.getProviderName()))
-    }
-
-    fun getLLMProvider(): LLMProvider = llmProvider
-
-    fun setResponseFormat(format: ResponseFormat, schema: ResponseSchema?) {
-        logger.info("Setting response format to $format")
-        responseFormat = format
-        responseSchema = schema
-
-        // Валидация схемы если она задана
-        if (schema != null && !schema.isValid()) {
-            logger.warn("Invalid schema provided for format $format")
-        }
-    }
-
-    fun getResponseFormat(): ResponseFormat? = responseFormat
-
-    fun getResponseSchema(): ResponseSchema? = responseSchema
-
-    fun clearResponseFormat() {
-        logger.info("Clearing response format")
-        responseFormat = null
-        responseSchema = null
-    }
+    /**
+     * Возвращает текущий LLM провайдер (для внутреннего использования)
+     */
+    internal fun getProvider(): LLMProvider = llmProvider
 
     /**
      * Формирует системный промпт. Если задана схема ответа,

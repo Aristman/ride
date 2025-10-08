@@ -81,7 +81,7 @@ class ChatService {
             try {
                 // Проверяем настройки в фоновом потоке (не на EDT!)
                 val chatAgent = agent as? ChatAgent
-                if (chatAgent != null && !chatAgent.getName().isNotBlank()) {
+                if (chatAgent != null && chatAgent.getProvider().getProviderName().isBlank()) {
                     withContext(Dispatchers.EDT) {
                         onError("Плагин не настроен. Перейдите в Settings → Tools → Ride")
                     }
@@ -183,10 +183,14 @@ class ChatService {
         val previousFormat = currentFormat
         val previousSchema = currentSchema
         agent = AgentFactory.createChatAgent()
-        // Восстановим формат ответа, если был задан
-        val chatAgent = agent as? ChatAgent
-        if (chatAgent != null && previousFormat != null) {
-            chatAgent.setResponseFormat(previousFormat, previousSchema)
+        // Восстановим формат ответа через настройки, если был задан
+        if (previousFormat != null) {
+            val agentSettings = AgentSettings(
+                defaultResponseFormat = previousFormat
+            )
+            agent.updateSettings(agentSettings)
+            currentFormat = previousFormat
+            currentSchema = previousSchema
         }
     }
 
@@ -194,8 +198,11 @@ class ChatService {
      * Устанавливает формат ответа для текущего агента
      */
     fun setResponseFormat(format: ResponseFormat, schema: ResponseSchema?) {
-        val chatAgent = agent as? ChatAgent
-        chatAgent?.setResponseFormat(format, schema)
+        // Обновляем настройки агента
+        val agentSettings = AgentSettings(
+            defaultResponseFormat = format
+        )
+        agent.updateSettings(agentSettings)
         logger.info("Response format set to: $format")
         currentFormat = format
         currentSchema = schema
@@ -224,8 +231,11 @@ class ChatService {
      * Сбрасывает формат ответа к TEXT (по умолчанию)
      */
     fun clearResponseFormat() {
-        val chatAgent = agent as? ChatAgent
-        chatAgent?.clearResponseFormat()
+        // Сбрасываем формат через настройки
+        val agentSettings = AgentSettings(
+            defaultResponseFormat = ResponseFormat.TEXT
+        )
+        agent.updateSettings(agentSettings)
         logger.info("Response format cleared")
         currentFormat = null
         currentSchema = null
@@ -240,10 +250,7 @@ class ChatService {
     /**
      * Возвращает текущий установленный формат ответа
      */
-    fun getResponseFormat(): ResponseFormat? {
-        val chatAgent = agent as? ChatAgent
-        return currentFormat ?: chatAgent?.getResponseFormat()
-    }
+    fun getResponseFormat(): ResponseFormat? = currentFormat
 
     /**
      * Возвращает текущую схему ответа (если была задана)
@@ -265,7 +272,7 @@ class ChatService {
     fun getCurrentProviderName(): String {
         val chatAgent = agent as? ChatAgent
         if (chatAgent != null) {
-            val provider = chatAgent.getLLMProvider()
+            val provider = chatAgent.getProvider()
             return when (provider) {
                 is HuggingFaceProvider -> provider.getModelDisplayName()
                 is YandexGPTProvider -> "${provider.getProviderName()} (${provider.getModelDisplayName()})"

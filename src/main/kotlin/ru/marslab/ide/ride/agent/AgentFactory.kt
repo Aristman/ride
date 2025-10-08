@@ -85,8 +85,12 @@ object AgentFactory {
         format: ResponseFormat,
         schema: ResponseSchema? = null
     ): Agent {
-        val agent = createChatAgent() as ChatAgent
-        agent.setResponseFormat(format, schema)
+        val agent = createChatAgent()
+        // Устанавливаем формат через настройки
+        val agentSettings = AgentSettings(
+            defaultResponseFormat = format
+        )
+        agent.updateSettings(agentSettings)
         return agent
     }
 
@@ -99,7 +103,12 @@ object AgentFactory {
         schema: ResponseSchema? = null
     ): Agent {
         val agent = ChatAgent(initialProvider = llmProvider)
-        agent.setResponseFormat(format, schema)
+        // Устанавливаем формат через настройки
+        val agentSettings = AgentSettings(
+            llmProvider = llmProvider.getProviderName(),
+            defaultResponseFormat = format
+        )
+        agent.updateSettings(agentSettings)
         return agent
     }
     
