@@ -17,7 +17,7 @@ object TaskPlanSchema {
     /**
      * Создает JSON схему для плана задач
      */
-    fun createJsonSchema(): ResponseSchema {
+    fun createJsonSchema(): TaskPlanJsonSchema {
         val schemaDefinition = """
 {
   "description": "Описание общей цели плана",
@@ -32,17 +32,13 @@ object TaskPlanSchema {
 }
         """.trimIndent()
         
-        return ResponseSchema(
-            format = ResponseFormat.JSON,
-            schemaDefinition = schemaDefinition,
-            parseResponse = { content -> parseJsonPlan(content) }
-        )
+        return TaskPlanJsonSchema(schemaDefinition)
     }
     
     /**
      * Создает XML схему для плана задач
      */
-    fun createXmlSchema(): ResponseSchema {
+    fun createXmlSchema(): TaskPlanXmlSchema {
         val schemaDefinition = """
 <plan>
   <description>Описание общей цели плана</description>
@@ -56,22 +52,18 @@ object TaskPlanSchema {
 </plan>
         """.trimIndent()
         
-        return ResponseSchema(
-            format = ResponseFormat.XML,
-            schemaDefinition = schemaDefinition,
-            parseResponse = { content -> parseXmlPlan(content) }
-        )
+        return TaskPlanXmlSchema(schemaDefinition)
     }
     
     /**
      * Парсит план из JSON
      */
-    private fun parseJsonPlan(content: String): ParsedResponse? {
+    fun parseJsonPlan(content: String): TaskPlanData? {
         return try {
             // Извлекаем JSON из markdown блока если есть
             val jsonContent = extractJsonFromMarkdown(content)
             val plan = json.decodeFromString<TaskPlan>(jsonContent)
-            TaskPlanData(plan)
+            TaskPlanData(rawContent = content, plan = plan)
         } catch (e: Exception) {
             null
         }
@@ -80,7 +72,7 @@ object TaskPlanSchema {
     /**
      * Парсит план из XML
      */
-    private fun parseXmlPlan(content: String): ParsedResponse? {
+    fun parseXmlPlan(content: String): TaskPlanData? {
         return try {
             // Извлекаем XML из markdown блока если есть
             val xmlContent = extractXmlFromMarkdown(content)
@@ -109,7 +101,7 @@ object TaskPlanSchema {
             }
             
             val plan = TaskPlan(description, tasks)
-            TaskPlanData(plan)
+            TaskPlanData(rawContent = content, plan = plan)
         } catch (e: Exception) {
             null
         }
@@ -138,5 +130,42 @@ object TaskPlanSchema {
  * Распарсенный план задач
  */
 data class TaskPlanData(
+    override val rawContent: String,
     val plan: TaskPlan
-) : ParsedResponse
+) : ParsedResponse() {
+    override val format: ResponseFormat = ResponseFormat.JSON
+}
+
+/**
+ * JSON схема для плана задач
+ */
+class TaskPlanJsonSchema(
+    override val schemaDefinition: String,
+    override val description: String = "План задач в формате JSON"
+) : ResponseSchema {
+    
+    override val format: ResponseFormat = ResponseFormat.JSON
+    
+    override fun isValid(): Boolean = schemaDefinition.isNotBlank()
+    
+    override fun parseResponse(rawContent: String): TaskPlanData? {
+        return TaskPlanSchema.parseJsonPlan(rawContent)
+    }
+}
+
+/**
+ * XML схема для плана задач
+ */
+class TaskPlanXmlSchema(
+    override val schemaDefinition: String,
+    override val description: String = "План задач в формате XML"
+) : ResponseSchema {
+    
+    override val format: ResponseFormat = ResponseFormat.XML
+    
+    override fun isValid(): Boolean = schemaDefinition.isNotBlank()
+    
+    override fun parseResponse(rawContent: String): TaskPlanData? {
+        return TaskPlanSchema.parseXmlPlan(rawContent)
+    }
+}

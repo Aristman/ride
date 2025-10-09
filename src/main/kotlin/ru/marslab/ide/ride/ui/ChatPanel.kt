@@ -150,20 +150,40 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         setUIEnabled(false)
         messageDisplayManager.displaySystemMessage(ChatPanelConfig.Messages.PROCESSING_REQUEST)
 
-        chatService.sendMessage(
-            userMessage = text,
-            project = project,
-            onResponse = { message ->
-                messageDisplayManager.removeLastSystemMessage()
-                messageDisplayManager.displayMessage(message)
-                setUIEnabled(true)
-            },
-            onError = { error ->
-                messageDisplayManager.removeLastSystemMessage()
-                messageDisplayManager.displaySystemMessage("${ChatPanelConfig.Icons.ERROR} Ошибка: $error")
-                setUIEnabled(true)
-            }
-        )
+        if (text.startsWith("/plan ")) {
+            val actualMessage = text.removePrefix("/plan ").trim()
+            sendMessageWithOrchestratorMode(
+                project = project,
+                text = actualMessage,
+                onStepComplete = { message ->
+                    messageDisplayManager.removeLastSystemMessage()
+                    messageDisplayManager.displayMessage(message)
+                },
+                onError = { error ->
+                    messageDisplayManager.removeLastSystemMessage()
+                    messageDisplayManager.displaySystemMessage("Ошибка: $error")
+                    setUIEnabled(true)
+                },
+                onComplete = {
+                    setUIEnabled(true)
+                }
+            )
+        } else {
+            chatService.sendMessage(
+                userMessage = text,
+                project = project,
+                onResponse = { message ->
+                    messageDisplayManager.removeLastSystemMessage()
+                    messageDisplayManager.displayMessage(message)
+                    setUIEnabled(true)
+                },
+                onError = { error ->
+                    messageDisplayManager.removeLastSystemMessage()
+                    messageDisplayManager.displaySystemMessage("${ChatPanelConfig.Icons.ERROR} Ошибка: $error")
+                    setUIEnabled(true)
+                }
+            )
+        }
     }
 
     /**

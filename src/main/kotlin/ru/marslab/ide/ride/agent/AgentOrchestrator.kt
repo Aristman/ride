@@ -17,11 +17,12 @@ import ru.marslab.ide.ride.model.*
  * @property llmProvider Провайдер для взаимодействия с LLM
  */
 class AgentOrchestrator(
-    private val llmProvider: LLMProvider
+    private val planerLlmProvider: LLMProvider,
+    private val executorLlmProvider: LLMProvider
 ) {
     private val logger = Logger.getInstance(AgentOrchestrator::class.java)
-    private val plannerAgent = PlannerAgent(llmProvider)
-    private val executorAgent = ExecutorAgent(llmProvider)
+    private val plannerAgent = PlannerAgent(planerLlmProvider)
+    private val executorAgent = ExecutorAgent(planerLlmProvider)
 
     /**
      * Обрабатывает запрос пользователя через систему двух агентов

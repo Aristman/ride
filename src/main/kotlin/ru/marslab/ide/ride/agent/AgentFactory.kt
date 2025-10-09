@@ -193,6 +193,6 @@ object AgentFactory {
             }
         }
         
-        return AgentOrchestrator(llmProvider)
+        return AgentOrchestrator(llmProvider, llmProvider)
     }
 }
