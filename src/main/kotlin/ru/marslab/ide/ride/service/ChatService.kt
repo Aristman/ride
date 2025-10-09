@@ -8,6 +8,8 @@ import com.intellij.openapi.project.Project
 import kotlinx.coroutines.*
 import ru.marslab.ide.ride.agent.Agent
 import ru.marslab.ide.ride.agent.AgentFactory
+import ru.marslab.ide.ride.agent.AgentOrchestrator
+import ru.marslab.ide.ride.agent.OrchestratorStep
 import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceProvider
 import ru.marslab.ide.ride.integration.llm.impl.YandexGPTProvider
 import ru.marslab.ide.ride.agent.impl.ChatAgent
@@ -148,6 +150,139 @@ class ChatService {
 
             } catch (e: Exception) {
                 logger.error("Error processing message", e)
+            }
+        }
+    }
+
+    /**
+     * Отправляет сообщение через систему двух агентов (PlannerAgent + ExecutorAgent)
+     * 
+     * @param userMessage Текст сообщения пользователя
+     * @param project Текущий проект
+     * @param onStepComplete Callback для каждого шага выполнения
+     * @param onError Callback для обработки ошибок
+     */
+    fun sendMessageWithOrchestrator(
+        userMessage: String,
+        project: Project,
+        onStepComplete: (Message) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        if (userMessage.isBlank()) {
+            onError("Сообщение не может быть пустым")
+            return
+        }
+
+        logger.info("Sending user message to orchestrator, length: ${userMessage.length}")
+
+        // Создаем и сохраняем сообщение пользователя
+        val userMsg = Message(
+            content = userMessage,
+            role = MessageRole.USER
+        )
+        val history = getCurrentHistory()
+        val wasEmpty = history.getMessageCount() == 0
+        history.addMessage(userMsg)
+        if (wasEmpty) {
+            val title = deriveTitleFrom(userMessage)
+            updateSessionTitle(currentSessionId, title)
+        }
+
+        // Обрабатываем запрос асинхронно
+        scope.launch {
+            try {
+                // Создаем оркестратор
+                val orchestrator = AgentFactory.createAgentOrchestrator()
+
+                // Формируем контекст
+                val context = ChatContext(
+                    project = project,
+                    history = getCurrentHistory().getMessages()
+                )
+
+                // Получаем параметры из настроек
+                val settings = service<PluginSettings>()
+                val llmParameters = LLMParameters(
+                    temperature = settings.temperature,
+                    maxTokens = settings.maxTokens
+                )
+
+                // Создаем запрос к оркестратору
+                val agentRequest = AgentRequest(
+                    request = userMessage,
+                    context = context,
+                    parameters = llmParameters
+                )
+
+                // Запускаем оркестратор с callback для каждого шага
+                orchestrator.process(agentRequest) { step ->
+                    withContext(Dispatchers.EDT) {
+                        when (step) {
+                            is OrchestratorStep.PlanningComplete -> {
+                                if (step.success) {
+                                    val message = Message(
+                                        content = step.content,
+                                        role = MessageRole.ASSISTANT,
+                                        metadata = mapOf("agentName" to step.agentName)
+                                    )
+                                    getCurrentHistory().addMessage(message)
+                                    onStepComplete(message)
+                                } else {
+                                    onError(step.error ?: "Ошибка планирования")
+                                }
+                            }
+                            is OrchestratorStep.TaskComplete -> {
+                                val content = buildString {
+                                    if (step.success) {
+                                        appendLine("✅ **Задача ${step.taskId}: ${step.taskTitle}**")
+                                        appendLine()
+                                        appendLine(step.content)
+                                    } else {
+                                        appendLine("❌ **Задача ${step.taskId}: ${step.taskTitle}**")
+                                        appendLine()
+                                        appendLine("**Ошибка:** ${step.error}")
+                                    }
+                                }
+                                val message = Message(
+                                    content = content,
+                                    role = MessageRole.ASSISTANT,
+                                    metadata = mapOf(
+                                        "agentName" to step.agentName,
+                                        "taskId" to step.taskId,
+                                        "taskTitle" to step.taskTitle,
+                                        "success" to step.success
+                                    )
+                                )
+                                getCurrentHistory().addMessage(message)
+                                onStepComplete(message)
+                            }
+                            is OrchestratorStep.AllComplete -> {
+                                val message = Message(
+                                    content = step.content,
+                                    role = MessageRole.ASSISTANT,
+                                    metadata = mapOf(
+                                        "totalTasks" to step.totalTasks,
+                                        "successfulTasks" to step.successfulTasks
+                                    )
+                                )
+                                getCurrentHistory().addMessage(message)
+                                onStepComplete(message)
+                            }
+                            is OrchestratorStep.Error -> {
+                                onError(step.error)
+                            }
+                        }
+                    }
+                }
+
+                // Освобождаем ресурсы оркестратора
+                orchestrator.dispose()
+
+            } catch (e: Exception) {
+                logger.error("Error processing message with orchestrator", e)
+                withContext(Dispatchers.EDT) {
+                    onError(e.message ?: "Неизвестная ошибка")
+                }
             }
         }
     }

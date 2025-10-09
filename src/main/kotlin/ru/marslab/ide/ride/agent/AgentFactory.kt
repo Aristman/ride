@@ -165,4 +165,34 @@ object AgentFactory {
         val provider = createHuggingFaceProvider(hfToken, modelId)
         return ChatAgent(initialProvider = provider)
     }
+
+    /**
+     * Создает AgentOrchestrator с настроенным LLM провайдером из настроек плагина
+     * 
+     * @return Настроенный оркестратор
+     */
+    fun createAgentOrchestrator(): AgentOrchestrator {
+        val settings = service<PluginSettings>()
+        val llmProvider: LLMProvider = when (settings.selectedProvider) {
+            PluginSettings.PROVIDER_YANDEX -> {
+                val apiKey = settings.getApiKey()
+                val folderId = settings.folderId
+                val modelId = settings.yandexModelId
+                createYandexGPTProvider(apiKey, folderId, modelId)
+            }
+            PluginSettings.PROVIDER_HUGGINGFACE -> {
+                val hfToken = settings.getHuggingFaceToken()
+                val modelId = settings.huggingFaceModelId
+                createHuggingFaceProvider(hfToken, modelId)
+            }
+            else -> {
+                val apiKey = settings.getApiKey()
+                val folderId = settings.folderId
+                val modelId = settings.yandexModelId
+                createYandexGPTProvider(apiKey, folderId, modelId)
+            }
+        }
+        
+        return AgentOrchestrator(llmProvider)
+    }
 }
