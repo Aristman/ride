@@ -8,6 +8,9 @@ import ru.marslab.ide.ride.agent.formatter.PromptFormatter
 import ru.marslab.ide.ride.agent.parser.ResponseParserFactory
 import ru.marslab.ide.ride.agent.validation.ResponseValidatorFactory
 import ru.marslab.ide.ride.integration.llm.LLMProvider
+import ru.marslab.ide.ride.integration.llm.TokenCounter
+import ru.marslab.ide.ride.integration.llm.impl.TiktokenCounter
+import ru.marslab.ide.ride.integration.llm.impl.YandexGPTProvider
 import ru.marslab.ide.ride.model.AgentCapabilities
 import ru.marslab.ide.ride.model.AgentRequest
 import ru.marslab.ide.ride.model.AgentResponse
@@ -49,6 +52,18 @@ class ChatAgent(
     )
     private var responseFormat: ResponseFormat? = ResponseFormat.XML
     private var responseSchema: ResponseSchema? = UncertaintyResponseSchema.createXmlSchema()
+    
+    private val tokenCounter: TokenCounter by lazy {
+        if (llmProvider is YandexGPTProvider) {
+            (llmProvider as YandexGPTProvider).getTokenCounter()
+        } else {
+            TiktokenCounter.forGPT()
+        }
+    }
+    
+    private val summarizerAgent: SummarizerAgent by lazy {
+        SummarizerAgent(llmProvider)
+    }
 
     private val logger = Logger.getInstance(ChatAgent::class.java)
 
@@ -87,12 +102,20 @@ class ChatAgent(
 
             // Полная история диалога для контекста
             val conversationHistory = buildConversationHistory(context)
+            
+            // Управляем контекстом: проверяем токены и сжимаем если нужно
+            val (managedHistory, systemMessage) = manageContext(
+                systemPrompt = systemPromptForRequest,
+                userMessage = request,
+                conversationHistory = conversationHistory,
+                project = context.project
+            )
 
             // Делегируем запрос в LLM провайдер с переданными параметрами
             val llmResponse = llmProvider.sendRequest(
                 systemPrompt = systemPromptForRequest,
                 userMessage = request,
-                conversationHistory = conversationHistory,
+                conversationHistory = managedHistory,
                 parameters = parameters
             )
 
@@ -138,12 +161,17 @@ class ChatAgent(
 
             // Собираем метаданные ответа
             val baseMetadata = mutableMapOf(
-                "tokensUsed" to llmResponse.tokensUsed,
+                "tokenUsage" to llmResponse.tokenUsage,
                 "provider" to llmProvider.getProviderName()
             )
 
             if (responseFormat != null) {
                 baseMetadata["format"] = responseFormat!!.name
+            }
+            
+            // Добавляем системное сообщение о сжатии если есть
+            if (systemMessage != null) {
+                baseMetadata["systemMessage"] = systemMessage
             }
 
             // Добавляем информацию о неопределенности
@@ -258,6 +286,129 @@ class ChatAgent(
             }
             ConversationMessage(role, message.content)
         }
+    }
+    
+    /**
+     * Управляет контекстом с учётом лимита токенов
+     * Сжимает историю если превышен лимит
+     * 
+     * @return Пара: (история для отправки, системное сообщение о сжатии или null)
+     */
+    private suspend fun manageContext(
+        systemPrompt: String,
+        userMessage: String,
+        conversationHistory: List<ConversationMessage>,
+        project: com.intellij.openapi.project.Project
+    ): Pair<List<ConversationMessage>, String?> {
+        // Подсчитываем токены в запросе
+        val requestTokens = tokenCounter.countRequestTokens(
+            systemPrompt = systemPrompt,
+            userMessage = userMessage,
+            conversationHistory = conversationHistory
+        )
+        
+        logger.info("Request tokens: $requestTokens, max context tokens: ${settings.maxContextTokens}")
+        
+        // Если не превышен лимит, возвращаем историю как есть
+        if (requestTokens <= settings.maxContextTokens) {
+            return Pair(conversationHistory, null)
+        }
+        
+        // Если превышен лимит и автосжатие выключено, обрезаем старые сообщения
+        if (!settings.enableAutoSummarization) {
+            logger.warn("Token limit exceeded ($requestTokens > ${settings.maxContextTokens}), truncating history")
+            val truncatedHistory = truncateHistory(
+                systemPrompt, userMessage, conversationHistory, settings.maxContextTokens
+            )
+            val systemMessage = "⚠️ История диалога была обрезана из-за превышения лимита токенов ($requestTokens > ${settings.maxContextTokens})"
+            return Pair(truncatedHistory, systemMessage)
+        }
+        
+        // Сжимаем историю через SummarizerAgent
+        logger.info("Token limit exceeded, summarizing history...")
+        return try {
+            val historyMessages = conversationHistory.map { msg ->
+                val role = when (msg.role) {
+                    ConversationRole.USER -> MessageRole.USER
+                    ConversationRole.ASSISTANT -> MessageRole.ASSISTANT
+                    ConversationRole.SYSTEM -> MessageRole.SYSTEM
+                }
+                Message(content = msg.content, role = role)
+            }
+            
+            // Создаём временный контекст для суммаризации
+            val summaryContext = ChatContext(
+                project = project,
+                history = historyMessages
+            )
+            
+            val summaryRequest = AgentRequest(
+                request = "Создай краткое резюме истории диалога",
+                context = summaryContext,
+                parameters = LLMParameters.PRECISE
+            )
+            
+            val summaryResponse = summarizerAgent.ask(summaryRequest)
+            
+            if (summaryResponse.success) {
+                // Создаём сжатую историю: резюме + последние N сообщений
+                val summaryMessage = ConversationMessage(
+                    role = ConversationRole.SYSTEM,
+                    content = "[РЕЗЮМЕ ПРЕДЫДУЩЕГО ДИАЛОГА]\n${summaryResponse.content}"
+                )
+                
+                val recentMessages = conversationHistory.takeLast(2) // Берём последние 2 сообщения
+                val compressedHistory = listOf(summaryMessage) + recentMessages
+                
+                val systemMessage = "🔄 История диалога была сжата для экономии токенов (было: $requestTokens токенов)"
+                
+                logger.info("History summarized successfully")
+                Pair(compressedHistory, systemMessage)
+            } else {
+                // Если сжатие не удалось, обрезаем историю
+                logger.warn("Summarization failed, falling back to truncation")
+                val truncatedHistory = truncateHistory(
+                    systemPrompt, userMessage, conversationHistory, settings.maxContextTokens
+                )
+                val systemMessage = "⚠️ Не удалось сжать историю, она была обрезана"
+                Pair(truncatedHistory, systemMessage)
+            }
+        } catch (e: Exception) {
+            logger.error("Error during summarization", e)
+            val truncatedHistory = truncateHistory(
+                systemPrompt, userMessage, conversationHistory, settings.maxContextTokens
+            )
+            val systemMessage = "⚠️ Ошибка при сжатии истории: ${e.message}"
+            Pair(truncatedHistory, systemMessage)
+        }
+    }
+    
+    /**
+     * Обрезает историю диалога, удаляя старые сообщения
+     */
+    private fun truncateHistory(
+        systemPrompt: String,
+        userMessage: String,
+        conversationHistory: List<ConversationMessage>,
+        maxTokens: Int
+    ): List<ConversationMessage> {
+        if (conversationHistory.isEmpty()) return emptyList()
+        
+        // Начинаем с последних сообщений и добавляем пока не превысим лимит
+        val result = mutableListOf<ConversationMessage>()
+        var currentTokens = tokenCounter.countTokens(systemPrompt) + 
+                           tokenCounter.countTokens(userMessage) + 10 // overhead
+        
+        for (message in conversationHistory.asReversed()) {
+            val messageTokens = tokenCounter.countTokens(message.content) + 4 // overhead
+            if (currentTokens + messageTokens > maxTokens) {
+                break
+            }
+            result.add(0, message)
+            currentTokens += messageTokens
+        }
+        
+        return result
     }
 
     companion object {

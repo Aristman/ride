@@ -5,12 +5,14 @@ import kotlinx.coroutines.delay
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import ru.marslab.ide.ride.integration.llm.LLMProvider
+import ru.marslab.ide.ride.integration.llm.TokenCounter
 import ru.marslab.ide.ride.integration.llm.model.CompletionOptions
 import ru.marslab.ide.ride.integration.llm.model.YandexGPTRequest
 import ru.marslab.ide.ride.integration.llm.model.YandexGPTResponse
 import ru.marslab.ide.ride.integration.llm.model.YandexMessage
 import ru.marslab.ide.ride.model.LLMParameters
 import ru.marslab.ide.ride.model.LLMResponse
+import ru.marslab.ide.ride.model.TokenUsage
 import ru.marslab.ide.ride.model.ConversationMessage
 import ru.marslab.ide.ride.model.ConversationRole
 import java.net.URI
@@ -60,7 +62,8 @@ data class YandexGPTConfig(
  * Использует Java HttpClient (JDK 11+) для избежания конфликтов корутин
  */
 class YandexGPTProvider(
-    private val config: YandexGPTConfig
+    private val config: YandexGPTConfig,
+    private val tokenCounter: TokenCounter = TiktokenCounter.forGPT()
 ) : LLMProvider {
     
     private val logger = Logger.getInstance(YandexGPTProvider::class.java)
@@ -87,7 +90,7 @@ class YandexGPTProvider(
             val request = buildRequest(systemPrompt, userMessage, conversationHistory, parameters)
             val response = sendWithRetry(request)
 
-            logger.info("Request successful, tokens used: ${response.tokensUsed}")
+            logger.info("Request successful, tokens used: ${response.tokenUsage.totalTokens} (input: ${response.tokenUsage.inputTokens}, output: ${response.tokenUsage.outputTokens})")
             response
 
         } catch (e: Exception) {
@@ -108,6 +111,11 @@ class YandexGPTProvider(
     fun getModelDisplayName(): String {
         return YandexModel.fromModelId(config.modelId)?.displayName ?: config.modelId
     }
+
+    /**
+     * Возвращает счётчик токенов для этого провайдера
+     */
+    fun getTokenCounter(): TokenCounter = tokenCounter
     
     /**
      * Строит запрос к Yandex GPT API
@@ -223,11 +231,17 @@ class YandexGPTProvider(
             ?: return LLMResponse.error("Пустой ответ от Yandex GPT")
         
         val content = alternative.message.text
-        val tokensUsed = response.result.usage.totalTokens.toIntOrNull() ?: 0
+        val usage = response.result.usage
+        
+        val tokenUsage = TokenUsage(
+            inputTokens = usage.inputTextTokens.toIntOrNull() ?: 0,
+            outputTokens = usage.completionTokens.toIntOrNull() ?: 0,
+            totalTokens = usage.totalTokens.toIntOrNull() ?: 0
+        )
         
         return LLMResponse.success(
             content = content,
-            tokensUsed = tokensUsed,
+            tokenUsage = tokenUsage,
             metadata = mapOf(
                 "modelVersion" to response.result.modelVersion,
                 "status" to alternative.status

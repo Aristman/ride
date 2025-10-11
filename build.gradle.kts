@@ -31,7 +31,6 @@ dependencies {
         // Отключаем проблемные плагины для избежания конфликта версий Java
         // excludePlugin не поддерживается в этой версии, используем другой подход
     }
-
     // Временно исключаем Gradle plugin для обхода ошибки
     // implementation("org.jetbrains.plugins.gradle:org.jetbrains.plugins.gradle.gradle-java-extensions.gradle") {
     //     exclude(group = "org.jetbrains.plugins.gradle", module = "gradle-jvm-compatibility")
@@ -43,6 +42,9 @@ dependencies {
     // XML serialization via xmlutil (kotlinx-serialization-xml)
     implementation("io.github.pdvrieze.xmlutil:core:0.86.3")
     implementation("io.github.pdvrieze.xmlutil:serialization:0.86.3")
+
+    // Tiktoken для подсчёта токенов
+    implementation("com.knuddels:jtokkit:1.0.0")
 
     // Testing
     testImplementation("org.jetbrains.kotlin:kotlin-test")
