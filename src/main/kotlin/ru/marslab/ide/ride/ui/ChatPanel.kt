@@ -178,7 +178,10 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                     // Системные сообщения (о сжатии) приходят первыми
                     if (message.role == MessageRole.SYSTEM) {
                         messageDisplayManager.displayMessage(message)
-                        updateContextSize()
+                        // Обновляем счётчик с небольшой задержкой, чтобы история успела обновиться
+                        SwingUtilities.invokeLater {
+                            updateContextSize()
+                        }
                     } else {
                         // Ответ ассистента
                         messageDisplayManager.removeLastSystemMessage()

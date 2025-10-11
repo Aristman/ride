@@ -137,6 +137,18 @@ class ChatService {
                         // Проверяем наличие системного сообщения о сжатии/обрезке
                         val systemMessage = agentResponse.metadata["systemMessage"] as? String
                         if (systemMessage != null) {
+                            // Получаем сжатую историю из метаданных
+                            @Suppress("UNCHECKED_CAST")
+                            val compressedHistory = agentResponse.metadata["compressedHistory"] as? List<Message>
+                            
+                            if (compressedHistory != null) {
+                                // Заменяем всю историю на сжатую
+                                val currentHistory = getCurrentHistory()
+                                currentHistory.clear()
+                                compressedHistory.forEach { currentHistory.addMessage(it) }
+                                logger.info("History replaced with compressed version: ${compressedHistory.size} messages")
+                            }
+                            
                             // Добавляем системное сообщение в историю
                             val sysMsg = Message(
                                 content = systemMessage,

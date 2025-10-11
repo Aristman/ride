@@ -174,6 +174,15 @@ class ChatAgent(
             // Добавляем системное сообщение о сжатии если есть
             if (systemMessage != null) {
                 baseMetadata["systemMessage"] = systemMessage
+                // Добавляем сжатую историю для замены в ChatService
+                baseMetadata["compressedHistory"] = managedHistory.map { msg ->
+                    val role = when (msg.role) {
+                        ConversationRole.USER -> MessageRole.USER
+                        ConversationRole.ASSISTANT -> MessageRole.ASSISTANT
+                        ConversationRole.SYSTEM -> MessageRole.SYSTEM
+                    }
+                    Message(content = msg.content, role = role)
+                }
             }
 
             // Добавляем информацию о неопределенности
