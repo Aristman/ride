@@ -8,8 +8,11 @@ import com.intellij.openapi.project.Project
 import kotlinx.coroutines.*
 import ru.marslab.ide.ride.agent.Agent
 import ru.marslab.ide.ride.agent.AgentFactory
+import ru.marslab.ide.ride.agent.AgentOrchestrator
+import ru.marslab.ide.ride.agent.OrchestratorStep
 import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceProvider
 import ru.marslab.ide.ride.integration.llm.impl.YandexGPTProvider
+import ru.marslab.ide.ride.agent.impl.ChatAgent
 import ru.marslab.ide.ride.model.*
 import ru.marslab.ide.ride.model.ChatSession
 import ru.marslab.ide.ride.settings.PluginSettings
@@ -79,7 +82,8 @@ class ChatService {
         scope.launch {
             try {
                 // Проверяем настройки в фоновом потоке (не на EDT!)
-                if (!agent.getName().isNotBlank()) {
+                val chatAgent = agent as? ChatAgent
+                if (chatAgent != null && chatAgent.getProvider().getProviderName().isBlank()) {
                     withContext(Dispatchers.EDT) {
                         onError("Плагин не настроен. Перейдите в Settings → Tools → Ride")
                     }
@@ -99,9 +103,16 @@ class ChatService {
                     maxTokens = settings.maxTokens
                 )
 
+                // Создаем запрос к агенту
+                val agentRequest = AgentRequest(
+                    request = userMessage,
+                    context = context,
+                    parameters = llmParameters
+                )
+
                 // Измеряем время выполнения запроса к LLM
                 val startTime = System.currentTimeMillis()
-                val agentResponse = agent.processRequest(userMessage, context, llmParameters)
+                val agentResponse = agent.ask(agentRequest)
                 val responseTime = System.currentTimeMillis() - startTime
 
                 // Обрабатываем ответ в UI потоке
@@ -144,6 +155,139 @@ class ChatService {
     }
 
     /**
+     * Отправляет сообщение через систему двух агентов (PlannerAgent + ExecutorAgent)
+     * 
+     * @param userMessage Текст сообщения пользователя
+     * @param project Текущий проект
+     * @param onStepComplete Callback для каждого шага выполнения
+     * @param onError Callback для обработки ошибок
+     */
+    fun sendMessageWithOrchestrator(
+        userMessage: String,
+        project: Project,
+        onStepComplete: (Message) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        if (userMessage.isBlank()) {
+            onError("Сообщение не может быть пустым")
+            return
+        }
+
+        logger.info("Sending user message to orchestrator, length: ${userMessage.length}")
+
+        // Создаем и сохраняем сообщение пользователя
+        val userMsg = Message(
+            content = userMessage,
+            role = MessageRole.USER
+        )
+        val history = getCurrentHistory()
+        val wasEmpty = history.getMessageCount() == 0
+        history.addMessage(userMsg)
+        if (wasEmpty) {
+            val title = deriveTitleFrom(userMessage)
+            updateSessionTitle(currentSessionId, title)
+        }
+
+        // Обрабатываем запрос асинхронно
+        scope.launch {
+            try {
+                // Создаем оркестратор
+                val orchestrator = AgentFactory.createAgentOrchestrator()
+
+                // Формируем контекст
+                val context = ChatContext(
+                    project = project,
+                    history = getCurrentHistory().getMessages()
+                )
+
+                // Получаем параметры из настроек
+                val settings = service<PluginSettings>()
+                val llmParameters = LLMParameters(
+                    temperature = settings.temperature,
+                    maxTokens = settings.maxTokens
+                )
+
+                // Создаем запрос к оркестратору
+                val agentRequest = AgentRequest(
+                    request = userMessage,
+                    context = context,
+                    parameters = llmParameters
+                )
+
+                // Запускаем оркестратор с callback для каждого шага
+                orchestrator.process(agentRequest) { step ->
+                    withContext(Dispatchers.EDT) {
+                        when (step) {
+                            is OrchestratorStep.PlanningComplete -> {
+                                if (step.success) {
+                                    val message = Message(
+                                        content = step.content,
+                                        role = MessageRole.ASSISTANT,
+                                        metadata = mapOf("agentName" to step.agentName)
+                                    )
+                                    getCurrentHistory().addMessage(message)
+                                    onStepComplete(message)
+                                } else {
+                                    onError(step.error ?: "Ошибка планирования")
+                                }
+                            }
+                            is OrchestratorStep.TaskComplete -> {
+                                val content = buildString {
+                                    if (step.success) {
+                                        appendLine("✅ **Задача ${step.taskId}: ${step.taskTitle}**")
+                                        appendLine()
+                                        appendLine(step.content)
+                                    } else {
+                                        appendLine("❌ **Задача ${step.taskId}: ${step.taskTitle}**")
+                                        appendLine()
+                                        appendLine("**Ошибка:** ${step.error}")
+                                    }
+                                }
+                                val message = Message(
+                                    content = content,
+                                    role = MessageRole.ASSISTANT,
+                                    metadata = mapOf(
+                                        "agentName" to step.agentName,
+                                        "taskId" to step.taskId,
+                                        "taskTitle" to step.taskTitle,
+                                        "success" to step.success
+                                    )
+                                )
+                                getCurrentHistory().addMessage(message)
+                                onStepComplete(message)
+                            }
+                            is OrchestratorStep.AllComplete -> {
+                                val message = Message(
+                                    content = step.content,
+                                    role = MessageRole.ASSISTANT,
+                                    metadata = mapOf(
+                                        "totalTasks" to step.totalTasks,
+                                        "successfulTasks" to step.successfulTasks
+                                    )
+                                )
+                                getCurrentHistory().addMessage(message)
+                                onStepComplete(message)
+                            }
+                            is OrchestratorStep.Error -> {
+                                onError(step.error)
+                            }
+                        }
+                    }
+                }
+
+                // Освобождаем ресурсы оркестратора
+                orchestrator.dispose()
+
+            } catch (e: Exception) {
+                logger.error("Error processing message with orchestrator", e)
+                withContext(Dispatchers.EDT) {
+                    onError(e.message ?: "Неизвестная ошибка")
+                }
+            }
+        }
+    }
+
+    /**
      * Возвращает историю сообщений
      *
      * @return Список всех сообщений
@@ -174,9 +318,14 @@ class ChatService {
         val previousFormat = currentFormat
         val previousSchema = currentSchema
         agent = AgentFactory.createChatAgent()
-        // Восстановим формат ответа, если был задан
+        // Восстановим формат ответа через настройки, если был задан
         if (previousFormat != null) {
-            agent.setResponseFormat(previousFormat, previousSchema)
+            val agentSettings = AgentSettings(
+                defaultResponseFormat = previousFormat
+            )
+            agent.updateSettings(agentSettings)
+            currentFormat = previousFormat
+            currentSchema = previousSchema
         }
     }
 
@@ -184,7 +333,11 @@ class ChatService {
      * Устанавливает формат ответа для текущего агента
      */
     fun setResponseFormat(format: ResponseFormat, schema: ResponseSchema?) {
-        agent.setResponseFormat(format, schema)
+        // Обновляем настройки агента
+        val agentSettings = AgentSettings(
+            defaultResponseFormat = format
+        )
+        agent.updateSettings(agentSettings)
         logger.info("Response format set to: $format")
         currentFormat = format
         currentSchema = schema
@@ -213,7 +366,11 @@ class ChatService {
      * Сбрасывает формат ответа к TEXT (по умолчанию)
      */
     fun clearResponseFormat() {
-        agent.clearResponseFormat()
+        // Сбрасываем формат через настройки
+        val agentSettings = AgentSettings(
+            defaultResponseFormat = ResponseFormat.TEXT
+        )
+        agent.updateSettings(agentSettings)
         logger.info("Response format cleared")
         currentFormat = null
         currentSchema = null
@@ -228,7 +385,7 @@ class ChatService {
     /**
      * Возвращает текущий установленный формат ответа
      */
-    fun getResponseFormat(): ResponseFormat? = currentFormat ?: agent.getResponseFormat()
+    fun getResponseFormat(): ResponseFormat? = currentFormat
 
     /**
      * Возвращает текущую схему ответа (если была задана)
@@ -248,12 +405,16 @@ class ChatService {
      * Для HuggingFace возвращает имя модели, для Yandex - "Yandex GPT (имя модели)"
      */
     fun getCurrentProviderName(): String {
-        val provider = agent.getLLMProvider()
-        return when (provider) {
-            is HuggingFaceProvider -> provider.getModelDisplayName()
-            is YandexGPTProvider -> "${provider.getProviderName()} (${provider.getModelDisplayName()})"
-            else -> provider.getProviderName()
+        val chatAgent = agent as? ChatAgent
+        if (chatAgent != null) {
+            val provider = chatAgent.getProvider()
+            return when (provider) {
+                is HuggingFaceProvider -> provider.getModelDisplayName()
+                is YandexGPTProvider -> "${provider.getProviderName()} (${provider.getModelDisplayName()})"
+                else -> provider.getProviderName()
+            }
         }
+        return "Unknown Provider"
     }
 
     // --- Sessions API ---

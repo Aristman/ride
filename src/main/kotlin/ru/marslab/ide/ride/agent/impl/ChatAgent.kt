@@ -8,7 +8,10 @@ import ru.marslab.ide.ride.agent.formatter.PromptFormatter
 import ru.marslab.ide.ride.agent.parser.ResponseParserFactory
 import ru.marslab.ide.ride.agent.validation.ResponseValidatorFactory
 import ru.marslab.ide.ride.integration.llm.LLMProvider
+import ru.marslab.ide.ride.model.AgentCapabilities
+import ru.marslab.ide.ride.model.AgentRequest
 import ru.marslab.ide.ride.model.AgentResponse
+import ru.marslab.ide.ride.model.AgentSettings
 import ru.marslab.ide.ride.model.ChatContext
 import ru.marslab.ide.ride.model.ConversationMessage
 import ru.marslab.ide.ride.model.ConversationRole
@@ -31,24 +34,41 @@ import ru.marslab.ide.ride.ui.ResponseFormatter.formatXmlResponseData
  * Агент НЕ привязан к конкретному LLM провайдеру.
  * Провайдер передается через конструктор (Dependency Injection).
  *
- * @property llmProvider Провайдер для взаимодействия с LLM
+ * @property initialProvider Начальный провайдер для взаимодействия с LLM
  * @property systemPrompt Системный промпт для агента
  */
 class ChatAgent(
-    private var llmProvider: LLMProvider,
+    initialProvider: LLMProvider,
     private val systemPrompt: String = DEFAULT_SYSTEM_PROMPT
 ) : Agent {
 
+    private var llmProvider: LLMProvider = initialProvider
+    private var settings: AgentSettings = AgentSettings(
+        llmProvider = initialProvider.getProviderName(),
+        defaultResponseFormat = ResponseFormat.XML
+    )
     private var responseFormat: ResponseFormat? = ResponseFormat.XML
     private var responseSchema: ResponseSchema? = UncertaintyResponseSchema.createXmlSchema()
 
     private val logger = Logger.getInstance(ChatAgent::class.java)
 
-    override suspend fun processRequest(
-        request: String, 
-        context: ChatContext, 
-        parameters: LLMParameters
-    ): AgentResponse {
+    override val capabilities: AgentCapabilities = AgentCapabilities(
+        stateful = true,
+        streaming = false,
+        reasoning = true,
+        tools = emptySet(),
+        systemPrompt = systemPrompt,
+        responseRules = listOf(
+            "Анализировать неопределенность перед ответом",
+            "Задавать уточняющие вопросы при неопределенности > 0.1",
+            "Использовать markdown для форматирования"
+        )
+    )
+
+    override suspend fun ask(req: AgentRequest): AgentResponse {
+        val request = req.request
+        val context = req.context
+        val parameters = req.parameters
 
         // Проверяем доступность провайдера
         if (!llmProvider.isAvailable()) {
@@ -184,38 +204,30 @@ class ChatAgent(
         }
     }
 
-    override fun getName(): String = "Chat Agent"
-
-    override fun getDescription(): String =
-        "Универсальный агент для общения с пользователем через ${llmProvider.getProviderName()}"
-
-    override fun setLLMProvider(provider: LLMProvider) {
-        logger.info("Changing LLM provider from ${llmProvider.getProviderName()} to ${provider.getProviderName()}")
-        llmProvider = provider
-    }
-
-    override fun getLLMProvider(): LLMProvider = llmProvider
-
-    override fun setResponseFormat(format: ResponseFormat, schema: ResponseSchema?) {
-        logger.info("Setting response format to $format")
-        responseFormat = format
-        responseSchema = schema
-
-        // Валидация схемы если она задана
-        if (schema != null && !schema.isValid()) {
-            logger.warn("Invalid schema provided for format $format")
+    override fun updateSettings(settings: AgentSettings) {
+        logger.info("Updating agent settings: $settings")
+        this.settings = settings
+        
+        // Обновляем формат ответа если указан
+        if (settings.defaultResponseFormat != responseFormat) {
+            responseFormat = settings.defaultResponseFormat
+            responseSchema = when (settings.defaultResponseFormat) {
+                ResponseFormat.XML -> UncertaintyResponseSchema.createXmlSchema()
+                ResponseFormat.JSON -> UncertaintyResponseSchema.createJsonSchema()
+                ResponseFormat.TEXT -> null
+            }
         }
     }
 
-    override fun getResponseFormat(): ResponseFormat? = responseFormat
-
-    override fun getResponseSchema(): ResponseSchema? = responseSchema
-
-    override fun clearResponseFormat() {
-        logger.info("Clearing response format")
-        responseFormat = null
-        responseSchema = null
+    override fun dispose() {
+        logger.info("Disposing ChatAgent")
+        // Освобождаем ресурсы если необходимо
     }
+
+    /**
+     * Возвращает текущий LLM провайдер (для внутреннего использования)
+     */
+    internal fun getProvider(): LLMProvider = llmProvider
 
     /**
      * Формирует системный промпт. Если задана схема ответа,

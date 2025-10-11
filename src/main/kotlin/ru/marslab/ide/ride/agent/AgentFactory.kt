@@ -9,6 +9,7 @@ import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceConfig
 import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceProvider
 import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceModel
 import ru.marslab.ide.ride.settings.PluginSettings
+import ru.marslab.ide.ride.model.AgentSettings
 import ru.marslab.ide.ride.model.ResponseFormat
 import ru.marslab.ide.ride.model.ResponseSchema
 
@@ -46,10 +47,20 @@ object AgentFactory {
         }
 
         // Создаем агента с провайдером
-        return ChatAgent(
-            llmProvider = llmProvider,
+        val agent = ChatAgent(
+            initialProvider = llmProvider,
 //            systemPrompt = settings.systemPrompt
         )
+        
+        // Применяем настройки
+        val agentSettings = AgentSettings(
+            llmProvider = llmProvider.getProviderName(),
+            defaultResponseFormat = ResponseFormat.XML,
+            mcpEnabled = false
+        )
+        agent.updateSettings(agentSettings)
+        
+        return agent
     }
     
     /**
@@ -61,7 +72,7 @@ object AgentFactory {
      * @return Агент с указанным провайдером
      */
     fun createChatAgent(llmProvider: LLMProvider): Agent {
-        return ChatAgent(llmProvider = llmProvider)
+        return ChatAgent(initialProvider = llmProvider)
     }
 
     /**
@@ -75,7 +86,11 @@ object AgentFactory {
         schema: ResponseSchema? = null
     ): Agent {
         val agent = createChatAgent()
-        agent.setResponseFormat(format, schema)
+        // Устанавливаем формат через настройки
+        val agentSettings = AgentSettings(
+            defaultResponseFormat = format
+        )
+        agent.updateSettings(agentSettings)
         return agent
     }
 
@@ -87,8 +102,13 @@ object AgentFactory {
         format: ResponseFormat,
         schema: ResponseSchema? = null
     ): Agent {
-        val agent = ChatAgent(llmProvider = llmProvider)
-        agent.setResponseFormat(format, schema)
+        val agent = ChatAgent(initialProvider = llmProvider)
+        // Устанавливаем формат через настройки
+        val agentSettings = AgentSettings(
+            llmProvider = llmProvider.getProviderName(),
+            defaultResponseFormat = format
+        )
+        agent.updateSettings(agentSettings)
         return agent
     }
     
@@ -143,6 +163,36 @@ object AgentFactory {
         val hfToken = settings.getHuggingFaceToken()
         val modelId = settings.huggingFaceModelId
         val provider = createHuggingFaceProvider(hfToken, modelId)
-        return ChatAgent(llmProvider = provider)
+        return ChatAgent(initialProvider = provider)
+    }
+
+    /**
+     * Создает AgentOrchestrator с настроенным LLM провайдером из настроек плагина
+     * 
+     * @return Настроенный оркестратор
+     */
+    fun createAgentOrchestrator(): AgentOrchestrator {
+        val settings = service<PluginSettings>()
+        val llmProvider: LLMProvider = when (settings.selectedProvider) {
+            PluginSettings.PROVIDER_YANDEX -> {
+                val apiKey = settings.getApiKey()
+                val folderId = settings.folderId
+                val modelId = settings.yandexModelId
+                createYandexGPTProvider(apiKey, folderId, modelId)
+            }
+            PluginSettings.PROVIDER_HUGGINGFACE -> {
+                val hfToken = settings.getHuggingFaceToken()
+                val modelId = settings.huggingFaceModelId
+                createHuggingFaceProvider(hfToken, modelId)
+            }
+            else -> {
+                val apiKey = settings.getApiKey()
+                val folderId = settings.folderId
+                val modelId = settings.yandexModelId
+                createYandexGPTProvider(apiKey, folderId, modelId)
+            }
+        }
+        
+        return AgentOrchestrator(llmProvider, llmProvider)
     }
 }
