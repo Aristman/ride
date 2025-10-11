@@ -176,7 +176,8 @@ class ChatContentRenderer {
         val content = escapeHtml(text).replace("\n", "<br/>")
         val marker = if (isLoading) "<!--LOADING_MARKER-->" else ""
 
-        return "<div class='msg ${ChatPanelConfig.RoleClasses.SYSTEM}'>$marker<div class='prefix'><b>${ChatPanelConfig.Icons.SYSTEM} ${ChatPanelConfig.Prefixes.SYSTEM}</b>:</div><div class='content'>$content</div></div>"
+        // Простое отображение без префикса, только серый текст
+        return "<div class='msg ${ChatPanelConfig.RoleClasses.SYSTEM}'>$marker<div class='system-content'>$content</div></div>"
     }
 
     /**
