@@ -78,7 +78,9 @@ tasks {
     runIde {
         jvmArgs("-Didea.ignore.disabled.plugins=true",
                 "-Dgradle-jvm-compatibility.disabled=true",
-                "-Dcom.intellij.gradle.jvm.support.skip=true")
+                "-Dcom.intellij.gradle.jvm.support.skip=true",
+                "-Dfile.encoding=UTF-8",
+                "-Dconsole.encoding=UTF-8")
     }
 }
 
