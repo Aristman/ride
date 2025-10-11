@@ -296,8 +296,24 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                 )
             }
         
+        // Получаем системный промпт из настроек (как в ChatAgent)
+        val systemPrompt = """
+            Ты - AI-ассистент для разработчиков в IntelliJ IDEA.
+            
+            Твоя задача:
+            - Помогать с вопросами о программировании
+            - Объяснять концепции и паттерны
+            - Предлагать решения проблем
+            - Отвечать чётко и по существу
+            
+            Важно:
+            - Используй примеры кода когда это уместно
+            - Форматируй код в блоках с указанием языка
+            - Будь конкретным и практичным
+        """.trimIndent()
+        
         val contextTokens = tokenCounter.countRequestTokens(
-            systemPrompt = "",
+            systemPrompt = systemPrompt,
             userMessage = "",
             conversationHistory = conversationHistory
         )
