@@ -277,10 +277,12 @@ class ChatAgent(
 
     /**
      * Строит полную историю диалога для LLM провайдера
+     * Использует ВСЮ историю без ограничений - сжатие управляется через manageContext()
      */
     private fun buildConversationHistory(context: ChatContext): List<ConversationMessage> {
-        val recentMessages = context.getRecentHistory(HISTORY_LIMIT)
-        return recentMessages.map { message ->
+        // Берём ВСЮ историю, а не только последние N сообщений
+        val allMessages = context.history
+        return allMessages.map { message ->
             val role = when (message.role) {
                 MessageRole.USER -> ConversationRole.USER
                 MessageRole.ASSISTANT -> ConversationRole.ASSISTANT
@@ -471,8 +473,6 @@ class ChatAgent(
     }
 
     companion object {
-        private const val HISTORY_LIMIT = 5
-
         /**
          * Системный промпт с анализом неопределенности
          */
