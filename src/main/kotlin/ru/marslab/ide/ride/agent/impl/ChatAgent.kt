@@ -300,6 +300,11 @@ class ChatAgent(
         conversationHistory: List<ConversationMessage>,
         project: com.intellij.openapi.project.Project
     ): Pair<List<ConversationMessage>, String?> {
+        // Получаем настройки из PluginSettings
+        val pluginSettings = service<PluginSettings>()
+        val maxContextTokens = pluginSettings.maxContextTokens
+        val enableAutoSummarization = pluginSettings.enableAutoSummarization
+        
         // Подсчитываем токены в запросе
         val requestTokens = tokenCounter.countRequestTokens(
             systemPrompt = systemPrompt,
@@ -307,20 +312,20 @@ class ChatAgent(
             conversationHistory = conversationHistory
         )
         
-        logger.info("Request tokens: $requestTokens, max context tokens: ${settings.maxContextTokens}")
+        logger.info("Request tokens: $requestTokens, max context tokens: $maxContextTokens")
         
         // Если не превышен лимит, возвращаем историю как есть
-        if (requestTokens <= settings.maxContextTokens) {
+        if (requestTokens <= maxContextTokens) {
             return Pair(conversationHistory, null)
         }
         
         // Если превышен лимит и автосжатие выключено, обрезаем старые сообщения
-        if (!settings.enableAutoSummarization) {
-            logger.warn("Token limit exceeded ($requestTokens > ${settings.maxContextTokens}), truncating history")
+        if (!enableAutoSummarization) {
+            logger.warn("Token limit exceeded ($requestTokens > $maxContextTokens), truncating history")
             val truncatedHistory = truncateHistory(
-                systemPrompt, userMessage, conversationHistory, settings.maxContextTokens
+                systemPrompt, userMessage, conversationHistory, maxContextTokens
             )
-            val systemMessage = "⚠️ История диалога была обрезана из-за превышения лимита токенов ($requestTokens > ${settings.maxContextTokens})"
+            val systemMessage = "⚠️ История диалога была обрезана из-за превышения лимита токенов ($requestTokens > $maxContextTokens)"
             return Pair(truncatedHistory, systemMessage)
         }
         

@@ -20,7 +20,9 @@ data class PluginSettingsState(
     var huggingFaceModelId: String = DEFAULT_HUGGINGFACE_MODEL_ID,
     var selectedProvider: String = DEFAULT_PROVIDER,
     var showProviderName: Boolean = false,
-    var enableUncertaintyAnalysis: Boolean = true
+    var enableUncertaintyAnalysis: Boolean = true,
+    var maxContextTokens: Int = DEFAULT_MAX_CONTEXT_TOKENS,
+    var enableAutoSummarization: Boolean = true
 ) {
     companion object {
         const val DEFAULT_CHAT_FONT_SIZE = 9
@@ -33,5 +35,6 @@ data class PluginSettingsState(
         const val DEFAULT_YANDEX_MODEL_ID = "yandexgpt"
         const val DEFAULT_HUGGINGFACE_MODEL_ID = "deepseek-ai/DeepSeek-R1:fireworks-ai"
         const val DEFAULT_PROVIDER = "YandexGPT"
+        const val DEFAULT_MAX_CONTEXT_TOKENS = 8000
     }
 }
