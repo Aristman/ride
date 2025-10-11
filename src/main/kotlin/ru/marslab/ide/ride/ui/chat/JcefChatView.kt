@@ -49,6 +49,25 @@ class JcefChatView : JPanel(BorderLayout()) {
         exec("window.removeElementWithFade && window.removeElementWithFade('$selector');")
     }
 
+    /**
+     * Удаляет только системные сообщения с маркером загрузки
+     * Постоянные системные сообщения (о сжатии истории и т.д.) остаются
+     */
+    fun removeLoadingSystemMessage() {
+        exec("""
+            (function() {
+                const messages = document.querySelectorAll('.msg.system');
+                for (let i = messages.length - 1; i >= 0; i--) {
+                    if (messages[i].innerHTML.includes('<!--LOADING_MARKER-->')) {
+                        messages[i].classList.add('fade-out');
+                        setTimeout(() => messages[i].remove(), 300);
+                        break;
+                    }
+                }
+            })();
+        """)
+    }
+
     private fun exec(script: String) {
         browser.cefBrowser.executeJavaScript(script, browser.cefBrowser.url, 0)
     }
