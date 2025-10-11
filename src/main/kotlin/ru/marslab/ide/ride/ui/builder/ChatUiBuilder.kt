@@ -46,15 +46,27 @@ class ChatUiBuilder(
                 }
             }
         }
+        
+        // Label для отображения размера контекста
+        val contextSizeLabel = JLabel("Контекст: 0 токенов")
+        contextSizeLabel.border = BorderFactory.createEmptyBorder(2, 8, 2, 8)
+        contextSizeLabel.font = contextSizeLabel.font.deriveFont(11f)
+        contextSizeLabel.foreground = java.awt.Color(0x9aa0a6) // Серый цвет
+
+        // Панель с toolbar и label
+        val toolbarPanel = JPanel(BorderLayout())
+        toolbarPanel.add(toolbar.component, BorderLayout.WEST)
+        toolbarPanel.add(contextSizeLabel, BorderLayout.EAST)
 
         val panel = JPanel(BorderLayout())
-        panel.add(toolbar.component, BorderLayout.NORTH)
+        panel.add(toolbarPanel, BorderLayout.NORTH)
         panel.add(sessionsTabs, BorderLayout.SOUTH)
 
         return TopPanelComponents(
             panel = panel,
             toolbar = toolbar,
-            sessionsTabs = sessionsTabs
+            sessionsTabs = sessionsTabs,
+            contextSizeLabel = contextSizeLabel
         )
     }
 

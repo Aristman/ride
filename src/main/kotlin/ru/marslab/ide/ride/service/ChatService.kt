@@ -489,4 +489,11 @@ class ChatService {
 
     private fun getCurrentHistory(): MessageHistory =
         sessionHistories.getOrPut(currentSessionId) { MessageHistory() }
+    
+    /**
+     * Возвращает TokenCounter для подсчёта токенов
+     */
+    fun getTokenCounter(): ru.marslab.ide.ride.integration.llm.TokenCounter {
+        return ru.marslab.ide.ride.integration.llm.impl.TiktokenCounter()
+    }
 }

@@ -158,6 +158,7 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                 onStepComplete = { message ->
                     messageDisplayManager.removeLastSystemMessage()
                     messageDisplayManager.displayMessage(message)
+                    updateContextSize()
                 },
                 onError = { error ->
                     messageDisplayManager.removeLastSystemMessage()
@@ -165,6 +166,7 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                     setUIEnabled(true)
                 },
                 onComplete = {
+                    updateContextSize()
                     setUIEnabled(true)
                 }
             )
@@ -175,6 +177,7 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                 onResponse = { message ->
                     messageDisplayManager.removeLastSystemMessage()
                     messageDisplayManager.displayMessage(message)
+                    updateContextSize()
                     setUIEnabled(true)
                 },
                 onError = { error ->
@@ -258,10 +261,42 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         val history = chatService.getHistory()
         htmlDocumentManager.updateTheme()
         messageDisplayManager.redrawMessages(history)
+        updateContextSize()
 
         if (!settings.isConfigured()) {
             messageDisplayManager.displaySystemMessage(ChatPanelConfig.Messages.CONFIGURATION_WARNING)
         }
+    }
+
+    /**
+     * Обновляет отображение размера контекста в токенах
+     */
+    private fun updateContextSize() {
+        val history = chatService.getHistory()
+        val tokenCounter = chatService.getTokenCounter()
+        
+        // Подсчитываем токены в истории
+        val conversationHistory = history
+            .filter { it.role != MessageRole.SYSTEM }
+            .map { message ->
+                ru.marslab.ide.ride.model.ConversationMessage(
+                    content = message.content,
+                    role = when (message.role) {
+                        MessageRole.USER -> ru.marslab.ide.ride.model.ConversationRole.USER
+                        MessageRole.ASSISTANT -> ru.marslab.ide.ride.model.ConversationRole.ASSISTANT
+                        MessageRole.SYSTEM -> ru.marslab.ide.ride.model.ConversationRole.SYSTEM
+                    }
+                )
+            }
+        
+        val contextTokens = tokenCounter.countRequestTokens(
+            systemPrompt = "",
+            userMessage = "",
+            conversationHistory = conversationHistory
+        )
+        
+        // Обновляем label
+        topComponents.contextSizeLabel.text = "Контекст: $contextTokens токенов"
     }
 
     /**
