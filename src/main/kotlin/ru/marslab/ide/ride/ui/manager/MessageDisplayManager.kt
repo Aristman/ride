@@ -151,6 +151,7 @@ class MessageDisplayManager(
         val hasClarifyingQuestions = message.metadata["hasClarifyingQuestions"] as? Boolean ?: false
         val responseTimeMs = message.metadata["responseTimeMs"] as? Long
         val tokensUsed = message.metadata["tokensUsed"] as? Int
+        val tokenUsage = message.metadata["tokenUsage"] as? ru.marslab.ide.ride.model.TokenUsage
 
         return contentRenderer.createStatusHtml(
             isFinal = isFinal,
@@ -159,7 +160,8 @@ class MessageDisplayManager(
             hasClarifyingQuestions = hasClarifyingQuestions,
             responseTimeMs = responseTimeMs,
             tokensUsed = tokensUsed,
-            showUncertaintyStatus = enableUncertaintyAnalysis
+            showUncertaintyStatus = enableUncertaintyAnalysis,
+            tokenUsage = tokenUsage
         )
     }
 

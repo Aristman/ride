@@ -118,12 +118,10 @@ class ChatService {
                 // Обрабатываем ответ в UI потоке
                 withContext(Dispatchers.EDT) {
                     if (agentResponse.success) {
-                        // Получаем количество токенов из ответа или оцениваем приблизительно
-                        val tokensFromResponse = agentResponse.metadata["tokensUsed"] as? Int ?: 0
-                        val tokensUsed = if (tokensFromResponse > 0) {
-                            tokensFromResponse
-                        } else {
-                            // Оцениваем токены по размеру запроса и ответа
+                        // Получаем детальную статистику токенов из ответа
+                        val tokenUsage = agentResponse.metadata["tokenUsage"] as? TokenUsage
+                        val tokensUsed = tokenUsage?.totalTokens ?: run {
+                            // Fallback: оцениваем токены по размеру запроса и ответа
                             TokenEstimator.estimateTotalTokens(userMessage, agentResponse.content)
                         }
                         
@@ -132,9 +130,23 @@ class ChatService {
                             "isFinal" to agentResponse.isFinal,
                             "uncertainty" to (agentResponse.uncertainty ?: 0.0),
                             "responseTimeMs" to responseTime,
-                            "tokensUsed" to tokensUsed
+                            "tokensUsed" to tokensUsed,
+                            "tokenUsage" to (tokenUsage ?: TokenUsage.EMPTY)
                         )
 
+                        // Проверяем наличие системного сообщения о сжатии/обрезке
+                        val systemMessage = agentResponse.metadata["systemMessage"] as? String
+                        if (systemMessage != null) {
+                            // Добавляем системное сообщение в историю
+                            val sysMsg = Message(
+                                content = systemMessage,
+                                role = MessageRole.SYSTEM,
+                                metadata = mapOf("type" to "context_management")
+                            )
+                            getCurrentHistory().addMessage(sysMsg)
+                            onResponse(sysMsg)
+                        }
+                        
                         val assistantMsg = Message(
                             content = agentResponse.content,
                             role = MessageRole.ASSISTANT,
