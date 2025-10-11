@@ -175,10 +175,17 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                 userMessage = text,
                 project = project,
                 onResponse = { message ->
-                    messageDisplayManager.removeLastSystemMessage()
-                    messageDisplayManager.displayMessage(message)
-                    updateContextSize()
-                    setUIEnabled(true)
+                    // Системные сообщения (о сжатии) приходят первыми
+                    if (message.role == MessageRole.SYSTEM) {
+                        messageDisplayManager.displayMessage(message)
+                        updateContextSize()
+                    } else {
+                        // Ответ ассистента
+                        messageDisplayManager.removeLastSystemMessage()
+                        messageDisplayManager.displayMessage(message)
+                        updateContextSize()
+                        setUIEnabled(true)
+                    }
                 },
                 onError = { error ->
                     messageDisplayManager.removeLastSystemMessage()
