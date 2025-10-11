@@ -235,7 +235,14 @@ class ChatService {
                                     val message = Message(
                                         content = step.content,
                                         role = MessageRole.ASSISTANT,
-                                        metadata = mapOf("agentName" to step.agentName)
+                                        metadata = mapOf(
+                                            "agentName" to step.agentName,
+                                            "responseTimeMs" to step.responseTimeMs,
+                                            "tokenUsage" to step.tokenUsage,
+                                            "tokensUsed" to step.tokenUsage.totalTokens,
+                                            "isFinal" to true,
+                                            "uncertainty" to 0.0
+                                        )
                                     )
                                     getCurrentHistory().addMessage(message)
                                     onStepComplete(message)
@@ -262,7 +269,12 @@ class ChatService {
                                         "agentName" to step.agentName,
                                         "taskId" to step.taskId,
                                         "taskTitle" to step.taskTitle,
-                                        "success" to step.success
+                                        "success" to step.success,
+                                        "responseTimeMs" to step.responseTimeMs,
+                                        "tokenUsage" to step.tokenUsage,
+                                        "tokensUsed" to step.tokenUsage.totalTokens,
+                                        "isFinal" to true,
+                                        "uncertainty" to 0.0
                                     )
                                 )
                                 getCurrentHistory().addMessage(message)
@@ -274,7 +286,12 @@ class ChatService {
                                     role = MessageRole.ASSISTANT,
                                     metadata = mapOf(
                                         "totalTasks" to step.totalTasks,
-                                        "successfulTasks" to step.successfulTasks
+                                        "successfulTasks" to step.successfulTasks,
+                                        "responseTimeMs" to step.totalTimeMs,
+                                        "tokenUsage" to step.totalTokenUsage,
+                                        "tokensUsed" to step.totalTokenUsage.totalTokens,
+                                        "isFinal" to true,
+                                        "uncertainty" to 0.0
                                     )
                                 )
                                 getCurrentHistory().addMessage(message)
