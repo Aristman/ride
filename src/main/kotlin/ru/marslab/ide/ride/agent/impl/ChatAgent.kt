@@ -307,6 +307,12 @@ class ChatAgent(
         val maxContextTokens = pluginSettings.maxContextTokens
         val enableAutoSummarization = pluginSettings.enableAutoSummarization
         
+        println("=== ChatAgent.manageContext() ===")
+        println("Настройки:")
+        println("  - maxContextTokens: $maxContextTokens")
+        println("  - enableAutoSummarization: $enableAutoSummarization")
+        println("  - conversationHistory.size: ${conversationHistory.size}")
+        
         // Подсчитываем токены в запросе
         val requestTokens = tokenCounter.countRequestTokens(
             systemPrompt = systemPrompt,
@@ -314,24 +320,39 @@ class ChatAgent(
             conversationHistory = conversationHistory
         )
         
+        println("Подсчёт токенов:")
+        println("  - systemPrompt: ${tokenCounter.countTokens(systemPrompt)} токенов")
+        println("  - userMessage: ${tokenCounter.countTokens(userMessage)} токенов")
+        println("  - conversationHistory: ${tokenCounter.countTokens(conversationHistory)} токенов")
+        println("  - ИТОГО requestTokens: $requestTokens")
+        
         logger.info("Request tokens: $requestTokens, max context tokens: $maxContextTokens")
         
         // Если не превышен лимит, возвращаем историю как есть
         if (requestTokens <= maxContextTokens) {
+            println("✅ Лимит НЕ превышен ($requestTokens <= $maxContextTokens)")
+            println("   История возвращается без изменений")
+            println("=================================\n")
             return Pair(conversationHistory, null)
         }
         
+        println("⚠️ ЛИМИТ ПРЕВЫШЕН! ($requestTokens > $maxContextTokens)")
+        
         // Если превышен лимит и автосжатие выключено, обрезаем старые сообщения
         if (!enableAutoSummarization) {
+            println("❌ Автосжатие ВЫКЛЮЧЕНО - обрезаем историю")
             logger.warn("Token limit exceeded ($requestTokens > $maxContextTokens), truncating history")
             val truncatedHistory = truncateHistory(
                 systemPrompt, userMessage, conversationHistory, maxContextTokens
             )
             val systemMessage = "⚠️ История диалога была обрезана из-за превышения лимита токенов ($requestTokens > $maxContextTokens)"
+            println("   Обрезано до ${truncatedHistory.size} сообщений")
+            println("=================================\n")
             return Pair(truncatedHistory, systemMessage)
         }
         
         // Сжимаем историю через SummarizerAgent
+        println("🔄 Автосжатие ВКЛЮЧЕНО - запускаем SummarizerAgent")
         logger.info("Token limit exceeded, summarizing history...")
         return try {
             val historyMessages = conversationHistory.map { msg ->
@@ -342,6 +363,9 @@ class ChatAgent(
                 }
                 Message(content = msg.content, role = role)
             }
+            
+            println("   Подготовка к сжатию:")
+            println("   - Количество сообщений для сжатия: ${historyMessages.size}")
             
             // Создаём временный контекст для суммаризации
             val summaryContext = ChatContext(
@@ -355,9 +379,13 @@ class ChatAgent(
                 parameters = LLMParameters.PRECISE
             )
             
+            println("   Вызов SummarizerAgent.ask()...")
             val summaryResponse = summarizerAgent.ask(summaryRequest)
             
             if (summaryResponse.success) {
+                println("   ✅ SummarizerAgent вернул успешный результат")
+                println("   Длина резюме: ${summaryResponse.content.length} символов")
+                
                 // Создаём сжатую историю: резюме + последние N сообщений
                 val summaryMessage = ConversationMessage(
                     role = ConversationRole.SYSTEM,
@@ -367,25 +395,49 @@ class ChatAgent(
                 val recentMessages = conversationHistory.takeLast(2) // Берём последние 2 сообщения
                 val compressedHistory = listOf(summaryMessage) + recentMessages
                 
+                val compressedTokens = tokenCounter.countRequestTokens(
+                    systemPrompt = systemPrompt,
+                    userMessage = "",
+                    conversationHistory = compressedHistory
+                )
+                
+                println("   Результат сжатия:")
+                println("   - Было сообщений: ${conversationHistory.size}")
+                println("   - Стало сообщений: ${compressedHistory.size} (резюме + 2 последних)")
+                println("   - Было токенов: $requestTokens")
+                println("   - Стало токенов: $compressedTokens")
+                println("   - Экономия: ${requestTokens - compressedTokens} токенов")
+                
                 val systemMessage = "🔄 История диалога была сжата для экономии токенов (было: $requestTokens токенов)"
                 
                 logger.info("History summarized successfully")
+                println("=================================\n")
                 Pair(compressedHistory, systemMessage)
             } else {
+                println("   ❌ SummarizerAgent вернул ошибку: ${summaryResponse.error}")
+                println("   Fallback: обрезаем историю")
+                
                 // Если сжатие не удалось, обрезаем историю
                 logger.warn("Summarization failed, falling back to truncation")
                 val truncatedHistory = truncateHistory(
                     systemPrompt, userMessage, conversationHistory, settings.maxContextTokens
                 )
                 val systemMessage = "⚠️ Не удалось сжать историю, она была обрезана"
+                println("   Обрезано до ${truncatedHistory.size} сообщений")
+                println("=================================\n")
                 Pair(truncatedHistory, systemMessage)
             }
         } catch (e: Exception) {
+            println("   ❌ ИСКЛЮЧЕНИЕ при сжатии: ${e.javaClass.simpleName}: ${e.message}")
+            e.printStackTrace()
+            
             logger.error("Error during summarization", e)
             val truncatedHistory = truncateHistory(
                 systemPrompt, userMessage, conversationHistory, settings.maxContextTokens
             )
             val systemMessage = "⚠️ Ошибка при сжатии истории: ${e.message}"
+            println("   Fallback: обрезано до ${truncatedHistory.size} сообщений")
+            println("=================================\n")
             Pair(truncatedHistory, systemMessage)
         }
     }
