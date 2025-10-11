@@ -104,9 +104,11 @@ class ChatAgent(
             val conversationHistory = buildConversationHistory(context)
             
             // Управляем контекстом: проверяем токены и сжимаем если нужно
+            // ВАЖНО: userMessage уже добавлено в conversationHistory в ChatService,
+            // поэтому передаём пустую строку чтобы избежать двойного подсчёта
             val (managedHistory, systemMessage) = manageContext(
                 systemPrompt = systemPromptForRequest,
-                userMessage = request,
+                userMessage = "",  // Уже в conversationHistory
                 conversationHistory = conversationHistory,
                 project = context.project
             )
