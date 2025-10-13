@@ -1,10 +1,15 @@
 package ru.marslab.ide.ride.model.mcp
 
-import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.Assertions.*
-import org.junit.jupiter.api.assertThrows
+import org.junit.Test
+import org.junit.Assert.*
+import org.junit.Rule
+import org.junit.rules.ExpectedException
 
 class MCPSettingsTest {
+    
+    @Rule
+    @JvmField
+    val exceptionRule: ExpectedException = ExpectedException.none()
     
     private val testServer1 = MCPServerConfig(
         name = "server1",
@@ -43,9 +48,8 @@ class MCPSettingsTest {
         val settings = MCPSettings.empty()
             .addServer(testServer1)
         
-        assertThrows<IllegalArgumentException> {
-            settings.addServer(testServer1)
-        }
+        exceptionRule.expect(IllegalArgumentException::class.java)
+        settings.addServer(testServer1)
     }
     
     @Test
@@ -64,9 +68,8 @@ class MCPSettingsTest {
     fun `test update non-existent server throws exception`() {
         val settings = MCPSettings.empty()
         
-        assertThrows<IllegalArgumentException> {
-            settings.updateServer("non-existent", testServer1)
-        }
+        exceptionRule.expect(IllegalArgumentException::class.java)
+        settings.updateServer("non-existent", testServer1)
     }
     
     @Test

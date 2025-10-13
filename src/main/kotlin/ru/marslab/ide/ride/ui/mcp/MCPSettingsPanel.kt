@@ -1,7 +1,9 @@
 package ru.marslab.ide.ride.ui.mcp
 
+import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
+import com.intellij.ui.AnActionButton
 import com.intellij.ui.ToolbarDecorator
 import com.intellij.ui.table.JBTable
 import com.intellij.util.ui.JBUI
@@ -58,9 +60,9 @@ class MCPSettingsPanel(private val project: Project) : JPanel(BorderLayout()) {
             .setAddAction { addServer() }
             .setEditAction { editServer() }
             .setRemoveAction { removeServer() }
-            .addExtraAction(object : ToolbarDecorator.ElementActionButton("Test Connection", "Test connection to server", 
+            .addExtraAction(object : AnActionButton("Test Connection", "Test connection to server", 
                 AllIcons.Actions.Execute) {
-                override fun actionPerformed(e: java.awt.event.ActionEvent) {
+                override fun actionPerformed(e: AnActionEvent) {
                     testConnection()
                 }
                 
@@ -68,9 +70,9 @@ class MCPSettingsPanel(private val project: Project) : JPanel(BorderLayout()) {
                     return table.selectedRow >= 0
                 }
             })
-            .addExtraAction(object : ToolbarDecorator.ElementActionButton("Refresh", "Refresh server status", 
+            .addExtraAction(object : AnActionButton("Refresh", "Refresh server status", 
                 AllIcons.Actions.Refresh) {
-                override fun actionPerformed(e: java.awt.event.ActionEvent) {
+                override fun actionPerformed(e: AnActionEvent) {
                     refreshStatuses()
                 }
             })

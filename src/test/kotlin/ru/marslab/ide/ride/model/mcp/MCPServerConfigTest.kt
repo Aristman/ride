@@ -1,7 +1,7 @@
 package ru.marslab.ide.ride.model.mcp
 
-import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.Assertions.*
+import org.junit.Test
+import org.junit.Assert.*
 
 class MCPServerConfigTest {
     

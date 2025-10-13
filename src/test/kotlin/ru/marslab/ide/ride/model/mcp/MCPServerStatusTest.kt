@@ -1,8 +1,8 @@
 package ru.marslab.ide.ride.model.mcp
 
 import kotlinx.serialization.json.JsonPrimitive
-import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.Assertions.*
+import org.junit.Test
+import org.junit.Assert.*
 
 class MCPServerStatusTest {
     
