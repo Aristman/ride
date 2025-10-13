@@ -178,12 +178,15 @@ class MCPServerListItem(
     fun refreshStatus() {
         // getServerStatus - синхронная функция, выполняем в UI потоке
         currentStatus = connectionManager.getServerStatus(server.name)
+        println("[MCPServerListItem] Refreshed status for ${server.name}: connected=${currentStatus?.connected}, methods=${currentStatus?.methods?.size}")
         updateStatusDisplay()
     }
 
     private fun updateStatusDisplay() {
+        println("[MCPServerListItem] updateStatusDisplay for ${server.name}: currentStatus=$currentStatus")
         when {
             currentStatus == null -> {
+                println("[MCPServerListItem] Status is null for ${server.name}")
                 statusIcon.icon = AllIcons.General.QuestionDialog
                 statusIcon.toolTipText = "Status unknown"
                 expandButton.isVisible = false
@@ -191,6 +194,7 @@ class MCPServerListItem(
                 isExpanded = false
             }
             currentStatus!!.connected -> {
+                println("[MCPServerListItem] Status is connected for ${server.name}, methods: ${currentStatus!!.methods.size}")
                 statusIcon.icon = AllIcons.General.InspectionsOK
                 statusIcon.toolTipText = "Connected (${currentStatus!!.methods.size} methods)"
                 expandButton.isVisible = currentStatus!!.hasMethods()
@@ -203,6 +207,7 @@ class MCPServerListItem(
                 }
             }
             currentStatus!!.hasError() -> {
+                println("[MCPServerListItem] Status has error for ${server.name}: ${currentStatus!!.error}")
                 statusIcon.icon = AllIcons.General.Error
                 statusIcon.toolTipText = "Error: ${currentStatus!!.error}"
                 expandButton.isVisible = false
@@ -210,6 +215,7 @@ class MCPServerListItem(
                 isExpanded = false
             }
             else -> {
+                println("[MCPServerListItem] Status is disconnected for ${server.name}")
                 statusIcon.icon = AllIcons.General.Warning
                 statusIcon.toolTipText = "Disconnected"
                 expandButton.isVisible = false
@@ -227,13 +233,18 @@ class MCPServerListItem(
         refreshButton.icon = AllIcons.Process.Step_1
         refreshButton.toolTipText = "Refreshing..."
         
+        println("[MCPServerListItem] Starting refresh for server: ${server.name}")
+        
         scope.launch(Dispatchers.IO) {
             try {
                 // Синхронизируем сервер - это обновит статус в БД
-                connectionManager.connectServer(server)
+                println("[MCPServerListItem] Connecting to server: ${server.name}")
+                val success = connectionManager.connectServer(server)
+                println("[MCPServerListItem] Connection result for ${server.name}: $success")
                 
                 // Получаем обновленный статус из БД
                 val updatedStatus = connectionManager.getServerStatus(server.name)
+                println("[MCPServerListItem] Updated status for ${server.name}: connected=${updatedStatus?.connected}, methods=${updatedStatus?.methods?.size}")
 
                 withContext(Dispatchers.Main) {
                     currentStatus = updatedStatus
@@ -242,6 +253,8 @@ class MCPServerListItem(
                     onRefreshComplete()
                 }
             } catch (e: Exception) {
+                println("[MCPServerListItem] Error refreshing server ${server.name}: ${e.message}")
+                e.printStackTrace()
                 withContext(Dispatchers.Main) {
                     // Получаем статус из БД (там может быть ошибка)
                     currentStatus = connectionManager.getServerStatus(server.name)
