@@ -89,6 +89,8 @@
                 serviceImplementation="ru.marslab.ide.ride.service.mcp.MCPConfigService"/>
         <projectService
                 serviceImplementation="ru.marslab.ide.ride.service.mcp.MCPConnectionManager"/>
+        <projectService
+                serviceImplementation="ru.marslab.ide.ride.service.mcp.MCPStatusPersistenceService"/>
     </extensions>
 
     <!-- Project listeners -->
