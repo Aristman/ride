@@ -298,9 +298,11 @@ class MCPConnectionManager(private val project: Project) {
      * Обновляет статус сервера
      */
     private fun updateStatus(serverName: String, status: MCPServerStatus) {
+        println("[MCPConnectionManager] Updating status for $serverName: connected=${status.connected}, methods=${status.methods.size}")
         statuses[serverName] = status
         // Сохраняем в БД
         persistenceService.saveStatus(status)
+        println("[MCPConnectionManager] Status saved to DB for $serverName")
         logger.debug("Updated status for $serverName: connected=${status.connected}, methods=${status.methods.size}")
     }
     
@@ -309,7 +311,9 @@ class MCPConnectionManager(private val project: Project) {
      */
     private fun loadStatusesFromDatabase() {
         val savedStatuses = persistenceService.getAllStatuses()
+        println("[MCPConnectionManager] Loading ${savedStatuses.size} statuses from database")
         savedStatuses.forEach { status ->
+            println("[MCPConnectionManager] Loaded status: ${status.name}, connected=${status.connected}, methods=${status.methods.size}")
             statuses[status.name] = status
         }
         logger.info("Loaded ${savedStatuses.size} server statuses from database")
