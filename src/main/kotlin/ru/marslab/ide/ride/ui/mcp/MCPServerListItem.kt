@@ -224,6 +224,12 @@ class MCPServerListItem(
             }
         }
         updateExpandButtonIcon()
+        
+        // Принудительно обновляем UI
+        statusIcon.revalidate()
+        statusIcon.repaint()
+        revalidate()
+        repaint()
     }
 
     private fun refreshServer() {
@@ -245,24 +251,27 @@ class MCPServerListItem(
                 // Получаем обновленный статус из БД
                 val updatedStatus = connectionManager.getServerStatus(server.name)
                 println("[MCPServerListItem] Updated status for ${server.name}: connected=${updatedStatus?.connected}, methods=${updatedStatus?.methods?.size}")
+                println("[MCPServerListItem] Switching to UI thread...")
 
-                withContext(Dispatchers.Main) {
+                SwingUtilities.invokeLater {
+                    println("[MCPServerListItem] In UI thread, updating UI...")
                     currentStatus = updatedStatus
                     // Обновляем отображение на основе данных из БД
                     updateStatusDisplay()
                     onRefreshComplete()
+                    println("[MCPServerListItem] UI update completed")
                 }
             } catch (e: Exception) {
                 println("[MCPServerListItem] Error refreshing server ${server.name}: ${e.message}")
                 e.printStackTrace()
-                withContext(Dispatchers.Main) {
+                SwingUtilities.invokeLater {
                     // Получаем статус из БД (там может быть ошибка)
                     currentStatus = connectionManager.getServerStatus(server.name)
                     updateStatusDisplay()
                     onRefreshComplete()
                 }
             } finally {
-                withContext(Dispatchers.Main) {
+                SwingUtilities.invokeLater {
                     isRefreshing = false
                     refreshButton.icon = AllIcons.Actions.Refresh
                     refreshButton.toolTipText = "Refresh server connection"
