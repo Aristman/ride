@@ -20,7 +20,8 @@ import javax.swing.*
 class MCPServerListPanel(
         private val project: Project,
         private val onEditServer: (MCPServerConfig) -> Unit = {},
-        private val onDeleteServer: (MCPServerConfig) -> Unit = {}
+        private val onDeleteServer: (MCPServerConfig) -> Unit = {},
+        private val onServerToggle: (MCPServerConfig) -> Unit = {}
     ) : JPanel(BorderLayout()) {
 
     private val configService = MCPConfigService.getInstance(project)
@@ -75,7 +76,8 @@ class MCPServerListPanel(
                         // Можно добавить дополнительную логику после рефреша
                     },
                     onEditServer = onEditServer,
-                    onDeleteServer = onDeleteServer
+                    onDeleteServer = onDeleteServer,
+                    onServerToggle = onServerToggle
                 )
                 serverItems.add(serverItem)
                 serversPanel.add(serverItem)

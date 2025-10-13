@@ -29,7 +29,8 @@ class MCPServerListItem(
     private val connectionManager: MCPConnectionManager,
     private val onRefreshComplete: () -> Unit,
     private val onEditServer: (MCPServerConfig) -> Unit,
-    private val onDeleteServer: (MCPServerConfig) -> Unit
+    private val onDeleteServer: (MCPServerConfig) -> Unit,
+    private val onServerToggle: (MCPServerConfig) -> Unit
 ) : JPanel(BorderLayout()) {
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -41,6 +42,7 @@ class MCPServerListItem(
     private val refreshButton = JButton(AllIcons.Actions.Refresh)
     private val editButton = JButton(AllIcons.Actions.Edit)
     private val deleteButton = JButton(AllIcons.General.Remove)
+    private val enableToggle = JCheckBox()
     private val expandButton = JButton(AllIcons.General.ArrowDown)
     private val methodsPanel = JPanel()
     private val methodsLayout = CardLayout()
@@ -139,6 +141,15 @@ class MCPServerListItem(
         gbc.insets = JBUI.insets(2, 0, 2, 0)
         headerPanel.add(deleteButton, gbc)
 
+        // Переключатель включения/выключения
+        enableToggle.isSelected = server.enabled
+        enableToggle.toolTipText = "Enable/disable server"
+        gbc.gridx = 7
+        gbc.gridy = 0
+        gbc.anchor = GridBagConstraints.EAST
+        gbc.insets = JBUI.insets(2, 4, 2, 0)
+        headerPanel.add(enableToggle, gbc)
+
         add(headerPanel, BorderLayout.NORTH)
 
         // Панель для методов (скрыта по умолчанию)
@@ -188,6 +199,23 @@ class MCPServerListItem(
             toggleMethodsList()
         }
 
+        // Переключатель включения-выключения
+        enableToggle.addActionListener {
+            val updated = server.copy(enabled = enableToggle.isSelected)
+            // Мгновенно обновляем отображение
+            if (!enableToggle.isSelected) {
+                // Отключен: скрываем методы и помечаем статус
+                methodsPanel.isVisible = false
+                isExpanded = false
+            } else {
+                // Включен: попробуем обновить статус
+                refreshStatus()
+            }
+            // Передаём наверх для сохранения и обновления списка/конфига
+            onServerToggle(updated)
+            updateStatusDisplay()
+        }
+
         // Клик по всей карточке раскрывает список тулзов
         val clickListener = object : MouseAdapter() {
             override fun mouseClicked(e: MouseEvent) {
@@ -235,6 +263,22 @@ class MCPServerListItem(
 
     private fun updateStatusDisplay() {
         println("[MCPServerListItem] updateStatusDisplay for ${server.name}: currentStatus=$currentStatus")
+        // Если сервер выключен переключателем, показываем отключённый статус и выходим
+        if (!enableToggle.isSelected) {
+            statusIcon.icon = AllIcons.General.Warning
+            statusIcon.toolTipText = "Server disabled"
+            expandButton.isVisible = false
+            methodsPanel.isVisible = false
+            isExpanded = false
+            typeLabel.text = "[${server.type.name}]"
+            nameLabel.text = "${server.name} (disabled)"
+            updateExpandButtonIcon()
+            statusIcon.revalidate()
+            statusIcon.repaint()
+            revalidate()
+            repaint()
+            return
+        }
         when {
             currentStatus == null -> {
                 println("[MCPServerListItem] Status is null for ${server.name}")

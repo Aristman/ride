@@ -48,6 +48,14 @@ class MCPSettingsPanel(private val project: Project) : JPanel(BorderLayout()) {
                 onDeleteServer = { server ->
                     currentSettings = currentSettings.removeServer(server.name)
                     serverListPanel.removeServer(server.name)
+                    // сохраняем сразу
+                    configService.saveConfig(currentSettings)
+                },
+                onServerToggle = { server ->
+                    // обновляем текущие настройки и сохраняем
+                    currentSettings = currentSettings.updateServer(server.name, server)
+                    serverListPanel.updateServer(server.name, server)
+                    configService.saveConfig(currentSettings)
                 }
             )
         }
@@ -93,6 +101,12 @@ class MCPSettingsPanel(private val project: Project) : JPanel(BorderLayout()) {
             onDeleteServer = { server ->
                 currentSettings = currentSettings.removeServer(server.name)
                 serverListPanel.removeServer(server.name)
+                configService.saveConfig(currentSettings)
+            },
+            onServerToggle = { server ->
+                currentSettings = currentSettings.updateServer(server.name, server)
+                serverListPanel.updateServer(server.name, server)
+                configService.saveConfig(currentSettings)
             }
         )
         removeAll()
