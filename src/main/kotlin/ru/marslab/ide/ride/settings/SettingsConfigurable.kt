@@ -41,6 +41,8 @@ class SettingsConfigurable : Configurable {
     private lateinit var yandexModelSelectorComboBox: ComboBox<String>
     private lateinit var showProviderNameCheck: JBCheckBox
     private lateinit var enableUncertaintyAnalysisCheck: JBCheckBox
+    private lateinit var maxContextTokensField: JBTextField
+    private lateinit var enableAutoSummarizationCheck: JBCheckBox
 
     private var panel: DialogPanel? = null
     private var initialApiKey: String = ""
@@ -126,7 +128,9 @@ class SettingsConfigurable : Configurable {
                 selectedHFModel != settings.huggingFaceModelId ||
                 selectedYandexModel != settings.yandexModelId ||
                 showProviderNameCheck.isSelected != settings.showProviderName ||
-                enableUncertaintyAnalysisCheck.isSelected != settings.enableUncertaintyAnalysis
+                enableUncertaintyAnalysisCheck.isSelected != settings.enableUncertaintyAnalysis ||
+                maxContextTokensField.text != settings.maxContextTokens.toString() ||
+                enableAutoSummarizationCheck.isSelected != settings.enableAutoSummarization
     }
 
     override fun apply() {
@@ -199,6 +203,14 @@ class SettingsConfigurable : Configurable {
         
         // Флаг анализа неопределенности
         settings.enableUncertaintyAnalysis = enableUncertaintyAnalysisCheck.isSelected
+        
+        // Настройки управления токенами
+        try {
+            settings.maxContextTokens = maxContextTokensField.text.toInt()
+        } catch (e: NumberFormatException) {
+            settings.maxContextTokens = PluginSettingsState.DEFAULT_MAX_CONTEXT_TOKENS
+        }
+        settings.enableAutoSummarization = enableAutoSummarizationCheck.isSelected
 
         initialApiKey = apiKey
         apiKeyLoaded = true
@@ -260,6 +272,8 @@ class SettingsConfigurable : Configurable {
             parseColor(settings.chatUserBorderColor, PluginSettingsState.DEFAULT_USER_BORDER_COLOR)
         showProviderNameCheck.isSelected = settings.showProviderName
         enableUncertaintyAnalysisCheck.isSelected = settings.enableUncertaintyAnalysis
+        maxContextTokensField.text = settings.maxContextTokens.toString()
+        enableAutoSummarizationCheck.isSelected = settings.enableAutoSummarization
     }
 
     override fun disposeUIResources() {
@@ -508,6 +522,21 @@ class SettingsConfigurable : Configurable {
                 enableUncertaintyAnalysisCheck = JBCheckBox("Включить анализ неопределенности")
                 cell(enableUncertaintyAnalysisCheck)
                     .comment("Если включено, агент будет задавать уточняющие вопросы при неопределенности > 0.1")
+            }
+        }
+        
+        group("Token Management") {
+            row("Max Context Tokens:") {
+                maxContextTokensField = JBTextField()
+                cell(maxContextTokensField)
+                    .columns(10)
+                    .comment("Максимальное количество токенов в контексте (запрос + история). Рекомендуется: 8000")
+            }
+            
+            row {
+                enableAutoSummarizationCheck = JBCheckBox("Включить автоматическое сжатие истории")
+                cell(enableAutoSummarizationCheck)
+                    .comment("При превышении лимита токенов история будет автоматически сжиматься через SummarizerAgent")
             }
         }
     }

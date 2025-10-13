@@ -158,6 +158,7 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                 onStepComplete = { message ->
                     messageDisplayManager.removeLastSystemMessage()
                     messageDisplayManager.displayMessage(message)
+                    updateContextSize()
                 },
                 onError = { error ->
                     messageDisplayManager.removeLastSystemMessage()
@@ -165,6 +166,7 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                     setUIEnabled(true)
                 },
                 onComplete = {
+                    updateContextSize()
                     setUIEnabled(true)
                 }
             )
@@ -173,9 +175,20 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                 userMessage = text,
                 project = project,
                 onResponse = { message ->
-                    messageDisplayManager.removeLastSystemMessage()
-                    messageDisplayManager.displayMessage(message)
-                    setUIEnabled(true)
+                    // Системные сообщения (о сжатии) приходят первыми
+                    if (message.role == MessageRole.SYSTEM) {
+                        messageDisplayManager.displayMessage(message)
+                        // Обновляем счётчик с небольшой задержкой, чтобы история успела обновиться
+                        SwingUtilities.invokeLater {
+                            updateContextSize()
+                        }
+                    } else {
+                        // Ответ ассистента
+                        messageDisplayManager.removeLastSystemMessage()
+                        messageDisplayManager.displayMessage(message)
+                        updateContextSize()
+                        setUIEnabled(true)
+                    }
                 },
                 onError = { error ->
                     messageDisplayManager.removeLastSystemMessage()
@@ -258,10 +271,58 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         val history = chatService.getHistory()
         htmlDocumentManager.updateTheme()
         messageDisplayManager.redrawMessages(history)
+        updateContextSize()
 
         if (!settings.isConfigured()) {
             messageDisplayManager.displaySystemMessage(ChatPanelConfig.Messages.CONFIGURATION_WARNING)
         }
+    }
+
+    /**
+     * Обновляет отображение размера контекста в токенах
+     */
+    private fun updateContextSize() {
+        val history = chatService.getHistory()
+        val tokenCounter = chatService.getTokenCounter()
+        
+        // Подсчитываем токены в истории
+        val conversationHistory = history
+            .filter { it.role != MessageRole.SYSTEM }
+            .map { message ->
+                ru.marslab.ide.ride.model.ConversationMessage(
+                    content = message.content,
+                    role = when (message.role) {
+                        MessageRole.USER -> ru.marslab.ide.ride.model.ConversationRole.USER
+                        MessageRole.ASSISTANT -> ru.marslab.ide.ride.model.ConversationRole.ASSISTANT
+                        MessageRole.SYSTEM -> ru.marslab.ide.ride.model.ConversationRole.SYSTEM
+                    }
+                )
+            }
+        
+        // Получаем системный промпт из настроек (как в ChatAgent)
+        val systemPrompt = """
+            Ты - AI-ассистент для разработчиков в IntelliJ IDEA.
+            
+            Твоя задача:
+            - Помогать с вопросами о программировании
+            - Объяснять концепции и паттерны
+            - Предлагать решения проблем
+            - Отвечать чётко и по существу
+            
+            Важно:
+            - Используй примеры кода когда это уместно
+            - Форматируй код в блоках с указанием языка
+            - Будь конкретным и практичным
+        """.trimIndent()
+        
+        val contextTokens = tokenCounter.countRequestTokens(
+            systemPrompt = systemPrompt,
+            userMessage = "",
+            conversationHistory = conversationHistory
+        )
+        
+        // Обновляем label
+        topComponents.contextSizeLabel.text = "Контекст: $contextTokens токенов"
     }
 
     /**

@@ -118,12 +118,10 @@ class ChatService {
                 // Обрабатываем ответ в UI потоке
                 withContext(Dispatchers.EDT) {
                     if (agentResponse.success) {
-                        // Получаем количество токенов из ответа или оцениваем приблизительно
-                        val tokensFromResponse = agentResponse.metadata["tokensUsed"] as? Int ?: 0
-                        val tokensUsed = if (tokensFromResponse > 0) {
-                            tokensFromResponse
-                        } else {
-                            // Оцениваем токены по размеру запроса и ответа
+                        // Получаем детальную статистику токенов из ответа
+                        val tokenUsage = agentResponse.metadata["tokenUsage"] as? TokenUsage
+                        val tokensUsed = tokenUsage?.totalTokens ?: run {
+                            // Fallback: оцениваем токены по размеру запроса и ответа
                             TokenEstimator.estimateTotalTokens(userMessage, agentResponse.content)
                         }
                         
@@ -132,9 +130,35 @@ class ChatService {
                             "isFinal" to agentResponse.isFinal,
                             "uncertainty" to (agentResponse.uncertainty ?: 0.0),
                             "responseTimeMs" to responseTime,
-                            "tokensUsed" to tokensUsed
+                            "tokensUsed" to tokensUsed,
+                            "tokenUsage" to (tokenUsage ?: TokenUsage.EMPTY)
                         )
 
+                        // Проверяем наличие системного сообщения о сжатии/обрезке
+                        val systemMessage = agentResponse.metadata["systemMessage"] as? String
+                        if (systemMessage != null) {
+                            // Получаем сжатую историю из метаданных
+                            @Suppress("UNCHECKED_CAST")
+                            val compressedHistory = agentResponse.metadata["compressedHistory"] as? List<Message>
+                            
+                            if (compressedHistory != null) {
+                                // Заменяем всю историю на сжатую
+                                val currentHistory = getCurrentHistory()
+                                currentHistory.clear()
+                                compressedHistory.forEach { currentHistory.addMessage(it) }
+                                logger.info("History replaced with compressed version: ${compressedHistory.size} messages")
+                            }
+                            
+                            // Добавляем системное сообщение в историю
+                            val sysMsg = Message(
+                                content = systemMessage,
+                                role = MessageRole.SYSTEM,
+                                metadata = mapOf("type" to "context_management")
+                            )
+                            getCurrentHistory().addMessage(sysMsg)
+                            onResponse(sysMsg)
+                        }
+                        
                         val assistantMsg = Message(
                             content = agentResponse.content,
                             role = MessageRole.ASSISTANT,
@@ -223,7 +247,14 @@ class ChatService {
                                     val message = Message(
                                         content = step.content,
                                         role = MessageRole.ASSISTANT,
-                                        metadata = mapOf("agentName" to step.agentName)
+                                        metadata = mapOf(
+                                            "agentName" to step.agentName,
+                                            "responseTimeMs" to step.responseTimeMs,
+                                            "tokenUsage" to step.tokenUsage,
+                                            "tokensUsed" to step.tokenUsage.totalTokens,
+                                            "isFinal" to true,
+                                            "uncertainty" to 0.0
+                                        )
                                     )
                                     getCurrentHistory().addMessage(message)
                                     onStepComplete(message)
@@ -250,7 +281,12 @@ class ChatService {
                                         "agentName" to step.agentName,
                                         "taskId" to step.taskId,
                                         "taskTitle" to step.taskTitle,
-                                        "success" to step.success
+                                        "success" to step.success,
+                                        "responseTimeMs" to step.responseTimeMs,
+                                        "tokenUsage" to step.tokenUsage,
+                                        "tokensUsed" to step.tokenUsage.totalTokens,
+                                        "isFinal" to true,
+                                        "uncertainty" to 0.0
                                     )
                                 )
                                 getCurrentHistory().addMessage(message)
@@ -262,7 +298,12 @@ class ChatService {
                                     role = MessageRole.ASSISTANT,
                                     metadata = mapOf(
                                         "totalTasks" to step.totalTasks,
-                                        "successfulTasks" to step.successfulTasks
+                                        "successfulTasks" to step.successfulTasks,
+                                        "responseTimeMs" to step.totalTimeMs,
+                                        "tokenUsage" to step.totalTokenUsage,
+                                        "tokensUsed" to step.totalTokenUsage.totalTokens,
+                                        "isFinal" to true,
+                                        "uncertainty" to 0.0
                                     )
                                 )
                                 getCurrentHistory().addMessage(message)
@@ -460,4 +501,11 @@ class ChatService {
 
     private fun getCurrentHistory(): MessageHistory =
         sessionHistories.getOrPut(currentSessionId) { MessageHistory() }
+    
+    /**
+     * Возвращает TokenCounter для подсчёта токенов
+     */
+    fun getTokenCounter(): ru.marslab.ide.ride.integration.llm.TokenCounter {
+        return ru.marslab.ide.ride.integration.llm.impl.TiktokenCounter()
+    }
 }

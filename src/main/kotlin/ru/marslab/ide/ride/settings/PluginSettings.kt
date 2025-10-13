@@ -198,6 +198,24 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
     }
 
     /**
+     * Максимальное количество токенов в контексте (запрос + история)
+     */
+    var maxContextTokens: Int
+        get() = state.maxContextTokens
+        set(value) {
+            state.maxContextTokens = value.coerceAtLeast(1000)
+        }
+    
+    /**
+     * Включить автоматическое сжатие истории при превышении лимита токенов
+     */
+    var enableAutoSummarization: Boolean
+        get() = state.enableAutoSummarization
+        set(value) {
+            state.enableAutoSummarization = value
+        }
+    
+    /**
      * Получает токен Hugging Face из безопасного хранилища
      */
     fun getHuggingFaceToken(): String {

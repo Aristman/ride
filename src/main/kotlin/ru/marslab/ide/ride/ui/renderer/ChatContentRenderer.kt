@@ -59,17 +59,29 @@ class ChatContentRenderer {
         hasClarifyingQuestions: Boolean,
         responseTimeMs: Long? = null,
         tokensUsed: Int? = null,
-        showUncertaintyStatus: Boolean = true
+        showUncertaintyStatus: Boolean = true,
+        tokenUsage: ru.marslab.ide.ride.model.TokenUsage? = null
     ): String {
         // Формируем метрики
         val metricsHtml = buildString {
-            if (responseTimeMs != null || tokensUsed != null) {
+            if (responseTimeMs != null || tokensUsed != null || tokenUsage != null) {
                 append("<span class='metrics'>")
                 if (responseTimeMs != null) {
                     val timeSeconds = responseTimeMs / 1000.0
                     append("⏱️ ${String.format("%.2f", timeSeconds)}s")
                 }
-                if (tokensUsed != null && tokensUsed > 0) {
+                
+                // Показываем детальную статистику токенов если доступна
+                if (tokenUsage != null && tokenUsage.totalTokens > 0) {
+                    if (responseTimeMs != null) append(" | ")
+                    append("🔢 ${tokenUsage.totalTokens} токенов")
+                    if (tokenUsage.inputTokens > 0 || tokenUsage.outputTokens > 0) {
+                        append(" <span style='opacity: 0.7; font-size: 0.9em;'>(")
+                        append("↑${tokenUsage.inputTokens} ↓${tokenUsage.outputTokens}")
+                        append(")</span>")
+                    }
+                } else if (tokensUsed != null && tokensUsed > 0) {
+                    // Fallback на старый формат
                     if (responseTimeMs != null) append(" | ")
                     append("🔢 ${tokensUsed} токенов")
                 }
@@ -164,7 +176,8 @@ class ChatContentRenderer {
         val content = escapeHtml(text).replace("\n", "<br/>")
         val marker = if (isLoading) "<!--LOADING_MARKER-->" else ""
 
-        return "<div class='msg ${ChatPanelConfig.RoleClasses.SYSTEM}'>$marker<div class='prefix'><b>${ChatPanelConfig.Icons.SYSTEM} ${ChatPanelConfig.Prefixes.SYSTEM}</b>:</div><div class='content'>$content</div></div>"
+        // Простое отображение без префикса, только серый текст
+        return "<div class='msg ${ChatPanelConfig.RoleClasses.SYSTEM}'>$marker<div class='system-content'>$content</div></div>"
     }
 
     /**

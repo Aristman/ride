@@ -96,24 +96,36 @@ class HtmlDocumentManager(
 
     /**
      * Удаляет последний системный блок (например, индикатор загрузки) с fade-out анимацией
+     * ВАЖНО: Удаляет только сообщения с маркером загрузки, не трогает постоянные системные сообщения
      */
     fun removeLastSystemMessage() {
         if (jcefView != null) {
             // Для JCEF используем fade-out анимацию через JavaScript
-            // Селектор ищет .msg.system который содержит маркер загрузки
-            jcefView.removeElementWithFade(".msg.system")
-            // Очищаем буфер (JavaScript сам удалит элемент через 300мс)
+            // Удаляем только сообщения с маркером загрузки, не трогаем постоянные системные сообщения
+            jcefView.removeLoadingSystemMessage()
+            // Очищаем буфер только если есть маркеры загрузки
             if (loadingStart != -1 && loadingEnd != -1 &&
                 loadingStart < loadingEnd && loadingEnd <= htmlBuffer.length) {
-                htmlBuffer.delete(loadingStart, loadingEnd)
-                loadingStart = -1
-                loadingEnd = -1
+                val loadingContent = htmlBuffer.substring(loadingStart, loadingEnd)
+                // Удаляем только если это действительно сообщение загрузки
+                if (loadingContent.contains("<!--LOADING_MARKER-->")) {
+                    htmlBuffer.delete(loadingStart, loadingEnd)
+                    loadingStart = -1
+                    loadingEnd = -1
+                }
             }
         } else {
             // Для fallback режима удаляем сразу
             if (loadingStart != -1 && loadingEnd != -1 &&
                 loadingStart < loadingEnd && loadingEnd <= htmlBuffer.length) {
-                htmlBuffer.delete(loadingStart, loadingEnd)
+                val loadingContent = htmlBuffer.substring(loadingStart, loadingEnd)
+                // Удаляем только если это действительно сообщение загрузки
+                if (loadingContent.contains("<!--LOADING_MARKER-->")) {
+                    htmlBuffer.delete(loadingStart, loadingEnd)
+                    loadingStart = -1
+                    loadingEnd = -1
+                    refreshEditor()
+                }
                 loadingStart = -1
                 loadingEnd = -1
                 refreshEditor()

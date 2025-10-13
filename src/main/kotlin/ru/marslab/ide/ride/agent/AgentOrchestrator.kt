@@ -40,7 +40,12 @@ class AgentOrchestrator(
         try {
             // Шаг 1: PlannerAgent создает план
             logger.info("Step 1: Creating task plan with PlannerAgent")
+            val planStartTime = System.currentTimeMillis()
             val planResponse = plannerAgent.ask(request)
+            val planResponseTime = System.currentTimeMillis() - planStartTime
+            
+            // Извлекаем информацию о токенах
+            val planTokenUsage = planResponse.metadata["tokenUsage"] as? TokenUsage ?: TokenUsage.EMPTY
             
             // Отправляем результат планирования в чат
             onStepComplete(
@@ -48,7 +53,9 @@ class AgentOrchestrator(
                     agentName = "PlannerAgent",
                     content = planResponse.content,
                     success = planResponse.success,
-                    error = planResponse.error
+                    error = planResponse.error,
+                    responseTimeMs = planResponseTime,
+                    tokenUsage = planTokenUsage
                 )
             )
             
@@ -76,6 +83,9 @@ class AgentOrchestrator(
             
             // Шаг 2: ExecutorAgent выполняет каждую задачу
             val executionResults = mutableListOf<ExecutionResult>()
+            var totalExecutionTime = 0L
+            var totalInputTokens = 0
+            var totalOutputTokens = 0
             
             for (task in plan.tasks) {
                 logger.info("Executing task ${task.id}: ${task.title}")
@@ -87,8 +97,18 @@ class AgentOrchestrator(
                     parameters = request.parameters
                 )
                 
-                // Выполняем задачу
+                // Выполняем задачу и измеряем время
+                val taskStartTime = System.currentTimeMillis()
                 val executorResponse = executorAgent.ask(executorRequest)
+                val taskResponseTime = System.currentTimeMillis() - taskStartTime
+                
+                // Извлекаем информацию о токенах
+                val taskTokenUsage = executorResponse.metadata["tokenUsage"] as? TokenUsage ?: TokenUsage.EMPTY
+                
+                // Суммируем статистику
+                totalExecutionTime += taskResponseTime
+                totalInputTokens += taskTokenUsage.inputTokens
+                totalOutputTokens += taskTokenUsage.outputTokens
                 
                 // Создаем результат выполнения
                 val result = if (executorResponse.success) {
@@ -107,7 +127,9 @@ class AgentOrchestrator(
                         taskTitle = task.title,
                         content = executorResponse.content,
                         success = executorResponse.success,
-                        error = executorResponse.error
+                        error = executorResponse.error,
+                        responseTimeMs = taskResponseTime,
+                        tokenUsage = taskTokenUsage
                     )
                 )
                 
@@ -121,6 +143,15 @@ class AgentOrchestrator(
             val successfulTasks = executionResults.count { it.success }
             val totalTasks = executionResults.size
             
+            // Общая статистика (планирование + выполнение)
+            val totalTime = planResponseTime + totalExecutionTime
+            val totalTokens = planTokenUsage.totalTokens + totalInputTokens + totalOutputTokens
+            val totalTokenUsage = TokenUsage(
+                inputTokens = planTokenUsage.inputTokens + totalInputTokens,
+                outputTokens = planTokenUsage.outputTokens + totalOutputTokens,
+                totalTokens = totalTokens
+            )
+            
             val summaryContent = buildString {
                 appendLine("✅ **Выполнение завершено**")
                 appendLine()
@@ -130,6 +161,13 @@ class AgentOrchestrator(
                 if (successfulTasks < totalTasks) {
                     appendLine("- Ошибок: ${totalTasks - successfulTasks}")
                 }
+                appendLine()
+                appendLine("**Производительность:**")
+                val totalSeconds = totalTime / 1000.0
+                appendLine("- Общее время: ${String.format("%.2f", totalSeconds)}s")
+                if (totalTokens > 0) {
+                    appendLine("- Всего токенов: $totalTokens (↑${totalTokenUsage.inputTokens} ↓${totalTokenUsage.outputTokens})")
+                }
             }
             
             // Отправляем итоговую сводку
@@ -137,7 +175,9 @@ class AgentOrchestrator(
                 OrchestratorStep.AllComplete(
                     content = summaryContent,
                     totalTasks = totalTasks,
-                    successfulTasks = successfulTasks
+                    successfulTasks = successfulTasks,
+                    totalTimeMs = totalTime,
+                    totalTokenUsage = totalTokenUsage
                 )
             )
             
@@ -186,7 +226,9 @@ sealed class OrchestratorStep {
         val agentName: String,
         val content: String,
         val success: Boolean,
-        val error: String?
+        val error: String?,
+        val responseTimeMs: Long = 0,
+        val tokenUsage: TokenUsage = TokenUsage.EMPTY
     ) : OrchestratorStep()
     
     /**
@@ -198,7 +240,9 @@ sealed class OrchestratorStep {
         val taskTitle: String,
         val content: String,
         val success: Boolean,
-        val error: String?
+        val error: String?,
+        val responseTimeMs: Long = 0,
+        val tokenUsage: TokenUsage = TokenUsage.EMPTY
     ) : OrchestratorStep()
     
     /**
@@ -207,7 +251,9 @@ sealed class OrchestratorStep {
     data class AllComplete(
         val content: String,
         val totalTasks: Int,
-        val successfulTasks: Int
+        val successfulTasks: Int,
+        val totalTimeMs: Long = 0,
+        val totalTokenUsage: TokenUsage = TokenUsage.EMPTY
     ) : OrchestratorStep()
     
     /**
