@@ -29,14 +29,7 @@ class MCPSettingsPanel(private val project: Project) : JPanel(BorderLayout()) {
     private val connectionManager = MCPConnectionManager.getInstance(project)
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
-    private var serverListPanel = MCPServerListPanel(
-        project = project,
-        onEditServer = { server -> editServer(server) },
-        onDeleteServer = { server ->
-            currentSettings = currentSettings.removeServer(server.name)
-            serverListPanel.removeServer(server.name)
-        }
-    )
+    private lateinit var serverListPanel: MCPServerListPanel
 
     private var originalSettings: MCPSettings = MCPSettings.empty()
     private var currentSettings: MCPSettings = MCPSettings.empty()
@@ -47,6 +40,17 @@ class MCPSettingsPanel(private val project: Project) : JPanel(BorderLayout()) {
     }
 
     private fun setupUI() {
+        // Инициализируем панель списка серверов до добавления в layout
+        if (!::serverListPanel.isInitialized) {
+            serverListPanel = MCPServerListPanel(
+                project = project,
+                onEditServer = { server -> editServer(server) },
+                onDeleteServer = { server ->
+                    currentSettings = currentSettings.removeServer(server.name)
+                    serverListPanel.removeServer(server.name)
+                }
+            )
+        }
         // Создаем панель с кнопками
         val buttonPanel = JPanel()
         buttonPanel.border = JBUI.Borders.empty(5)
