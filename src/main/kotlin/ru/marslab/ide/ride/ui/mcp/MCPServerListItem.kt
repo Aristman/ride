@@ -2,6 +2,7 @@ package ru.marslab.ide.ride.ui.mcp
 
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.ui.Messages
 import com.intellij.ui.components.JBLabel
 import com.intellij.util.ui.JBUI
 import kotlinx.coroutines.*
@@ -27,7 +28,8 @@ class MCPServerListItem(
     private val server: MCPServerConfig,
     private val connectionManager: MCPConnectionManager,
     private val onRefreshComplete: () -> Unit,
-    private val onEditServer: (MCPServerConfig) -> Unit
+    private val onEditServer: (MCPServerConfig) -> Unit,
+    private val onDeleteServer: (MCPServerConfig) -> Unit
 ) : JPanel(BorderLayout()) {
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -38,6 +40,7 @@ class MCPServerListItem(
     private val typeLabel = JBLabel()
     private val refreshButton = JButton(AllIcons.Actions.Refresh)
     private val editButton = JButton(AllIcons.Actions.Edit)
+    private val deleteButton = JButton(AllIcons.General.Remove)
     private val expandButton = JButton(AllIcons.General.ArrowDown)
     private val methodsPanel = JPanel()
     private val methodsLayout = CardLayout()
@@ -123,8 +126,18 @@ class MCPServerListItem(
         gbc.gridx = 5
         gbc.gridy = 0
         gbc.anchor = GridBagConstraints.EAST
-        gbc.insets = JBUI.insets(2, 0, 2, 0)
+        gbc.insets = JBUI.insets(2, 0, 2, 4)
         headerPanel.add(editButton, gbc)
+
+        // Кнопка удаления
+        deleteButton.border = JBUI.Borders.empty(4)
+        deleteButton.toolTipText = "Remove server"
+        deleteButton.isContentAreaFilled = false
+        gbc.gridx = 6
+        gbc.gridy = 0
+        gbc.anchor = GridBagConstraints.EAST
+        gbc.insets = JBUI.insets(2, 0, 2, 0)
+        headerPanel.add(deleteButton, gbc)
 
         add(headerPanel, BorderLayout.NORTH)
 
@@ -155,6 +168,19 @@ class MCPServerListItem(
         // Кнопка редактирования
         editButton.addActionListener {
             onEditServer(server)
+        }
+
+        // Кнопка удаления с подтверждением
+        deleteButton.addActionListener {
+            val result = Messages.showYesNoDialog(
+                project,
+                "Are you sure you want to remove server '${server.name}'?",
+                "Remove Server",
+                Messages.getQuestionIcon()
+            )
+            if (result == Messages.YES) {
+                onDeleteServer(server)
+            }
         }
 
         // Кнопка раскрытия списка методов

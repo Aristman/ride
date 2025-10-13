@@ -19,7 +19,8 @@ import javax.swing.*
  */
 class MCPServerListPanel(
         private val project: Project,
-        private val onEditServer: (MCPServerConfig) -> Unit = {}
+        private val onEditServer: (MCPServerConfig) -> Unit = {},
+        private val onDeleteServer: (MCPServerConfig) -> Unit = {}
     ) : JPanel(BorderLayout()) {
 
     private val configService = MCPConfigService.getInstance(project)
@@ -73,7 +74,8 @@ class MCPServerListPanel(
                     onRefreshComplete = {
                         // Можно добавить дополнительную логику после рефреша
                     },
-                    onEditServer = onEditServer
+                    onEditServer = onEditServer,
+                    onDeleteServer = onDeleteServer
                 )
                 serverItems.add(serverItem)
                 serversPanel.add(serverItem)

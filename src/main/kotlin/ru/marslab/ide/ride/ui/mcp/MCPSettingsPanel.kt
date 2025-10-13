@@ -29,9 +29,14 @@ class MCPSettingsPanel(private val project: Project) : JPanel(BorderLayout()) {
     private val connectionManager = MCPConnectionManager.getInstance(project)
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
-    private var serverListPanel = MCPServerListPanel(project) { server ->
-        editServer(server)
-    }
+    private var serverListPanel = MCPServerListPanel(
+        project = project,
+        onEditServer = { server -> editServer(server) },
+        onDeleteServer = { server ->
+            currentSettings = currentSettings.removeServer(server.name)
+            serverListPanel.removeServer(server.name)
+        }
+    )
 
     private var originalSettings: MCPSettings = MCPSettings.empty()
     private var currentSettings: MCPSettings = MCPSettings.empty()
@@ -55,12 +60,6 @@ class MCPSettingsPanel(private val project: Project) : JPanel(BorderLayout()) {
         addButton.preferredSize = buttonSize
         addButton.addActionListener { addServer() }
 
-        val removeButton = JButton()
-        removeButton.icon = AllIcons.General.Remove
-        removeButton.toolTipText = "Remove Server"
-        removeButton.preferredSize = buttonSize
-        removeButton.addActionListener { removeServer() }
-
         val refreshAllButton = JButton()
         refreshAllButton.icon = AllIcons.Actions.Refresh
         refreshAllButton.toolTipText = "Refresh All Servers"
@@ -70,7 +69,6 @@ class MCPSettingsPanel(private val project: Project) : JPanel(BorderLayout()) {
         }
 
         buttonPanel.add(addButton)
-        buttonPanel.add(removeButton)
         buttonPanel.add(refreshAllButton)
 
         add(buttonPanel, BorderLayout.NORTH)
@@ -85,9 +83,14 @@ class MCPSettingsPanel(private val project: Project) : JPanel(BorderLayout()) {
 
     private fun updateServerList() {
         serverListPanel.dispose()
-        serverListPanel = MCPServerListPanel(project) { server ->
-            editServer(server)
-        }
+        serverListPanel = MCPServerListPanel(
+            project = project,
+            onEditServer = { server -> editServer(server) },
+            onDeleteServer = { server ->
+                currentSettings = currentSettings.removeServer(server.name)
+                serverListPanel.removeServer(server.name)
+            }
+        )
         removeAll()
         setupUI()
         revalidate()
