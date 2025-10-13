@@ -176,12 +176,9 @@ class MCPServerListItem(
     }
 
     fun refreshStatus() {
-        scope.launch {
-            currentStatus = connectionManager.getServerStatus(server.name)
-            SwingUtilities.invokeLater {
-                updateStatusDisplay()
-            }
-        }
+        // getServerStatus - синхронная функция, выполняем в UI потоке
+        currentStatus = connectionManager.getServerStatus(server.name)
+        updateStatusDisplay()
     }
 
     private fun updateStatusDisplay() {
@@ -229,28 +226,30 @@ class MCPServerListItem(
         isRefreshing = true
         refreshButton.icon = AllIcons.Process.Step_1
         refreshButton.toolTipText = "Refreshing..."
-        scope.launch {
+        
+        scope.launch(Dispatchers.IO) {
             try {
                 // Синхронизируем сервер - это обновит статус в БД
                 connectionManager.connectServer(server)
                 
                 // Получаем обновленный статус из БД
-                currentStatus = connectionManager.getServerStatus(server.name)
+                val updatedStatus = connectionManager.getServerStatus(server.name)
 
-                SwingUtilities.invokeLater {
+                withContext(Dispatchers.Main) {
+                    currentStatus = updatedStatus
                     // Обновляем отображение на основе данных из БД
                     updateStatusDisplay()
                     onRefreshComplete()
                 }
             } catch (e: Exception) {
-                SwingUtilities.invokeLater {
+                withContext(Dispatchers.Main) {
                     // Получаем статус из БД (там может быть ошибка)
                     currentStatus = connectionManager.getServerStatus(server.name)
                     updateStatusDisplay()
                     onRefreshComplete()
                 }
             } finally {
-                SwingUtilities.invokeLater {
+                withContext(Dispatchers.Main) {
                     isRefreshing = false
                     refreshButton.icon = AllIcons.Actions.Refresh
                     refreshButton.toolTipText = "Refresh server connection"

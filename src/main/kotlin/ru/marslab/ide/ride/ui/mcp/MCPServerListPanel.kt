@@ -68,6 +68,7 @@ class MCPServerListPanel(private val project: Project) : JPanel(BorderLayout()) 
     private fun updateServersList() {
         // Очищаем старые элементы
         serverItems.forEach { it.dispose() }
+        serverItems.clear()
         serversPanel.removeAll()
 
         if (currentSettings.servers.isEmpty()) {
@@ -99,10 +100,10 @@ class MCPServerListPanel(private val project: Project) : JPanel(BorderLayout()) 
         refreshAllButton.icon = AllIcons.Process.Step_1
         refreshAllButton.text = "Refreshing..."
 
-        scope.launch {
+        scope.launch(Dispatchers.IO) {
             val servers = currentSettings.servers
             if (servers.isEmpty()) {
-                SwingUtilities.invokeLater {
+                withContext(Dispatchers.Main) {
                     resetRefreshButton()
                 }
                 return@launch
@@ -116,7 +117,7 @@ class MCPServerListPanel(private val project: Project) : JPanel(BorderLayout()) 
                 }
 
                 // Обновляем UI в реальном времени
-                SwingUtilities.invokeLater {
+                withContext(Dispatchers.Main) {
                     serverItems.forEach { it.refreshStatus() }
                 }
 
@@ -125,7 +126,7 @@ class MCPServerListPanel(private val project: Project) : JPanel(BorderLayout()) 
             }
 
             // Сбрасываем кнопку после завершения
-            SwingUtilities.invokeLater {
+            withContext(Dispatchers.Main) {
                 resetRefreshButton()
             }
         }
