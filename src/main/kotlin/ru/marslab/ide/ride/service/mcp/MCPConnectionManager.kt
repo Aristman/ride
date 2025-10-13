@@ -24,15 +24,21 @@ class MCPConnectionManager(private val project: Project) {
     
     private val logger = Logger.getInstance(MCPConnectionManager::class.java)
     private val configService = MCPConfigService.getInstance(project)
+    private val persistenceService = MCPStatusPersistenceService.getInstance(project)
     
     // Клиенты для каждого сервера
     private val clients = ConcurrentHashMap<String, MCPClient>()
     
-    // Статусы серверов
+    // Статусы серверов (кэш)
     private val statuses = ConcurrentHashMap<String, MCPServerStatus>()
     
     // Scope для корутин
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    
+    init {
+        // Загружаем статусы из БД при инициализации
+        loadStatusesFromDatabase()
+    }
     
     /**
      * Инициализирует подключения ко всем включенным серверам
@@ -293,7 +299,20 @@ class MCPConnectionManager(private val project: Project) {
      */
     private fun updateStatus(serverName: String, status: MCPServerStatus) {
         statuses[serverName] = status
+        // Сохраняем в БД
+        persistenceService.saveStatus(status)
         logger.debug("Updated status for $serverName: connected=${status.connected}, methods=${status.methods.size}")
+    }
+    
+    /**
+     * Загружает статусы из базы данных
+     */
+    private fun loadStatusesFromDatabase() {
+        val savedStatuses = persistenceService.getAllStatuses()
+        savedStatuses.forEach { status ->
+            statuses[status.name] = status
+        }
+        logger.info("Loaded ${savedStatuses.size} server statuses from database")
     }
     
     companion object {
