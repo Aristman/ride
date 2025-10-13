@@ -23,15 +23,15 @@ data class JsonRpcRequest(
 /**
  * JSON-RPC ответ
  *
- * @property jsonrpc Версия протокола (всегда "2.0")
- * @property id Идентификатор запроса
+ * @property jsonrpc Версия протокола (обычно "2.0", опционально)
+ * @property id Идентификатор запроса (может быть null для notifications)
  * @property result Результат выполнения (если успешно)
  * @property error Ошибка (если не успешно)
  */
 @Serializable
 data class JsonRpcResponse(
-    val jsonrpc: String = "2.0",
-    val id: Int,
+    val jsonrpc: String? = "2.0",
+    val id: Int? = null,
     val result: JsonElement? = null,
     val error: JsonRpcError? = null
 ) {

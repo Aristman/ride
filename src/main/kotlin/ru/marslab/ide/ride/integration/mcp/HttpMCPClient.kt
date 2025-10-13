@@ -27,7 +27,7 @@ class HttpMCPClient(
     private val logger = Logger.getInstance(HttpMCPClient::class.java)
     private val json = Json {
         ignoreUnknownKeys = true
-        encodeDefaults = false
+        encodeDefaults = true // Нужно для включения jsonrpc="2.0"
     }
     
     private val httpClient: HttpClient = HttpClient.newBuilder()

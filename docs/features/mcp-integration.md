@@ -121,7 +121,7 @@ MCP серверы настраиваются через JSON файл в кор
 # Создайте GitHub Personal Access Token на https://github.com/settings/personal-access-tokens/new
 # Запустите сервер
 docker run -d -p 3000:3000 \
-  -e GITHUB_PAT=your_token_here \
+  -e GITHUB_PERSONAL_ACCESS_TOKEN=your_token_here \
   ghcr.io/github/github-mcp-server:latest
 ```
 
@@ -138,7 +138,7 @@ docker run -d -p 3000:3000 \
       "command": "docker",
       "args": [
         "run", "-i", "--rm",
-        "-e", "GITHUB_PAT=your_token_here",
+        "-e", "GITHUB_PERSONAL_ACCESS_TOKEN=your_token_here",
         "ghcr.io/github/github-mcp-server:latest"
       ],
       "enabled": true
@@ -160,6 +160,7 @@ docker run -d -p 3000:3000 \
 
 **Примечание:** 
 - Замените `your_token_here` на ваш GitHub Personal Access Token
+- **Важно:** Используйте переменную `GITHUB_PERSONAL_ACCESS_TOKEN`, а не `GITHUB_PAT`
 - Remote GitHub MCP Server (`https://api.githubcopilot.com/mcp/`) требует OAuth и не поддерживается напрямую
 - Используйте локальный Docker-сервер для полной функциональности
 

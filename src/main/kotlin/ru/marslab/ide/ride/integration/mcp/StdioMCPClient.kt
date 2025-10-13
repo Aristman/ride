@@ -26,7 +26,7 @@ class StdioMCPClient(
     private val logger = Logger.getInstance(StdioMCPClient::class.java)
     private val json = Json {
         ignoreUnknownKeys = true
-        encodeDefaults = false
+        encodeDefaults = true // Нужно для включения jsonrpc="2.0"
     }
     
     private var process: Process? = null
@@ -116,12 +116,15 @@ class StdioMCPClient(
             val request = JsonRpcRequest(
                 id = requestId.incrementAndGet(),
                 method = "tools/list",
-                params = null
+                params = buildJsonObject {} // Пустой объект вместо null
             )
             
             val response = sendRequest(request)
             
+            logger.debug("Response for tools/list: jsonrpc=${response.jsonrpc}, id=${response.id}, hasError=${response.hasError()}")
+            
             if (response.hasError()) {
+                logger.error("Error response: ${response.error}")
                 throw MCPException("Failed to list methods: ${response.error?.message}")
             }
             
@@ -190,6 +193,7 @@ class StdioMCPClient(
     private suspend fun sendRequest(request: JsonRpcRequest): JsonRpcResponse = 
         withTimeout(timeout) {
             val requestJson = json.encodeToString(request)
+            println("DEBUG [${config.name}] Sending request: $requestJson")
             logger.debug("Sending request: $requestJson")
             
             // Отправляем запрос
@@ -201,11 +205,15 @@ class StdioMCPClient(
             val responseLine = reader?.readLine() 
                 ?: throw MCPException("Failed to read response: stream closed")
             
+            println("DEBUG [${config.name}] Received response: $responseLine")
             logger.debug("Received response: $responseLine")
             
             try {
-                json.decodeFromString<JsonRpcResponse>(responseLine)
+                val parsedResponse = json.decodeFromString<JsonRpcResponse>(responseLine)
+                println("DEBUG [${config.name}] Parsed response: jsonrpc=${parsedResponse.jsonrpc}, id=${parsedResponse.id}, hasError=${parsedResponse.hasError()}")
+                parsedResponse
             } catch (e: Exception) {
+                println("DEBUG [${config.name}] Failed to parse: ${e.message}")
                 throw MCPException("Failed to parse response: ${e.message}", e)
             }
         }
