@@ -4,9 +4,83 @@
 
 ## Список всех задач
 
+- [ ] Стабилизировать все тесты
 - [ ] Отслеживание использования токенов
 - [ ] Форматирование ответов - поддержка дополнительных форматов
 - [ ] Интеграция MCP с Agent - автоматический вызов MCP tools
+
+## Стабилизировать все тесты
+
+**Приоритет:** Высокий  
+**Статус:** Запланировано  
+**Оценка:** ~8 часов
+
+### Описание
+Привести все существующие тесты в рабочее состояние. В настоящее время часть тестов не компилируется из-за несовместимости между JUnit 4 и JUnit 5, а также из-за использования устаревших API.
+
+### Проблемы
+1. **Смешанное использование JUnit 4 и JUnit 5**
+   - Новые MCP тесты используют JUnit 4
+   - Старые тесты используют JUnit 5 (jupiter)
+   - Нужно привести к единому стандарту
+
+2. **Ошибки компиляции в существующих тестах**
+   - `ResponseFormattingIntegrationTest` - unresolved references
+   - `JsonResponseParserTest`, `XmlResponseParserTest`, `TextResponseParserTest` - unresolved references
+   - `HuggingFaceProviderTest` - использует JUnit 5
+   - `ResponseModelsTest` - проблемы с типами
+
+3. **Устаревшие API**
+   - Некоторые тесты используют методы, которые были изменены или удалены
+
+### Задачи
+- [ ] Выбрать единый стандарт тестирования (JUnit 4 или JUnit 5)
+- [ ] Обновить все тесты для использования выбранного стандарта
+- [ ] Исправить ошибки компиляции в существующих тестах
+- [ ] Обновить импорты и зависимости
+- [ ] Убедиться, что все тесты проходят успешно
+- [ ] Добавить в CI/CD проверку всех тестов
+
+### Технические детали
+
+**Вариант 1: Миграция на JUnit 4**
+- Преимущества: новые MCP тесты уже используют JUnit 4
+- Недостатки: JUnit 4 устаревший, меньше возможностей
+- Действия: обновить старые тесты с JUnit 5 на JUnit 4
+
+**Вариант 2: Миграция на JUnit 5** (рекомендуется)
+- Преимущества: современный фреймворк, больше возможностей
+- Недостатки: нужно обновить новые MCP тесты
+- Действия: обновить MCP тесты с JUnit 4 на JUnit 5
+
+**Рекомендация:** Использовать JUnit 5 как современный стандарт
+
+### Файлы, требующие исправления
+1. `src/test/kotlin/ru/marslab/ide/ride/agent/integration/ResponseFormattingIntegrationTest.kt`
+2. `src/test/kotlin/ru/marslab/ide/ride/agent/parser/JsonResponseParserTest.kt`
+3. `src/test/kotlin/ru/marslab/ide/ride/agent/parser/TextResponseParserTest.kt`
+4. `src/test/kotlin/ru/marslab/ide/ride/agent/parser/XmlResponseParserTest.kt`
+5. `src/test/kotlin/ru/marslab/ide/ride/agent/validation/JsonResponseValidatorTest.kt`
+6. `src/test/kotlin/ru/marslab/ide/ride/agent/validation/XmlResponseValidatorTest.kt`
+7. `src/test/kotlin/ru/marslab/ide/ride/integration/llm/impl/HuggingFaceProviderTest.kt`
+8. `src/test/kotlin/ru/marslab/ide/ride/model/ResponseModelsTest.kt`
+9. Все MCP тесты (если выбран вариант 2)
+
+### Критерии завершения
+- ✅ Все тесты компилируются без ошибок
+- ✅ Все тесты используют единый фреймворк (JUnit 4 или 5)
+- ✅ `./gradlew test` проходит успешно
+- ✅ Покрытие тестами не уменьшилось
+- ✅ Документация обновлена
+
+### Зависимости
+- Нет критических зависимостей
+
+### Риски
+- Возможны регрессии при обновлении тестов
+- Может потребоваться обновление mock-библиотек
+
+---
 
 ## Отслеживание использования токенов
 
@@ -186,4 +260,5 @@ Tool Window "Token Usage":
 ---
 
 **Дата создания:** 2025-10-02  
-**Последнее обновление:** 2025-10-13
+**Последнее обновление:** 2025-10-13  
+**Последнее добавление:** Стабилизация тестов (2025-10-13)
