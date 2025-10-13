@@ -61,6 +61,8 @@ MCP серверы настраиваются через JSON файл в кор
 
 - **url** (string, обязательно) - URL эндпоинта (например, `http://localhost:3000/mcp`)
 - **headers** (object, опционально) - HTTP заголовки (например, для авторизации)
+  - В UI используйте формат: `Key: Value` или `Key=Value`, разделитель `;`
+  - Пример: `Authorization: Bearer TOKEN;X-Custom: value`
 
 ## Использование
 
@@ -111,27 +113,63 @@ MCP серверы настраиваются через JSON файл в кор
 - `write_file` - запись в файл
 - `list_directory` - список файлов в директории
 
-### Пример 2: GitHub Copilot MCP (HTTP с авторизацией)
+### Пример 2: GitHub MCP Server (Локальный через Docker)
+
+**Шаг 1: Запустите GitHub MCP Server в Docker**
+
+```bash
+# Создайте GitHub Personal Access Token на https://github.com/settings/personal-access-tokens/new
+# Запустите сервер
+docker run -d -p 3000:3000 \
+  -e GITHUB_PAT=your_token_here \
+  ghcr.io/github/github-mcp-server:latest
+```
+
+**Шаг 2: Настройте в Ride**
+
+Создайте `.ride/mcp.json`:
+
+```json
+{
+  "servers": [
+    {
+      "name": "github",
+      "type": "STDIO",
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "-e", "GITHUB_PAT=your_token_here",
+        "ghcr.io/github/github-mcp-server:latest"
+      ],
+      "enabled": true
+    }
+  ]
+}
+```
+
+**Или через HTTP** (если сервер уже запущен):
 
 ```json
 {
   "name": "github",
   "type": "HTTP",
-  "url": "https://api.githubcopilot.com/mcp/",
-  "headers": {
-    "Authorization": "Bearer YOUR_GITHUB_PAT"
-  },
+  "url": "http://localhost:3000",
   "enabled": true
 }
 ```
 
-**Примечание:** Замените `YOUR_GITHUB_PAT` на ваш Personal Access Token от GitHub.
+**Примечание:** 
+- Замените `your_token_here` на ваш GitHub Personal Access Token
+- Remote GitHub MCP Server (`https://api.githubcopilot.com/mcp/`) требует OAuth и не поддерживается напрямую
+- Используйте локальный Docker-сервер для полной функциональности
 
 **Доступные методы:**
 - `create_issue` - создание issue
 - `search_repositories` - поиск репозиториев
 - `get_file_contents` - получение содержимого файла
-- и другие методы GitHub API
+- `create_pull_request` - создание PR
+- `fork_repository` - форк репозитория
+- и [многие другие](https://github.com/github/github-mcp-server#tools)
 
 ### Пример вызова метода
 

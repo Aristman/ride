@@ -3,15 +3,22 @@ package ru.marslab.ide.ride.ui.mcp
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.DialogWrapper
+import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.ui.ValidationInfo
 import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.components.JBTextField
 import com.intellij.ui.dsl.builder.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import ru.marslab.ide.ride.integration.mcp.MCPClientFactory
 import ru.marslab.ide.ride.model.mcp.MCPServerConfig
 import ru.marslab.ide.ride.model.mcp.MCPServerType
 import java.awt.CardLayout
 import javax.swing.JComponent
 import javax.swing.JPanel
+import javax.swing.SwingUtilities
 
 /**
  * Диалог для добавления/редактирования MCP сервера
@@ -32,11 +39,13 @@ class MCPServerDialog(
     
     // Поля для HTTP
     private lateinit var urlField: JBTextField
+    private lateinit var headersField: JBTextField
     
     private lateinit var cardPanel: JPanel
     private lateinit var cardLayout: CardLayout
     
     private var serverConfig: MCPServerConfig? = null
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     
     init {
         title = if (existingServer == null) "Add MCP Server" else "Edit MCP Server"
@@ -97,6 +106,7 @@ class MCPServerDialog(
                     }
                     MCPServerType.HTTP -> {
                         urlField.text = server.url ?: ""
+                        headersField.text = server.headers.entries.joinToString(";") { "${it.key}: ${it.value}" }
                     }
                 }
                 
@@ -142,6 +152,19 @@ class MCPServerDialog(
                     .columns(30)
                     .comment("HTTP endpoint URL (e.g., 'http://localhost:3000/mcp')")
                     .component
+            }
+            
+            row("Headers:") {
+                headersField = textField()
+                    .columns(30)
+                    .comment("Semicolon-separated headers (e.g., 'Authorization: Bearer TOKEN;X-Custom: value')")
+                    .component
+            }
+            
+            row {
+                button("Test Connection") {
+                    testConnection()
+                }
             }
         }
     }
@@ -201,11 +224,13 @@ class MCPServerDialog(
             }
             MCPServerType.HTTP -> {
                 val url = urlField.text.trim()
+                val headers = parseHeaders(headersField.text.trim())
                 
                 MCPServerConfig(
                     name = name,
                     type = type,
                     url = url,
+                    headers = headers,
                     enabled = enabled
                 )
             }
@@ -227,6 +252,101 @@ class MCPServerDialog(
                 }
             }
             .toMap()
+    }
+    
+    private fun parseHeaders(headersString: String): Map<String, String> {
+        if (headersString.isEmpty()) return emptyMap()
+        
+        return headersString.split(";")
+            .mapNotNull { pair ->
+                // Поддерживаем оба формата: "Key=Value" и "Key: Value"
+                val parts = if (pair.contains("=")) {
+                    pair.split("=", limit = 2)
+                } else if (pair.contains(":")) {
+                    pair.split(":", limit = 2)
+                } else {
+                    return@mapNotNull null
+                }
+                
+                if (parts.size == 2) {
+                    parts[0].trim() to parts[1].trim()
+                } else {
+                    null
+                }
+            }
+            .toMap()
+    }
+    
+    private fun testConnection() {
+        val type = typeComboBox.selectedItem as? MCPServerType ?: return
+        
+        // Создаем временную конфигурацию для теста
+        val testConfig = when (type) {
+            MCPServerType.STDIO -> {
+                MCPServerConfig(
+                    name = "test",
+                    type = type,
+                    command = commandField.text.trim(),
+                    args = argsField.text.trim().split("\\s+".toRegex()).filter { it.isNotEmpty() },
+                    env = parseEnvironment(envField.text.trim()),
+                    enabled = true
+                )
+            }
+            MCPServerType.HTTP -> {
+                MCPServerConfig(
+                    name = "test",
+                    type = type,
+                    url = urlField.text.trim(),
+                    headers = parseHeaders(headersField.text.trim()),
+                    enabled = true
+                )
+            }
+        }
+        
+        // Валидация
+        val validation = testConfig.validate()
+        if (!validation.isValid()) {
+            Messages.showErrorDialog(
+                project,
+                validation.getErrorMessage() ?: "Invalid configuration",
+                "Test Connection"
+            )
+            return
+        }
+        
+        // Тестируем подключение
+        scope.launch {
+            try {
+                val client = MCPClientFactory.createClient(testConfig)
+                val success = client.connect()
+                
+                SwingUtilities.invokeLater {
+                    if (success) {
+                        Messages.showInfoMessage(
+                            project,
+                            "Successfully connected!",
+                            "Test Connection"
+                        )
+                    } else {
+                        Messages.showErrorDialog(
+                            project,
+                            "Failed to connect",
+                            "Test Connection"
+                        )
+                    }
+                }
+                
+                client.disconnect()
+            } catch (e: Exception) {
+                SwingUtilities.invokeLater {
+                    Messages.showErrorDialog(
+                        project,
+                        "Connection error: ${e.message}",
+                        "Test Connection"
+                    )
+                }
+            }
+        }
     }
     
     fun getServerConfig(): MCPServerConfig? = serverConfig
