@@ -53,11 +53,16 @@
     <!-- Extension points defined by the plugin.
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-extension-points.html -->
     <extensions defaultExtensionNs="com.intellij">
-        <!-- Tool Window -->
+        <!-- Tool Windows -->
         <toolWindow id="Ride Chat" 
                     anchor="right" 
                     factoryClass="ru.marslab.ide.ride.ui.ChatToolWindowFactory"
                     icon="AllIcons.General.User"/>
+        
+        <toolWindow id="MCP Methods" 
+                    anchor="right" 
+                    factoryClass="ru.marslab.ide.ride.ui.mcp.MCPToolWindowFactory"
+                    icon="AllIcons.Actions.ListFiles"/>
         
         <!-- Settings -->
         <applicationConfigurable 
@@ -65,6 +70,13 @@
                 instance="ru.marslab.ide.ride.settings.SettingsConfigurable"
                 id="ru.marslab.ide.ride.settings.SettingsConfigurable"
                 displayName="Ride"/>
+        
+        <!-- MCP Settings (sub-page under Ride) -->
+        <projectConfigurable
+                parentId="ru.marslab.ide.ride.settings.SettingsConfigurable"
+                instance="ru.marslab.ide.ride.settings.MCPSettingsConfigurable"
+                id="ru.marslab.ide.ride.settings.MCPSettingsConfigurable"
+                displayName="MCP Servers"/>
         
         <!-- Application Services -->
         <applicationService 

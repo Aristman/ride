@@ -23,6 +23,7 @@ enum class MCPServerType {
  * @property args Аргументы команды (для stdio)
  * @property env Переменные окружения (для stdio)
  * @property url URL для подключения (для http)
+ * @property headers HTTP заголовки (для http)
  * @property enabled Включен ли сервер
  */
 @Serializable
@@ -33,6 +34,7 @@ data class MCPServerConfig(
     val args: List<String> = emptyList(),
     val env: Map<String, String> = emptyMap(),
     val url: String? = null,
+    val headers: Map<String, String> = emptyMap(),
     val enabled: Boolean = true
 ) {
     /**

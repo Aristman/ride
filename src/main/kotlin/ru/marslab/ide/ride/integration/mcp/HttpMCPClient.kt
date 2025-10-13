@@ -180,12 +180,19 @@ class HttpMCPClient(
             val requestJson = json.encodeToString(request)
             logger.debug("Sending HTTP request to ${config.url}: $requestJson")
             
-            val httpRequest = HttpRequest.newBuilder()
+            val requestBuilder = HttpRequest.newBuilder()
                 .uri(URI.create(config.url!!))
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(requestJson))
                 .timeout(Duration.ofMillis(timeout))
-                .build()
+            
+            // Добавляем кастомные заголовки
+            config.headers.forEach { (key, value) ->
+                requestBuilder.header(key, value)
+                logger.debug("Adding header: $key")
+            }
+            
+            val httpRequest = requestBuilder.build()
             
             try {
                 val httpResponse = httpClient.send(

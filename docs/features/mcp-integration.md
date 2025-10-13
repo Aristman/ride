@@ -60,6 +60,7 @@ MCP серверы настраиваются через JSON файл в кор
 #### Параметры для HTTP
 
 - **url** (string, обязательно) - URL эндпоинта (например, `http://localhost:3000/mcp`)
+- **headers** (object, опционально) - HTTP заголовки (например, для авторизации)
 
 ## Использование
 
@@ -110,21 +111,27 @@ MCP серверы настраиваются через JSON файл в кор
 - `write_file` - запись в файл
 - `list_directory` - список файлов в директории
 
-### Пример 2: GitHub API (HTTP)
+### Пример 2: GitHub Copilot MCP (HTTP с авторизацией)
 
 ```json
 {
   "name": "github",
   "type": "HTTP",
-  "url": "http://localhost:3000/mcp",
+  "url": "https://api.githubcopilot.com/mcp/",
+  "headers": {
+    "Authorization": "Bearer YOUR_GITHUB_PAT"
+  },
   "enabled": true
 }
 ```
+
+**Примечание:** Замените `YOUR_GITHUB_PAT` на ваш Personal Access Token от GitHub.
 
 **Доступные методы:**
 - `create_issue` - создание issue
 - `search_repositories` - поиск репозиториев
 - `get_file_contents` - получение содержимого файла
+- и другие методы GitHub API
 
 ### Пример вызова метода
 
