@@ -204,9 +204,12 @@ class MCPServerListItem(
             val updated = server.copy(enabled = enableToggle.isSelected)
             // Мгновенно обновляем отображение
             if (!enableToggle.isSelected) {
-                // Отключен: скрываем методы и помечаем статус
+                // Отключен: скрываем и очищаем список методов, блокируем разворачивание
                 methodsPanel.isVisible = false
                 isExpanded = false
+                methodsListPanel.removeAll()
+                methodsListPanel.revalidate()
+                methodsListPanel.repaint()
             } else {
                 // Включен: попробуем обновить статус
                 refreshStatus()
@@ -216,10 +219,15 @@ class MCPServerListItem(
             updateStatusDisplay()
         }
 
-        // Клик по всей карточке раскрывает список тулзов
+        // Клик по всей карточке раскрывает список тулзов (только если сервер включен, есть коннект и методы)
         val clickListener = object : MouseAdapter() {
             override fun mouseClicked(e: MouseEvent) {
-                if (e.clickCount == 1 && currentStatus?.hasMethods() == true) {
+                if (
+                    e.clickCount == 1 &&
+                    enableToggle.isSelected &&
+                    currentStatus?.connected == true &&
+                    currentStatus?.hasMethods() == true
+                ) {
                     toggleMethodsList()
                 }
             }
@@ -387,6 +395,11 @@ class MCPServerListItem(
         println("[MCPServerListItem] currentStatus: $currentStatus")
         println("[MCPServerListItem] connected: ${currentStatus?.connected}, hasMethods: ${currentStatus?.hasMethods()}")
         
+        if (!enableToggle.isSelected) {
+            println("[MCPServerListItem] Cannot toggle - server is disabled")
+            return
+        }
+
         if (currentStatus?.connected != true || !currentStatus!!.hasMethods()) {
             println("[MCPServerListItem] Cannot toggle - not connected or no methods")
             return
