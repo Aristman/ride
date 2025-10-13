@@ -26,7 +26,8 @@ class MCPServerListItem(
     private val project: Project,
     private val server: MCPServerConfig,
     private val connectionManager: MCPConnectionManager,
-    private val onRefreshComplete: () -> Unit
+    private val onRefreshComplete: () -> Unit,
+    private val onEditServer: (MCPServerConfig) -> Unit
 ) : JPanel(BorderLayout()) {
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -36,9 +37,12 @@ class MCPServerListItem(
     private val nameLabel = JBLabel()
     private val typeLabel = JBLabel()
     private val refreshButton = JButton(AllIcons.Actions.Refresh)
+    private val editButton = JButton(AllIcons.Actions.Edit)
     private val expandButton = JButton(AllIcons.General.ArrowDown)
     private val methodsPanel = JPanel()
     private val methodsLayout = CardLayout()
+    private val methodsListPanel = JPanel()
+    private lateinit var methodsScrollPane: JScrollPane
 
     // Состояние
     private var currentStatus: MCPServerStatus? = null
@@ -109,8 +113,18 @@ class MCPServerListItem(
         gbc.gridx = 4
         gbc.gridy = 0
         gbc.anchor = GridBagConstraints.EAST
-        gbc.insets = JBUI.insets(2, 0, 2, 0)
+        gbc.insets = JBUI.insets(2, 0, 2, 4)
         headerPanel.add(refreshButton, gbc)
+
+        // Кнопка редактирования
+        editButton.border = JBUI.Borders.empty(4)
+        editButton.toolTipText = "Edit server"
+        editButton.isContentAreaFilled = false
+        gbc.gridx = 5
+        gbc.gridy = 0
+        gbc.anchor = GridBagConstraints.EAST
+        gbc.insets = JBUI.insets(2, 0, 2, 0)
+        headerPanel.add(editButton, gbc)
 
         add(headerPanel, BorderLayout.NORTH)
 
@@ -121,9 +135,12 @@ class MCPServerListItem(
         val emptyPanel = JPanel()
         methodsPanel.add(emptyPanel, "empty")
 
-        val methodsListPanel = JPanel()
         methodsListPanel.layout = BoxLayout(methodsListPanel, BoxLayout.Y_AXIS)
-        methodsPanel.add(JScrollPane(methodsListPanel), "methods")
+        methodsScrollPane = JScrollPane(methodsListPanel)
+        methodsScrollPane.preferredSize = Dimension(0, 200)
+        methodsScrollPane.verticalScrollBarPolicy = JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED
+        methodsScrollPane.horizontalScrollBarPolicy = JScrollPane.HORIZONTAL_SCROLLBAR_NEVER
+        methodsPanel.add(methodsScrollPane, "methods")
 
         add(methodsPanel, BorderLayout.CENTER)
         methodsPanel.isVisible = false
@@ -135,28 +152,35 @@ class MCPServerListItem(
             refreshServer()
         }
 
+        // Кнопка редактирования
+        editButton.addActionListener {
+            onEditServer(server)
+        }
+
         // Кнопка раскрытия списка методов
         expandButton.addActionListener {
             toggleMethodsList()
         }
 
-        // Клик по названию или типу также раскрывает список
+        // Клик по всей карточке раскрывает список тулзов
         val clickListener = object : MouseAdapter() {
             override fun mouseClicked(e: MouseEvent) {
-                if (e.clickCount == 1 && currentStatus?.connected == true) {
+                if (e.clickCount == 1 && currentStatus?.hasMethods() == true) {
                     toggleMethodsList()
                 }
             }
         }
 
+        // Добавляем слушатель на всю панель
+        addMouseListener(clickListener)
         nameLabel.addMouseListener(clickListener)
         typeLabel.addMouseListener(clickListener)
         statusIcon.addMouseListener(clickListener)
 
-        // Изменение курсора при наведении на активные элементы
+        // Изменение курсора при наведении
         val cursorListener = object : MouseAdapter() {
             override fun mouseEntered(e: MouseEvent) {
-                if (currentStatus?.connected == true) {
+                if (currentStatus?.hasMethods() == true) {
                     cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
                 }
             }
@@ -166,6 +190,7 @@ class MCPServerListItem(
             }
         }
 
+        addMouseListener(cursorListener)
         nameLabel.addMouseListener(cursorListener)
         typeLabel.addMouseListener(cursorListener)
     }
@@ -192,6 +217,7 @@ class MCPServerListItem(
                 expandButton.isVisible = false
                 methodsPanel.isVisible = false
                 isExpanded = false
+                typeLabel.text = "[${server.type.name}]"
             }
             currentStatus!!.connected -> {
                 println("[MCPServerListItem] Status is connected for ${server.name}, methods: ${currentStatus!!.methods.size}")
@@ -205,6 +231,10 @@ class MCPServerListItem(
                     // Ensure expand button is visible and properly styled when there are methods
                     expandButton.isVisible = true
                 }
+                // Показываем реальное количество тулзов при подключении
+                val count = currentStatus!!.methods.size
+                nameLabel.text = "${server.name} - $count tools"
+//                typeLabel.text = "(${count}) [${server.type.name}]"
             }
             currentStatus!!.hasError() -> {
                 println("[MCPServerListItem] Status has error for ${server.name}: ${currentStatus!!.error}")
@@ -213,6 +243,7 @@ class MCPServerListItem(
                 expandButton.isVisible = false
                 methodsPanel.isVisible = false
                 isExpanded = false
+                typeLabel.text = "[${server.type.name}]"
             }
             else -> {
                 println("[MCPServerListItem] Status is disconnected for ${server.name}")
@@ -221,10 +252,11 @@ class MCPServerListItem(
                 expandButton.isVisible = false
                 methodsPanel.isVisible = false
                 isExpanded = false
+                typeLabel.text = "[${server.type.name}]"
             }
         }
         updateExpandButtonIcon()
-        
+
         // Принудительно обновляем UI
         statusIcon.revalidate()
         statusIcon.repaint()
@@ -238,16 +270,16 @@ class MCPServerListItem(
         isRefreshing = true
         refreshButton.icon = AllIcons.Process.Step_1
         refreshButton.toolTipText = "Refreshing..."
-        
+
         println("[MCPServerListItem] Starting refresh for server: ${server.name}")
-        
+
         scope.launch(Dispatchers.IO) {
             try {
                 // Синхронизируем сервер - это обновит статус в БД
                 println("[MCPServerListItem] Connecting to server: ${server.name}")
                 val success = connectionManager.connectServer(server)
                 println("[MCPServerListItem] Connection result for ${server.name}: $success")
-                
+
                 // Получаем обновленный статус из БД
                 val updatedStatus = connectionManager.getServerStatus(server.name)
                 println("[MCPServerListItem] Updated status for ${server.name}: connected=${updatedStatus?.connected}, methods=${updatedStatus?.methods?.size}")
@@ -281,9 +313,17 @@ class MCPServerListItem(
     }
 
     private fun toggleMethodsList() {
-        if (currentStatus?.connected != true || !currentStatus!!.hasMethods()) return
+        println("[MCPServerListItem] toggleMethodsList called for ${server.name}")
+        println("[MCPServerListItem] currentStatus: $currentStatus")
+        println("[MCPServerListItem] connected: ${currentStatus?.connected}, hasMethods: ${currentStatus?.hasMethods()}")
+        
+        if (currentStatus?.connected != true || !currentStatus!!.hasMethods()) {
+            println("[MCPServerListItem] Cannot toggle - not connected or no methods")
+            return
+        }
 
         isExpanded = !isExpanded
+        println("[MCPServerListItem] isExpanded: $isExpanded")
         updateExpandButtonIcon()
 
         if (isExpanded) {
@@ -302,33 +342,52 @@ class MCPServerListItem(
     }
 
     private fun showMethods() {
-        val methodsListPanel = (methodsPanel.getComponent(1) as JScrollPane).viewport.view as JPanel
+        println("[MCPServerListItem] showMethods called for ${server.name}")
+        println("[MCPServerListItem] methods count: ${currentStatus?.methods?.size}")
+        
         methodsListPanel.removeAll()
 
-        currentStatus?.methods?.forEach { method ->
+        currentStatus?.methods?.forEachIndexed { index, method ->
+            println("[MCPServerListItem] Adding method #$index: ${method.name}")
+            
             val methodPanel = JPanel(BorderLayout())
             methodPanel.border = JBUI.Borders.empty(2, 4)
-            methodPanel.maximumSize = Dimension(Int.MAX_VALUE, methodPanel.preferredSize.height)
+            methodPanel.background = null // Прозрачный фон
 
+            // Показываем только имя тулзы
             val nameLabel = JBLabel(method.name)
             nameLabel.font = nameLabel.font.deriveFont(11f)
-
+            nameLabel.foreground = JBUI.CurrentTheme.Label.foreground()
             methodPanel.add(nameLabel, BorderLayout.WEST)
-
-            if (method.hasDescription()) {
-                val descLabel = JBLabel("<html><font color='gray' size='2'>${method.description}</font></html>")
-                descLabel.border = JBUI.Borders.emptyLeft(8)
-                methodPanel.add(descLabel, BorderLayout.CENTER)
-            }
+            
+            // Устанавливаем размеры после добавления компонентов
+            val preferredHeight = nameLabel.preferredSize.height + 4
+            methodPanel.preferredSize = Dimension(Int.MAX_VALUE, preferredHeight)
+            methodPanel.maximumSize = Dimension(Int.MAX_VALUE, preferredHeight)
 
             methodsListPanel.add(methodPanel)
             methodsListPanel.add(Box.createVerticalStrut(2))
         }
 
+        println("[MCPServerListItem] methodsListPanel component count: ${methodsListPanel.componentCount}")
+        println("[MCPServerListItem] Showing methods panel...")
+        
         methodsLayout.show(methodsPanel, "methods")
         methodsPanel.isVisible = true
+        
+        println("[MCPServerListItem] methodsPanel visible: ${methodsPanel.isVisible}")
+        
+        // Обновляем размеры и перерисовываем
+        methodsListPanel.revalidate()
+        methodsListPanel.repaint()
+        methodsPanel.revalidate()
+        methodsPanel.repaint()
         revalidate()
         repaint()
+        
+        // Обновляем родительскую панель
+        parent?.revalidate()
+        parent?.repaint()
     }
 
     fun dispose() {

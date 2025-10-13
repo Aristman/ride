@@ -17,6 +17,7 @@ import ru.marslab.ide.ride.model.mcp.MCPSettings
 import ru.marslab.ide.ride.service.mcp.MCPConfigService
 import ru.marslab.ide.ride.service.mcp.MCPConnectionManager
 import java.awt.BorderLayout
+import java.awt.Dimension
 import javax.swing.*
 
 /**
@@ -28,7 +29,9 @@ class MCPSettingsPanel(private val project: Project) : JPanel(BorderLayout()) {
     private val connectionManager = MCPConnectionManager.getInstance(project)
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
-    private var serverListPanel = MCPServerListPanel(project)
+    private var serverListPanel = MCPServerListPanel(project) { server ->
+        editServer(server)
+    }
 
     private var originalSettings: MCPSettings = MCPSettings.empty()
     private var currentSettings: MCPSettings = MCPSettings.empty()
@@ -43,21 +46,32 @@ class MCPSettingsPanel(private val project: Project) : JPanel(BorderLayout()) {
         val buttonPanel = JPanel()
         buttonPanel.border = JBUI.Borders.empty(5)
 
-        val addButton = JButton("Add Server")
+        // Размер кнопок под иконки
+        val buttonSize = Dimension(28, 28)
+
+        val addButton = JButton()
         addButton.icon = AllIcons.General.Add
+        addButton.toolTipText = "Add Server"
+        addButton.preferredSize = buttonSize
         addButton.addActionListener { addServer() }
 
-        val editButton = JButton("Edit Server")
-        editButton.icon = AllIcons.Actions.Edit
-        editButton.addActionListener { editServer() }
-
-        val removeButton = JButton("Remove Server")
+        val removeButton = JButton()
         removeButton.icon = AllIcons.General.Remove
+        removeButton.toolTipText = "Remove Server"
+        removeButton.preferredSize = buttonSize
         removeButton.addActionListener { removeServer() }
 
+        val refreshAllButton = JButton()
+        refreshAllButton.icon = AllIcons.Actions.Refresh
+        refreshAllButton.toolTipText = "Refresh All Servers"
+        refreshAllButton.preferredSize = buttonSize
+        refreshAllButton.addActionListener {
+            serverListPanel.refreshAllServersPublic(refreshAllButton)
+        }
+
         buttonPanel.add(addButton)
-        buttonPanel.add(editButton)
         buttonPanel.add(removeButton)
+        buttonPanel.add(refreshAllButton)
 
         add(buttonPanel, BorderLayout.NORTH)
         add(serverListPanel, BorderLayout.CENTER)
@@ -71,7 +85,9 @@ class MCPSettingsPanel(private val project: Project) : JPanel(BorderLayout()) {
 
     private fun updateServerList() {
         serverListPanel.dispose()
-        serverListPanel = MCPServerListPanel(project)
+        serverListPanel = MCPServerListPanel(project) { server ->
+            editServer(server)
+        }
         removeAll()
         setupUI()
         revalidate()
@@ -132,6 +148,25 @@ class MCPSettingsPanel(private val project: Project) : JPanel(BorderLayout()) {
                             )
                         }
                     }
+                }
+            }
+        }
+    }
+    
+    private fun editServer(server: MCPServerConfig) {
+        val dialog = MCPServerDialog(project, server)
+        if (dialog.showAndGet()) {
+            val updatedServer = dialog.getServerConfig()
+            if (updatedServer != null) {
+                try {
+                    currentSettings = currentSettings.updateServer(server.name, updatedServer)
+                    serverListPanel.updateServer(server.name, updatedServer)
+                } catch (e: IllegalArgumentException) {
+                    Messages.showErrorDialog(
+                        project,
+                        e.message ?: "Failed to update server",
+                        "Error"
+                    )
                 }
             }
         }

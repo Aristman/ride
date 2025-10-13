@@ -17,7 +17,10 @@ import javax.swing.*
 /**
  * Панель для отображения списка MCP серверов в виде карточек
  */
-class MCPServerListPanel(private val project: Project) : JPanel(BorderLayout()) {
+class MCPServerListPanel(
+        private val project: Project,
+        private val onEditServer: (MCPServerConfig) -> Unit = {}
+    ) : JPanel(BorderLayout()) {
 
     private val configService = MCPConfigService.getInstance(project)
     private val connectionManager = MCPConnectionManager.getInstance(project)
@@ -25,10 +28,10 @@ class MCPServerListPanel(private val project: Project) : JPanel(BorderLayout()) 
 
     private val serversPanel = JPanel()
     private val serversScroll = JScrollPane(serversPanel)
-    private val refreshAllButton = JButton("Refresh All Servers")
 
     private var currentSettings: MCPSettings = MCPSettings.empty()
     private val serverItems = mutableListOf<MCPServerListItem>()
+    private var isRefreshing = false
 
     init {
         setupUI()
@@ -36,20 +39,6 @@ class MCPServerListPanel(private val project: Project) : JPanel(BorderLayout()) 
     }
 
     private fun setupUI() {
-        // Верхняя панель с кнопками
-        val topPanel = JPanel(BorderLayout())
-        topPanel.border = JBUI.Borders.empty(10)
-
-        // Кнопка Refresh All
-        refreshAllButton.icon = AllIcons.Actions.Refresh
-        refreshAllButton.toolTipText = "Test all configured servers"
-        refreshAllButton.addActionListener {
-            refreshAllServers()
-        }
-
-        topPanel.add(refreshAllButton, BorderLayout.EAST)
-        add(topPanel, BorderLayout.NORTH)
-
         // Панель со списком серверов
         serversPanel.layout = BoxLayout(serversPanel, BoxLayout.Y_AXIS)
         serversPanel.border = JBUI.Borders.empty(10)
@@ -83,7 +72,8 @@ class MCPServerListPanel(private val project: Project) : JPanel(BorderLayout()) 
                     connectionManager = connectionManager,
                     onRefreshComplete = {
                         // Можно добавить дополнительную логику после рефреша
-                    }
+                    },
+                    onEditServer = onEditServer
                 )
                 serverItems.add(serverItem)
                 serversPanel.add(serverItem)
@@ -95,16 +85,22 @@ class MCPServerListPanel(private val project: Project) : JPanel(BorderLayout()) 
         serversPanel.repaint()
     }
 
-    private fun refreshAllServers() {
-        refreshAllButton.isEnabled = false
-        refreshAllButton.icon = AllIcons.Process.Step_1
-        refreshAllButton.text = "Refreshing..."
+    fun refreshAllServersPublic(button: JButton? = null) {
+        if (isRefreshing) return
+        
+        isRefreshing = true
+        
+        // Меняем иконку на процесс обновления
+        SwingUtilities.invokeLater {
+            button?.icon = AllIcons.Process.Step_1
+        }
 
         scope.launch(Dispatchers.IO) {
             val servers = currentSettings.servers
             if (servers.isEmpty()) {
-                withContext(Dispatchers.Main) {
-                    resetRefreshButton()
+                SwingUtilities.invokeLater {
+                    button?.icon = AllIcons.Actions.Refresh
+                    isRefreshing = false
                 }
                 return@launch
             }
@@ -117,7 +113,7 @@ class MCPServerListPanel(private val project: Project) : JPanel(BorderLayout()) 
                 }
 
                 // Обновляем UI в реальном времени
-                withContext(Dispatchers.Main) {
+                SwingUtilities.invokeLater {
                     serverItems.forEach { it.refreshStatus() }
                 }
 
@@ -125,17 +121,12 @@ class MCPServerListPanel(private val project: Project) : JPanel(BorderLayout()) 
                 delay(300)
             }
 
-            // Сбрасываем кнопку после завершения
-            withContext(Dispatchers.Main) {
-                resetRefreshButton()
+            // Возвращаем иконку обратно и сбрасываем флаг
+            SwingUtilities.invokeLater {
+                button?.icon = AllIcons.Actions.Refresh
+                isRefreshing = false
             }
         }
-    }
-
-    private fun resetRefreshButton() {
-        refreshAllButton.isEnabled = true
-        refreshAllButton.icon = AllIcons.Actions.Refresh
-        refreshAllButton.text = "Refresh All Servers"
     }
 
     fun addServer(server: MCPServerConfig) {
