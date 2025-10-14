@@ -233,7 +233,7 @@ class ChatService {
                 
                 // Создаем конфигурацию для Yandex GPT
                 val config = YandexGPTConfig(
-                    apiKey = settings.apiKey,
+                    apiKey = settings.getApiKey(),
                     folderId = settings.folderId,
                     modelId = "yandexgpt-lite"
                 )

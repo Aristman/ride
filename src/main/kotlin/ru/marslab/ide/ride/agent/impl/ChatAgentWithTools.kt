@@ -90,7 +90,7 @@ class ChatAgentWithTools(
      * Цикл tool calling
      */
     private suspend fun toolCallingLoop(
-        initialMessages: List<Message>,
+        initialMessages: List<YandexToolsMessage>,
         tools: List<Tool>,
         parameters: LLMParameters
     ): ToolCallingResult {
@@ -135,7 +135,7 @@ class ChatAgentWithTools(
                 
                 // Добавляем результаты tool calls
                 messages.add(
-                    Message(
+                    YandexToolsMessage(
                         role = "tool",
                         toolResultList = ToolResultList(toolResults)
                     )
@@ -177,11 +177,11 @@ class ChatAgentWithTools(
     private fun buildInitialMessages(
         userMessage: String,
         conversationHistory: List<ConversationMessage>
-    ): List<Message> {
+    ): List<YandexToolsMessage> {
         return buildList {
             // Системный промпт
             if (systemPrompt.isNotBlank()) {
-                add(Message(role = "system", text = systemPrompt))
+                add(YandexToolsMessage(role = "system", text = systemPrompt))
             }
             
             // История диалога
@@ -192,12 +192,12 @@ class ChatAgentWithTools(
                     ConversationRole.SYSTEM -> "system"
                 }
                 if (convMsg.content.isNotBlank()) {
-                    add(Message(role = role, text = convMsg.content))
+                    add(YandexToolsMessage(role = role, text = convMsg.content))
                 }
             }
             
             // Текущее сообщение пользователя
-            add(Message(role = "user", text = userMessage))
+            add(YandexToolsMessage(role = "user", text = userMessage))
         }
     }
     

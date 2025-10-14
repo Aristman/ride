@@ -13,7 +13,7 @@ import kotlinx.serialization.json.JsonObject
 data class YandexGPTToolsRequest(
     val modelUri: String,
     val completionOptions: CompletionOptions,
-    val messages: List<Message>,
+    val messages: List<YandexToolsMessage>,
     val tools: List<Tool>? = null,
     val parallelToolCalls: Boolean? = null,
     val toolChoice: ToolChoice? = null
@@ -27,7 +27,7 @@ data class CompletionOptions(
 )
 
 @Serializable
-data class Message(
+data class YandexToolsMessage(
     val role: String,
     val text: String? = null,
     val toolCallList: ToolCallList? = null,
@@ -99,7 +99,7 @@ data class YandexGPTResult(
 
 @Serializable
 data class Alternative(
-    val message: Message,
+    val message: YandexToolsMessage,
     val status: String
 )
 

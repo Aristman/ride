@@ -34,7 +34,7 @@ class YandexGPTToolsProvider(
      * Отправить запрос с tools
      */
     suspend fun sendRequestWithTools(
-        messages: List<Message>,
+        messages: List<YandexToolsMessage>,
         tools: List<Tool>,
         parameters: LLMParameters,
         parallelToolCalls: Boolean = false
@@ -46,7 +46,7 @@ class YandexGPTToolsProvider(
             completionOptions = CompletionOptions(
                 stream = false,
                 temperature = parameters.temperature,
-                maxTokens = parameters.maxTokens
+                maxTokens = parameters.maxTokens.toString()
             ),
             messages = messages,
             tools = tools,

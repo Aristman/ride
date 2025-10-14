@@ -1,10 +1,6 @@
 package ru.marslab.ide.ride.mcp
 
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
-import kotlinx.serialization.json.putJsonArray
-import kotlinx.serialization.json.putJsonObject
+import kotlinx.serialization.json.*
 import ru.marslab.ide.ride.model.FunctionTool
 import ru.marslab.ide.ride.model.Tool
 
@@ -60,8 +56,8 @@ object MCPToolsRegistry {
                     }
                 }
                 putJsonArray("required") {
-                    add("path")
-                    add("content")
+                    add(JsonPrimitive("path"))
+                    add(JsonPrimitive("content"))
                 }
             },
             strict = true
@@ -81,7 +77,7 @@ object MCPToolsRegistry {
                     }
                 }
                 putJsonArray("required") {
-                    add("path")
+                    add(JsonPrimitive("path"))
                 }
             },
             strict = true
@@ -105,8 +101,8 @@ object MCPToolsRegistry {
                     }
                 }
                 putJsonArray("required") {
-                    add("path")
-                    add("content")
+                    add(JsonPrimitive("path"))
+                    add(JsonPrimitive("content"))
                 }
             },
             strict = true
@@ -126,7 +122,7 @@ object MCPToolsRegistry {
                     }
                 }
                 putJsonArray("required") {
-                    add("path")
+                    add(JsonPrimitive("path"))
                 }
             },
             strict = true
@@ -168,7 +164,7 @@ object MCPToolsRegistry {
                     }
                 }
                 putJsonArray("required") {
-                    add("path")
+                    add(JsonPrimitive("path"))
                 }
             },
             strict = true
@@ -188,7 +184,7 @@ object MCPToolsRegistry {
                     }
                 }
                 putJsonArray("required") {
-                    add("path")
+                    add(JsonPrimitive("path"))
                 }
             },
             strict = true
