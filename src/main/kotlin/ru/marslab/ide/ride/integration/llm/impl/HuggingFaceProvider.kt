@@ -1,4 +1,4 @@
-package ru.marslab.ide.ride.integration.llm.impl
+﻿package ru.marslab.ide.ride.integration.llm.impl
 
 import com.intellij.openapi.diagnostic.Logger
 import kotlinx.coroutines.delay
@@ -8,10 +8,10 @@ import ru.marslab.ide.ride.integration.llm.LLMProvider
 import ru.marslab.ide.ride.integration.llm.model.HFChatCompletionsRequest
 import ru.marslab.ide.ride.integration.llm.model.HFChatCompletionsResponse
 import ru.marslab.ide.ride.integration.llm.model.HFMessage
-import ru.marslab.ide.ride.model.ConversationMessage
-import ru.marslab.ide.ride.model.ConversationRole
-import ru.marslab.ide.ride.model.LLMParameters
-import ru.marslab.ide.ride.model.LLMResponse
+import ru.marslab.ide.ride.model.chat.ConversationMessage
+import ru.marslab.ide.ride.model.chat.ConversationRole
+import ru.marslab.ide.ride.model.llm.LLMParameters
+import ru.marslab.ide.ride.model.llm.LLMResponse
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest

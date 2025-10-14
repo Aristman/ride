@@ -4,7 +4,11 @@ import com.intellij.openapi.diagnostic.Logger
 import ru.marslab.ide.ride.agent.impl.ExecutorAgent
 import ru.marslab.ide.ride.agent.impl.PlannerAgent
 import ru.marslab.ide.ride.integration.llm.LLMProvider
-import ru.marslab.ide.ride.model.*
+import ru.marslab.ide.ride.model.agent.*
+import ru.marslab.ide.ride.model.chat.*
+import ru.marslab.ide.ride.model.llm.*
+import ru.marslab.ide.ride.model.task.*
+import ru.marslab.ide.ride.model.schema.*
 
 /**
  * Оркестратор для координации работы PlannerAgent и ExecutorAgent

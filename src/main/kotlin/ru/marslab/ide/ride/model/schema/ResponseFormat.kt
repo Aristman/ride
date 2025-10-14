@@ -1,4 +1,4 @@
-package ru.marslab.ide.ride.model
+package ru.marslab.ide.ride.model.schema
 
 /**
  * Формат ответа от агента

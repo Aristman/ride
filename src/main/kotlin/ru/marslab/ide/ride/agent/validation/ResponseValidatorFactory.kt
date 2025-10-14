@@ -1,6 +1,6 @@
-package ru.marslab.ide.ride.agent.validation
+﻿package ru.marslab.ide.ride.agent.validation
 
-import ru.marslab.ide.ride.model.ResponseFormat
+import ru.marslab.ide.ride.model.schema.ResponseFormat
 
 object ResponseValidatorFactory {
     private val jsonValidator = JsonResponseValidator()

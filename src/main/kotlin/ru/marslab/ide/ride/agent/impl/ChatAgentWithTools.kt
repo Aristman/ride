@@ -1,4 +1,4 @@
-package ru.marslab.ide.ride.agent.impl
+﻿package ru.marslab.ide.ride.agent.impl
 
 import com.intellij.openapi.diagnostic.Logger
 import kotlinx.coroutines.Dispatchers
@@ -9,7 +9,12 @@ import ru.marslab.ide.ride.mcp.MCPClient
 import ru.marslab.ide.ride.mcp.MCPServerManager
 import ru.marslab.ide.ride.mcp.MCPToolExecutor
 import ru.marslab.ide.ride.mcp.MCPToolsRegistry
-import ru.marslab.ide.ride.model.*
+import ru.marslab.ide.ride.model.agent.*
+import ru.marslab.ide.ride.model.chat.*
+import ru.marslab.ide.ride.model.llm.*
+import ru.marslab.ide.ride.model.task.*
+import ru.marslab.ide.ride.model.schema.*
+import ru.marslab.ide.ride.model.mcp.*
 
 /**
  * Chat Agent с поддержкой MCP Tools через Yandex GPT Tools API

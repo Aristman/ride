@@ -1,12 +1,12 @@
-package ru.marslab.ide.ride.agent.validation
+﻿package ru.marslab.ide.ride.agent.validation
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import ru.marslab.ide.ride.model.ParsedResponse
-import ru.marslab.ide.ride.model.ResponseFormat
-import ru.marslab.ide.ride.model.ResponseSchema
+import ru.marslab.ide.ride.model.schema.ParsedResponse
+import ru.marslab.ide.ride.model.schema.ResponseFormat
+import ru.marslab.ide.ride.model.schema.ResponseSchema
 
 /**
  * Простейшая валидация JSON: сверяем, что в ответе присутствуют поля из схемы-примера

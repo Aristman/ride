@@ -1,5 +1,6 @@
-package ru.marslab.ide.ride.model
+﻿package ru.marslab.ide.ride.model.agent
 
+import ru.marslab.ide.ride.model.schema.ParsedResponse
 /**
  * Ответ от агента на запрос пользователя
  *

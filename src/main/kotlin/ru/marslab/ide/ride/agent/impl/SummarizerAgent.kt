@@ -1,8 +1,13 @@
-package ru.marslab.ide.ride.agent.impl
+﻿package ru.marslab.ide.ride.agent.impl
 
 import ru.marslab.ide.ride.agent.Agent
 import ru.marslab.ide.ride.integration.llm.LLMProvider
-import ru.marslab.ide.ride.model.*
+import ru.marslab.ide.ride.model.agent.*
+import ru.marslab.ide.ride.model.chat.*
+import ru.marslab.ide.ride.model.llm.*
+import ru.marslab.ide.ride.model.task.*
+import ru.marslab.ide.ride.model.schema.*
+import ru.marslab.ide.ride.model.mcp.*
 
 /**
  * Агент для сжатия (суммаризации) истории диалога

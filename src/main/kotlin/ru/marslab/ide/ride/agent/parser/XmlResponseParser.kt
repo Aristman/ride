@@ -1,9 +1,9 @@
-package ru.marslab.ide.ride.agent.parser
+﻿package ru.marslab.ide.ride.agent.parser
 
 import com.intellij.openapi.diagnostic.Logger
-import ru.marslab.ide.ride.model.ParsedResponse
-import ru.marslab.ide.ride.model.ResponseFormat
-import ru.marslab.ide.ride.model.ResponseSchema
+import ru.marslab.ide.ride.model.schema.ParsedResponse
+import ru.marslab.ide.ride.model.schema.ResponseFormat
+import ru.marslab.ide.ride.model.schema.ResponseSchema
 
 /**
  * Парсер для XML ответов

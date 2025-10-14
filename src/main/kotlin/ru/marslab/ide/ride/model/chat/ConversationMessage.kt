@@ -1,4 +1,4 @@
-package ru.marslab.ide.ride.model
+package ru.marslab.ide.ride.model.chat
 
 /**
  * Сообщение в диалоге для LLM провайдера

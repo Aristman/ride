@@ -1,4 +1,4 @@
-package ru.marslab.ide.ride.agent
+﻿package ru.marslab.ide.ride.agent
 
 import com.intellij.openapi.components.service
 import ru.marslab.ide.ride.agent.impl.ChatAgent
@@ -9,9 +9,9 @@ import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceConfig
 import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceProvider
 import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceModel
 import ru.marslab.ide.ride.settings.PluginSettings
-import ru.marslab.ide.ride.model.AgentSettings
-import ru.marslab.ide.ride.model.ResponseFormat
-import ru.marslab.ide.ride.model.ResponseSchema
+import ru.marslab.ide.ride.model.agent.AgentSettings
+import ru.marslab.ide.ride.model.schema.ResponseFormat
+import ru.marslab.ide.ride.model.schema.ResponseSchema
 
 /**
  * Фабрика для создания агентов

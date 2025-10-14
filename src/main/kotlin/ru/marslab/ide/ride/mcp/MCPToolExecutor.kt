@@ -1,12 +1,12 @@
-package ru.marslab.ide.ride.mcp
+﻿package ru.marslab.ide.ride.mcp
 
 import com.intellij.openapi.diagnostic.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.*
-import ru.marslab.ide.ride.model.FunctionCall
-import ru.marslab.ide.ride.model.FunctionResult
-import ru.marslab.ide.ride.model.ToolResult
+import ru.marslab.ide.ride.model.llm.FunctionCall
+import ru.marslab.ide.ride.model.llm.FunctionResult
+import ru.marslab.ide.ride.model.llm.ToolResult
 
 /**
  * Исполнитель MCP tool calls

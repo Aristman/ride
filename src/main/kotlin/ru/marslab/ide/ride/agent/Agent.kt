@@ -1,11 +1,11 @@
-package ru.marslab.ide.ride.agent
+﻿package ru.marslab.ide.ride.agent
 
 import kotlinx.coroutines.flow.Flow
-import ru.marslab.ide.ride.model.AgentCapabilities
-import ru.marslab.ide.ride.model.AgentEvent
-import ru.marslab.ide.ride.model.AgentRequest
-import ru.marslab.ide.ride.model.AgentResponse
-import ru.marslab.ide.ride.model.AgentSettings
+import ru.marslab.ide.ride.model.agent.AgentCapabilities
+import ru.marslab.ide.ride.model.agent.AgentEvent
+import ru.marslab.ide.ride.model.agent.AgentRequest
+import ru.marslab.ide.ride.model.agent.AgentResponse
+import ru.marslab.ide.ride.model.agent.AgentSettings
 
 /**
  * Унифицированный интерфейс для всех агентов

@@ -1,7 +1,7 @@
-package ru.marslab.ide.ride.agent.parser
+﻿package ru.marslab.ide.ride.agent.parser
 
-import ru.marslab.ide.ride.model.ParsedResponse
-import ru.marslab.ide.ride.model.ResponseSchema
+import ru.marslab.ide.ride.model.schema.ParsedResponse
+import ru.marslab.ide.ride.model.schema.ResponseSchema
 
 /**
  * Интерфейс для парсинга ответов от LLM в заданном формате

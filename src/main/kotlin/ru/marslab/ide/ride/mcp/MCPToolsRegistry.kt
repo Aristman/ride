@@ -1,8 +1,8 @@
-package ru.marslab.ide.ride.mcp
+﻿package ru.marslab.ide.ride.mcp
 
 import kotlinx.serialization.json.*
-import ru.marslab.ide.ride.model.FunctionTool
-import ru.marslab.ide.ride.model.Tool
+import ru.marslab.ide.ride.model.llm.FunctionTool
+import ru.marslab.ide.ride.model.llm.Tool
 
 /**
  * Реестр MCP Tools для интеграции с Yandex GPT

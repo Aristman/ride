@@ -1,6 +1,6 @@
-package ru.marslab.ide.ride.service
+﻿package ru.marslab.ide.ride.service
 
-import ru.marslab.ide.ride.model.Message
+import ru.marslab.ide.ride.model.chat.Message
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**

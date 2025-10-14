@@ -1,4 +1,4 @@
-package ru.marslab.ide.ride.model
+package ru.marslab.ide.ride.model.chat
 
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile

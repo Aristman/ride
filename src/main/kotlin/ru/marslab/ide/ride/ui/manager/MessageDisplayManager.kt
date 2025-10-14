@@ -1,7 +1,7 @@
-package ru.marslab.ide.ride.ui.manager
+﻿package ru.marslab.ide.ride.ui.manager
 
-import ru.marslab.ide.ride.model.Message
-import ru.marslab.ide.ride.model.MessageRole
+import ru.marslab.ide.ride.model.chat.Message
+import ru.marslab.ide.ride.model.chat.MessageRole
 import ru.marslab.ide.ride.ui.config.ChatPanelConfig
 import ru.marslab.ide.ride.ui.renderer.ChatContentRenderer
 import java.util.*

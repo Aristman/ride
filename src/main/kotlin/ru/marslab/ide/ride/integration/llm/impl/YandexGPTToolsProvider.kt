@@ -1,10 +1,15 @@
-package ru.marslab.ide.ride.integration.llm.impl
+﻿package ru.marslab.ide.ride.integration.llm.impl
 
 import com.intellij.openapi.diagnostic.Logger
 import kotlinx.coroutines.delay
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import ru.marslab.ide.ride.model.*
+import ru.marslab.ide.ride.model.agent.*
+import ru.marslab.ide.ride.model.chat.*
+import ru.marslab.ide.ride.model.llm.*
+import ru.marslab.ide.ride.model.task.*
+import ru.marslab.ide.ride.model.schema.*
+import ru.marslab.ide.ride.model.mcp.*
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest

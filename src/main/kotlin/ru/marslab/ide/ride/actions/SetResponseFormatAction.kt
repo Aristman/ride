@@ -1,4 +1,4 @@
-package ru.marslab.ide.ride.actions
+﻿package ru.marslab.ide.ride.actions
 
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
@@ -6,9 +6,9 @@ import com.intellij.openapi.components.service
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.Messages
 import org.jetbrains.annotations.Nullable
-import ru.marslab.ide.ride.model.ResponseFormat
-import ru.marslab.ide.ride.model.JsonResponseSchema
-import ru.marslab.ide.ride.model.XmlResponseSchema
+import ru.marslab.ide.ride.model.schema.ResponseFormat
+import ru.marslab.ide.ride.model.schema.JsonResponseSchema
+import ru.marslab.ide.ride.model.schema.XmlResponseSchema
 import ru.marslab.ide.ride.service.ChatService
 import java.awt.BorderLayout
 import java.awt.Dimension

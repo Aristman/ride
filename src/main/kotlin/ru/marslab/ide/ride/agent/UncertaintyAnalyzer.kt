@@ -1,7 +1,7 @@
-package ru.marslab.ide.ride.agent
+﻿package ru.marslab.ide.ride.agent
 
-import ru.marslab.ide.ride.model.AgentResponse
-import ru.marslab.ide.ride.model.ChatContext
+import ru.marslab.ide.ride.model.agent.AgentResponse
+import ru.marslab.ide.ride.model.chat.ChatContext
 import java.util.regex.Pattern
 
 /**

@@ -1,4 +1,4 @@
-package ru.marslab.ide.ride.service
+﻿package ru.marslab.ide.ride.service
 
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.components.Service
@@ -16,8 +16,13 @@ import ru.marslab.ide.ride.agent.impl.ChatAgent
 import ru.marslab.ide.ride.agent.impl.ChatAgentWithTools
 import ru.marslab.ide.ride.integration.llm.impl.YandexGPTConfig
 import ru.marslab.ide.ride.mcp.MCPServerManager
-import ru.marslab.ide.ride.model.*
-import ru.marslab.ide.ride.model.ChatSession
+import ru.marslab.ide.ride.model.agent.*
+import ru.marslab.ide.ride.model.chat.*
+import ru.marslab.ide.ride.model.llm.*
+import ru.marslab.ide.ride.model.task.*
+import ru.marslab.ide.ride.model.schema.*
+import ru.marslab.ide.ride.model.mcp.*
+import ru.marslab.ide.ride.model.chat.ChatSession
 import ru.marslab.ide.ride.settings.PluginSettings
 import ru.marslab.ide.ride.util.TokenEstimator
 import java.time.Instant

@@ -1,7 +1,7 @@
-package ru.marslab.ide.ride.agent.parser
+﻿package ru.marslab.ide.ride.agent.parser
 
-import ru.marslab.ide.ride.model.ResponseFormat
-import ru.marslab.ide.ride.model.ResponseSchema
+import ru.marslab.ide.ride.model.schema.ResponseFormat
+import ru.marslab.ide.ride.model.schema.ResponseSchema
 
 /**
  * Фабрика для создания парсеров ответов

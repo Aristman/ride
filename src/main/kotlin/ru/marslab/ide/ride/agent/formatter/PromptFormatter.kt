@@ -1,7 +1,7 @@
-package ru.marslab.ide.ride.agent.formatter
+﻿package ru.marslab.ide.ride.agent.formatter
 
-import ru.marslab.ide.ride.model.ResponseFormat
-import ru.marslab.ide.ride.model.ResponseSchema
+import ru.marslab.ide.ride.model.schema.ResponseFormat
+import ru.marslab.ide.ride.model.schema.ResponseSchema
 
 /**
  * Форматтер для создания промптов с учетом требуемого формата ответа

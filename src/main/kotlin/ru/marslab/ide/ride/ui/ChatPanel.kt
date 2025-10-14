@@ -1,11 +1,11 @@
-package ru.marslab.ide.ride.ui
+﻿package ru.marslab.ide.ride.ui
 
 import com.intellij.ide.ui.LafManagerListener
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
-import ru.marslab.ide.ride.model.Message
-import ru.marslab.ide.ride.model.MessageRole
+import ru.marslab.ide.ride.model.chat.Message
+import ru.marslab.ide.ride.model.chat.MessageRole
 import ru.marslab.ide.ride.service.ChatService
 import ru.marslab.ide.ride.settings.ChatAppearanceListener
 import ru.marslab.ide.ride.settings.PluginSettings

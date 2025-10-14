@@ -1,5 +1,7 @@
-package ru.marslab.ide.ride.model
+﻿package ru.marslab.ide.ride.model.schema
 
+import ru.marslab.ide.ride.model.task.TaskPlan
+import ru.marslab.ide.ride.model.task.TaskItem
 import kotlinx.serialization.json.Json
 import org.w3c.dom.Element
 import javax.xml.parsers.DocumentBuilderFactory
