@@ -82,17 +82,17 @@ object MCPToolsRegistry {
     private fun updateFileTool() = Tool(
         function = FunctionTool(
             name = "update_file",
-            description = "Update the content of an existing file. Use this when user asks to modify, edit, or update a file.",
+            description = "MUST use for ANY file modifications! When user says 'измени', 'обнови', 'модифицируй', 'добавь', 'замени', 'исправь' - ALWAYS call this tool. Use this to modify, edit, update, add code to, or change any existing file content.",
             parameters = buildJsonObject {
                 put("type", "object")
                 putJsonObject("properties") {
                     putJsonObject("path") {
                         put("type", "string")
-                        put("description", "Relative path to the file to update")
+                        put("description", "Relative path to the file to update (e.g., 'src/Main.kt')")
                     }
                     putJsonObject("content") {
                         put("type", "string")
-                        put("description", "New content for the file")
+                        put("description", "COMPLETE new content for the file - not just changes")
                     }
                 }
                 putJsonArray("required") {

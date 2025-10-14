@@ -5,9 +5,11 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.serializer
 import java.net.URI
+import java.net.URLEncoder
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.nio.charset.StandardCharsets
 import java.time.Duration
 
 /**
@@ -38,7 +40,8 @@ class MCPClient(private val baseUrl: String = "http://localhost:3000") {
      * Прочитать файл
      */
     suspend fun readFile(path: String): FileContentResponse {
-        val response = get("/files/$path")
+        val encodedPath = URLEncoder.encode(path, StandardCharsets.UTF_8)
+        val response = get("/files/$encodedPath")
         return json.decodeFromString(FileContentResponse.serializer(), response)
     }
     
@@ -46,8 +49,18 @@ class MCPClient(private val baseUrl: String = "http://localhost:3000") {
      * Обновить файл
      */
     suspend fun updateFile(path: String, content: String): FileResponse {
+        println("🌐 MCPClient: updateFile")
+        println("  Path: '$path'")
+        println("  Content length: ${content.length}")
+
+        val encodedPath = URLEncoder.encode(path, StandardCharsets.UTF_8)
+        val endpoint = "/files/$encodedPath"
+
+        println("  Encoded path: '$encodedPath'")
+        println("  Full endpoint: '$endpoint'")
+
         val request = UpdateFileRequest(content)
-        val response = put("/files/$path", request)
+        val response = put(endpoint, request)
         return json.decodeFromString(FileResponse.serializer(), response)
     }
     
@@ -55,7 +68,8 @@ class MCPClient(private val baseUrl: String = "http://localhost:3000") {
      * Удалить файл
      */
     suspend fun deleteFile(path: String): DeleteResponse {
-        val response = delete("/files/$path")
+        val encodedPath = URLEncoder.encode(path, StandardCharsets.UTF_8)
+        val response = delete("/files/$encodedPath")
         return json.decodeFromString(DeleteResponse.serializer(), response)
     }
     
@@ -63,7 +77,12 @@ class MCPClient(private val baseUrl: String = "http://localhost:3000") {
      * Список файлов
      */
     suspend fun listFiles(dir: String? = null): DirectoryListResponse {
-        val url = if (dir != null) "/files?dir=$dir" else "/files"
+        val url = if (dir != null) {
+            val encodedDir = URLEncoder.encode(dir, StandardCharsets.UTF_8)
+            "/files?dir=$encodedDir"
+        } else {
+            "/files"
+        }
         val response = get(url)
         return json.decodeFromString(DirectoryListResponse.serializer(), response)
     }
@@ -81,7 +100,8 @@ class MCPClient(private val baseUrl: String = "http://localhost:3000") {
      * Удалить директорию
      */
     suspend fun deleteDirectory(path: String): DeleteResponse {
-        val response = delete("/directories/$path")
+        val encodedPath = URLEncoder.encode(path, StandardCharsets.UTF_8)
+        val response = delete("/directories/$encodedPath")
         return json.decodeFromString(DeleteResponse.serializer(), response)
     }
     
@@ -143,16 +163,31 @@ class MCPClient(private val baseUrl: String = "http://localhost:3000") {
     
     private fun executeRequest(request: HttpRequest): String {
         try {
+            println("🌐 MCPClient: HTTP Request")
+            println("  Method: ${request.method()}")
+            println("  URI: ${request.uri()}")
+            println("  Headers: ${request.headers().map()}")
+
             val response = client.send(request, HttpResponse.BodyHandlers.ofString())
-            
+
+            println("🌐 MCPClient: HTTP Response")
+            println("  Status: ${response.statusCode()}")
+            println("  Body length: ${response.body().length}")
+            if (response.body().length < 500) {
+                println("  Body: ${response.body()}")
+            }
+
             if (response.statusCode() !in 200..299) {
                 val errorBody = response.body()
                 logger.error("MCP Server error: ${response.statusCode()} - $errorBody")
                 throw MCPException("HTTP ${response.statusCode()}: $errorBody")
             }
-            
+
             return response.body()
         } catch (e: Exception) {
+            println("🚨 MCPClient: Request failed")
+            println("  Error: ${e.message}")
+            println("  Exception type: ${e.javaClass.simpleName}")
             logger.error("Failed to execute MCP request", e)
             throw MCPException("Request failed: ${e.message}", e)
         }
