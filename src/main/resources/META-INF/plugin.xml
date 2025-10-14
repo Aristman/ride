@@ -83,6 +83,8 @@
                 serviceImplementation="ru.marslab.ide.ride.settings.PluginSettings"/>
         <applicationService
                 serviceImplementation="ru.marslab.ide.ride.service.ChatService"/>
+        <applicationService
+                serviceImplementation="ru.marslab.ide.ride.mcp.MCPServerManager"/>
 
         <!-- Project Services -->
         <projectService
@@ -91,7 +93,16 @@
                 serviceImplementation="ru.marslab.ide.ride.service.mcp.MCPConnectionManager"/>
         <projectService
                 serviceImplementation="ru.marslab.ide.ride.service.mcp.MCPStatusPersistenceService"/>
+        
+        <!-- Startup Activity -->
+        <postStartupActivity implementation="ru.marslab.ide.ride.startup.RideStartupActivity"/>
     </extensions>
+
+    <!-- Application listeners -->
+    <applicationListeners>
+        <listener class="ru.marslab.ide.ride.startup.RideApplicationListener"
+                  topic="com.intellij.ide.AppLifecycleListener"/>
+    </applicationListeners>
 
     <!-- Project listeners -->
     <projectListeners>

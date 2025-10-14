@@ -40,6 +40,14 @@ class MCPSettingsPanel(private val project: Project) : JPanel(BorderLayout()) {
     }
 
     private fun setupUI() {
+        // Создаем главную панель с вертикальным layout
+        val mainPanel = JPanel()
+        mainPanel.layout = BoxLayout(mainPanel, BoxLayout.Y_AXIS)
+        
+        // Добавляем панель статуса MCP Server Rust
+        mainPanel.add(createMCPServerStatusPanel())
+        mainPanel.add(Box.createVerticalStrut(10))
+        
         // Инициализируем панель списка серверов до добавления в layout
         if (!::serverListPanel.isInitialized) {
             serverListPanel = MCPServerListPanel(
@@ -59,6 +67,7 @@ class MCPSettingsPanel(private val project: Project) : JPanel(BorderLayout()) {
                 }
             )
         }
+        
         // Создаем панель с кнопками
         val buttonPanel = JPanel()
         buttonPanel.border = JBUI.Borders.empty(5)
@@ -83,8 +92,20 @@ class MCPSettingsPanel(private val project: Project) : JPanel(BorderLayout()) {
         buttonPanel.add(addButton)
         buttonPanel.add(refreshAllButton)
 
-        add(buttonPanel, BorderLayout.NORTH)
-        add(serverListPanel, BorderLayout.CENTER)
+        mainPanel.add(buttonPanel)
+        mainPanel.add(serverListPanel)
+
+        add(mainPanel, BorderLayout.CENTER)
+    }
+    
+    private fun createMCPServerStatusPanel(): JPanel {
+        val panel = JPanel(BorderLayout())
+        panel.border = JBUI.Borders.empty(10)
+        
+        val statusPanel = MCPServerStatusPanel()
+        panel.add(statusPanel, BorderLayout.CENTER)
+        
+        return panel
     }
     
     private fun loadSettings() {
