@@ -13,6 +13,9 @@ import ru.marslab.ide.ride.agent.OrchestratorStep
 import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceProvider
 import ru.marslab.ide.ride.integration.llm.impl.YandexGPTProvider
 import ru.marslab.ide.ride.agent.impl.ChatAgent
+import ru.marslab.ide.ride.agent.impl.ChatAgentWithTools
+import ru.marslab.ide.ride.integration.llm.impl.YandexGPTConfig
+import ru.marslab.ide.ride.mcp.MCPServerManager
 import ru.marslab.ide.ride.model.*
 import ru.marslab.ide.ride.model.ChatSession
 import ru.marslab.ide.ride.settings.PluginSettings
@@ -174,6 +177,153 @@ class ChatService {
 
             } catch (e: Exception) {
                 logger.error("Error processing message", e)
+            }
+        }
+    }
+
+    /**
+     * Отправляет сообщение с поддержкой MCP Tools
+     * 
+     * @param userMessage Текст сообщения пользователя
+     * @param project Текущий проект
+     * @param onResponse Callback для получения ответа
+     * @param onError Callback для обработки ошибок
+     * @param onToolExecution Callback для индикации выполнения tool
+     */
+    fun sendMessageWithTools(
+        userMessage: String,
+        project: Project,
+        onResponse: (Message) -> Unit,
+        onError: (String) -> Unit,
+        onToolExecution: ((String) -> Unit)? = null
+    ) {
+        if (userMessage.isBlank()) {
+            onError("Сообщение не может быть пустым")
+            return
+        }
+
+        logger.info("Sending user message with tools support, length: ${userMessage.length}")
+
+        // Проверяем, запущен ли MCP Server
+        val serverManager = MCPServerManager.getInstance()
+        if (!serverManager.isServerRunning()) {
+            logger.warn("MCP Server is not running, falling back to regular sendMessage")
+            sendMessage(userMessage, project, onResponse, onError)
+            return
+        }
+
+        // Создаем и сохраняем сообщение пользователя
+        val userMsg = Message(
+            content = userMessage,
+            role = MessageRole.USER
+        )
+        val history = getCurrentHistory()
+        val wasEmpty = history.getMessageCount() == 0
+        history.addMessage(userMsg)
+        if (wasEmpty) {
+            val title = deriveTitleFrom(userMessage)
+            updateSessionTitle(currentSessionId, title)
+        }
+
+        // Обрабатываем запрос асинхронно
+        scope.launch {
+            try {
+                // Получаем настройки
+                val settings = service<PluginSettings>()
+                
+                // Создаем конфигурацию для Yandex GPT
+                val config = YandexGPTConfig(
+                    apiKey = settings.apiKey,
+                    folderId = settings.folderId,
+                    modelId = "yandexgpt-lite"
+                )
+                
+                // Создаем агента с поддержкой tools
+                val agentWithTools = ChatAgentWithTools(config)
+                
+                // Формируем историю для агента
+                val conversationHistory = history.getMessages()
+                    .filter { it.role != MessageRole.SYSTEM }
+                    .map { msg ->
+                        ConversationMessage(
+                            role = when (msg.role) {
+                                MessageRole.USER -> ConversationRole.USER
+                                MessageRole.ASSISTANT -> ConversationRole.ASSISTANT
+                                MessageRole.SYSTEM -> ConversationRole.SYSTEM
+                            },
+                            content = msg.content
+                        )
+                    }
+                
+                // Получаем параметры
+                val llmParameters = LLMParameters(
+                    temperature = settings.temperature,
+                    maxTokens = settings.maxTokens
+                )
+
+                // Измеряем время выполнения
+                val startTime = System.currentTimeMillis()
+                val agentResponse = agentWithTools.processRequest(
+                    userMessage = userMessage,
+                    conversationHistory = conversationHistory,
+                    parameters = llmParameters
+                )
+                val responseTime = System.currentTimeMillis() - startTime
+
+                // Обрабатываем ответ в UI потоке
+                withContext(Dispatchers.EDT) {
+                    if (agentResponse.success) {
+                        // Извлекаем информацию о выполненных tools
+                        val executedTools = agentResponse.metadata["executedTools"] as? String
+                        val iterations = agentResponse.metadata["iterations"] as? String
+                        
+                        // Если были выполнены tools, показываем индикатор
+                        if (!executedTools.isNullOrBlank() && onToolExecution != null) {
+                            onToolExecution("Executed tools: $executedTools")
+                        }
+                        
+                        // Получаем статистику токенов
+                        val inputTokens = agentResponse.metadata["inputTokens"] as? String
+                        val outputTokens = agentResponse.metadata["outputTokens"] as? String
+                        val totalTokens = agentResponse.metadata["totalTokens"] as? String
+                        
+                        val tokenUsage = if (inputTokens != null && outputTokens != null && totalTokens != null) {
+                            TokenUsage(
+                                inputTokens = inputTokens.toIntOrNull() ?: 0,
+                                outputTokens = outputTokens.toIntOrNull() ?: 0,
+                                totalTokens = totalTokens.toIntOrNull() ?: 0
+                            )
+                        } else {
+                            TokenUsage.EMPTY
+                        }
+                        
+                        // Создаем метаданные
+                        val metadata = mapOf(
+                            "responseTimeMs" to responseTime,
+                            "tokenUsage" to tokenUsage,
+                            "executedTools" to (executedTools ?: "none"),
+                            "toolIterations" to (iterations ?: "0"),
+                            "usedMCPTools" to true
+                        )
+
+                        val assistantMsg = Message(
+                            content = agentResponse.content,
+                            role = MessageRole.ASSISTANT,
+                            metadata = metadata
+                        )
+                        getCurrentHistory().addMessage(assistantMsg)
+                        onResponse(assistantMsg)
+                    } else {
+                        logger.warn("Agent returned error: ${agentResponse.error}")
+                        onError(agentResponse.error ?: "Неизвестная ошибка")
+                    }
+                }
+
+            } catch (e: Exception) {
+                logger.error("Error processing message with tools", e)
+                withContext(Dispatchers.EDT) {
+                    onError("Ошибка: ${e.message}")
+                }
             }
         }
     }

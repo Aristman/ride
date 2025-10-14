@@ -171,7 +171,8 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                 }
             )
         } else {
-            chatService.sendMessage(
+            // Используем sendMessageWithTools для поддержки MCP операций
+            chatService.sendMessageWithTools(
                 userMessage = text,
                 project = project,
                 onResponse = { message ->
@@ -194,6 +195,10 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                     messageDisplayManager.removeLastSystemMessage()
                     messageDisplayManager.displaySystemMessage("${ChatPanelConfig.Icons.ERROR} Ошибка: $error")
                     setUIEnabled(true)
+                },
+                onToolExecution = { toolInfo ->
+                    // Показываем индикатор выполнения tool
+                    messageDisplayManager.displaySystemMessage("🔧 $toolInfo")
                 }
             )
         }
