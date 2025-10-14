@@ -45,7 +45,13 @@ class YandexGPTToolsProvider(
         parallelToolCalls: Boolean = false
     ): YandexGPTToolsResponse {
         logger.info("Sending request with ${tools.size} tools")
-        
+        println("🔧 YandexGPT: Sending request with ${tools.size} tools")
+
+        // Логируем доступные tools
+        tools.forEach { tool ->
+            println("  📋 Tool: ${tool.function.name} - ${tool.function.description}")
+        }
+
         val request = YandexGPTToolsRequest(
             modelUri = config.modelUri,
             completionOptions = CompletionOptions(
@@ -57,7 +63,7 @@ class YandexGPTToolsProvider(
             tools = tools,
             parallelToolCalls = parallelToolCalls
         )
-        
+
         return sendWithRetry(request)
     }
     
@@ -74,7 +80,9 @@ class YandexGPTToolsProvider(
         repeat(maxRetries) { attempt ->
             try {
                 val requestBody = json.encodeToString(request)
-                
+
+                println("📤 YandexGPT Request JSON:")
+                println(requestBody)
                 logger.debug("Request body: $requestBody")
                 
                 val httpRequest = HttpRequest.newBuilder()
@@ -89,8 +97,11 @@ class YandexGPTToolsProvider(
                 
                 return when (httpResponse.statusCode()) {
                     200 -> {
-                        logger.debug("Response body: ${httpResponse.body()}")
-                        json.decodeFromString<YandexGPTToolsResponse>(httpResponse.body())
+                        val responseBody = httpResponse.body()
+                        println("📥 YandexGPT Response JSON:")
+                        println(responseBody)
+                        logger.debug("Response body: $responseBody")
+                        json.decodeFromString<YandexGPTToolsResponse>(responseBody)
                     }
                     401 -> {
                         throw Exception("Invalid API key")

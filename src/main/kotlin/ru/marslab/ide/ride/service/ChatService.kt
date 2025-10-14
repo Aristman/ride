@@ -211,21 +211,31 @@ class ChatService {
 
         // Проверяем, запущен ли MCP Server
         val serverManager = MCPServerManager.getInstance()
+        println("🔧 ChatService: MCP Server running: ${serverManager.isServerRunning()}")
+
         if (!serverManager.isServerRunning()) {
-            logger.warn("MCP Server is not running, falling back to regular sendMessage")
-            sendMessage(userMessage, project, onResponse, onError)
-            return
+            println("🔧 ChatService: Starting MCP Server...")
+            val started = serverManager.ensureServerRunning()
+            println("🔧 ChatService: MCP Server start result: $started")
+
+            if (!started) {
+                logger.error("Failed to start MCP Server")
+                onError("Не удалось запустить MCP Server. Файловые операции недоступны.")
+                return
+            }
         }
 
-        // Создаем и сохраняем сообщение пользователя
+        // Создаем сообщение пользователя
         val userMsg = Message(
             content = userMessage,
             role = MessageRole.USER
         )
         val history = getCurrentHistory()
         val wasEmpty = history.getMessageCount() == 0
-        history.addMessage(userMsg)
+
         if (wasEmpty) {
+            // Добавляем сообщение пользователя для авто-именования сессии
+            history.addMessage(userMsg)
             val title = deriveTitleFrom(userMessage)
             updateSessionTitle(currentSessionId, title)
         }
@@ -246,9 +256,16 @@ class ChatService {
                 // Создаем агента с поддержкой tools
                 val agentWithTools = ChatAgentWithTools(config)
                 
-                // Формируем историю для агента
-                val conversationHistory = history.getMessages()
-                    .filter { it.role != MessageRole.SYSTEM }
+                // Формируем историю для агента (включаем системные сообщения для контекста)
+                val allMessages = if (wasEmpty) {
+                    // Если история была пустой, пользовательское сообщение уже добавлено
+                    history.getMessages()
+                } else {
+                    // Если история не была пустой, добавляем текущее сообщение
+                    history.getMessages() + userMsg
+                }
+
+                val conversationHistory = allMessages
                     .map { msg ->
                         ConversationMessage(
                             role = when (msg.role) {
@@ -302,6 +319,11 @@ class ChatService {
                             TokenUsage.EMPTY
                         }
                         
+                        // Добавляем сообщение пользователя в историю (если еще не добавлено)
+                        if (!wasEmpty) {
+                            getCurrentHistory().addMessage(userMsg)
+                        }
+
                         // Создаем метаданные
                         val metadata = mapOf(
                             "responseTimeMs" to responseTime,
