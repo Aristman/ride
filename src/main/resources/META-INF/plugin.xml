@@ -53,11 +53,16 @@
     <!-- Extension points defined by the plugin.
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-extension-points.html -->
     <extensions defaultExtensionNs="com.intellij">
-        <!-- Tool Window -->
+        <!-- Tool Windows -->
         <toolWindow id="Ride Chat" 
                     anchor="right" 
                     factoryClass="ru.marslab.ide.ride.ui.ChatToolWindowFactory"
                     icon="AllIcons.General.User"/>
+        
+        <toolWindow id="MCP Methods" 
+                    anchor="right" 
+                    factoryClass="ru.marslab.ide.ride.ui.mcp.MCPToolWindowFactory"
+                    icon="AllIcons.Actions.ListFiles"/>
         
         <!-- Settings -->
         <applicationConfigurable 
@@ -66,13 +71,35 @@
                 id="ru.marslab.ide.ride.settings.SettingsConfigurable"
                 displayName="Ride"/>
         
+        <!-- MCP Settings (sub-page under Ride) -->
+        <projectConfigurable
+                parentId="ru.marslab.ide.ride.settings.SettingsConfigurable"
+                instance="ru.marslab.ide.ride.settings.MCPSettingsConfigurable"
+                id="ru.marslab.ide.ride.settings.MCPSettingsConfigurable"
+                displayName="MCP Servers"/>
+        
         <!-- Application Services -->
-        <applicationService 
+        <applicationService
                 serviceImplementation="ru.marslab.ide.ride.settings.PluginSettings"/>
-        <applicationService 
+        <applicationService
                 serviceImplementation="ru.marslab.ide.ride.service.ChatService"/>
+
+        <!-- Project Services -->
+        <projectService
+                serviceImplementation="ru.marslab.ide.ride.service.mcp.MCPConfigService"/>
+        <projectService
+                serviceImplementation="ru.marslab.ide.ride.service.mcp.MCPConnectionManager"/>
+        <projectService
+                serviceImplementation="ru.marslab.ide.ride.service.mcp.MCPStatusPersistenceService"/>
     </extensions>
 
+    <!-- Project listeners -->
+    <projectListeners>
+        <listener class="ru.marslab.ide.ride.mcp.MCPProjectStartupListener"
+                  topic="com.intellij.openapi.project.ProjectManagerListener"/>
+    </projectListeners>
+
+    
     <!-- Actions registration -->
     <actions>
         <group id="Ride.Menu" text="Ride" description="Ride plugin actions" popup="true">

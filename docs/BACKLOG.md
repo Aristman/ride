@@ -2,6 +2,266 @@
 
 Список задач и идей для будущей реализации.
 
+## Список всех задач
+
+- [ ] Стабилизировать все тесты
+- [ ] Поддержка OAuth для MCP серверов
+- [ ] Отслеживание использования токенов
+- [ ] Форматирование ответов - поддержка дополнительных форматов
+- [ ] Интеграция MCP с Agent - автоматический вызов MCP tools
+
+## Стабилизировать все тесты
+
+**Приоритет:** Высокий  
+**Статус:** Запланировано  
+**Оценка:** ~8 часов
+
+### Описание
+Привести все существующие тесты в рабочее состояние. В настоящее время часть тестов не компилируется из-за несовместимости между JUnit 4 и JUnit 5, а также из-за использования устаревших API.
+
+### Проблемы
+1. **Смешанное использование JUnit 4 и JUnit 5**
+   - Новые MCP тесты используют JUnit 4
+   - Старые тесты используют JUnit 5 (jupiter)
+   - Нужно привести к единому стандарту
+
+2. **Ошибки компиляции в существующих тестах**
+   - `ResponseFormattingIntegrationTest` - unresolved references
+   - `JsonResponseParserTest`, `XmlResponseParserTest`, `TextResponseParserTest` - unresolved references
+   - `HuggingFaceProviderTest` - использует JUnit 5
+   - `ResponseModelsTest` - проблемы с типами
+
+3. **Устаревшие API**
+   - Некоторые тесты используют методы, которые были изменены или удалены
+
+### Задачи
+- [ ] Выбрать единый стандарт тестирования (JUnit 4 или JUnit 5)
+- [ ] Обновить все тесты для использования выбранного стандарта
+- [ ] Исправить ошибки компиляции в существующих тестах
+- [ ] Обновить импорты и зависимости
+- [ ] Убедиться, что все тесты проходят успешно
+- [ ] Добавить в CI/CD проверку всех тестов
+
+### Технические детали
+
+**Вариант 1: Миграция на JUnit 4**
+- Преимущества: новые MCP тесты уже используют JUnit 4
+- Недостатки: JUnit 4 устаревший, меньше возможностей
+- Действия: обновить старые тесты с JUnit 5 на JUnit 4
+
+**Вариант 2: Миграция на JUnit 5** (рекомендуется)
+- Преимущества: современный фреймворк, больше возможностей
+- Недостатки: нужно обновить новые MCP тесты
+- Действия: обновить MCP тесты с JUnit 4 на JUnit 5
+
+**Рекомендация:** Использовать JUnit 5 как современный стандарт
+
+### Файлы, требующие исправления
+1. `src/test/kotlin/ru/marslab/ide/ride/agent/integration/ResponseFormattingIntegrationTest.kt`
+2. `src/test/kotlin/ru/marslab/ide/ride/agent/parser/JsonResponseParserTest.kt`
+3. `src/test/kotlin/ru/marslab/ide/ride/agent/parser/TextResponseParserTest.kt`
+4. `src/test/kotlin/ru/marslab/ide/ride/agent/parser/XmlResponseParserTest.kt`
+5. `src/test/kotlin/ru/marslab/ide/ride/agent/validation/JsonResponseValidatorTest.kt`
+6. `src/test/kotlin/ru/marslab/ide/ride/agent/validation/XmlResponseValidatorTest.kt`
+7. `src/test/kotlin/ru/marslab/ide/ride/integration/llm/impl/HuggingFaceProviderTest.kt`
+8. `src/test/kotlin/ru/marslab/ide/ride/model/ResponseModelsTest.kt`
+9. Все MCP тесты (если выбран вариант 2)
+
+### Критерии завершения
+- ✅ Все тесты компилируются без ошибок
+- ✅ Все тесты используют единый фреймворк (JUnit 4 или 5)
+- ✅ `./gradlew test` проходит успешно
+- ✅ Покрытие тестами не уменьшилось
+- ✅ Документация обновлена
+
+### Зависимости
+- Нет критических зависимостей
+
+### Риски
+- Возможны регрессии при обновлении тестов
+- Может потребоваться обновление mock-библиотек
+
+---
+
+## Поддержка OAuth для MCP серверов
+
+**Приоритет:** Средний  
+**Статус:** Запланировано  
+**Оценка:** ~16 часов
+
+### Описание
+Добавить поддержку OAuth авторизации для MCP серверов, чтобы можно было подключаться к Remote GitHub MCP Server и другим сервисам, требующим OAuth flow.
+
+### Проблема
+В настоящее время плагин поддерживает только:
+- Basic Authentication (через headers)
+- Bearer tokens (статичные)
+
+Но многие MCP серверы (например, Remote GitHub MCP Server на `https://api.githubcopilot.com/mcp/`) требуют полноценный OAuth 2.0 flow с:
+- Authorization Code flow
+- Session management
+- Token refresh
+
+### Цели
+- Поддержка OAuth 2.0 Authorization Code flow
+- Безопасное хранение OAuth токенов
+- Автоматический refresh токенов
+- UI для OAuth авторизации
+- Поддержка различных OAuth провайдеров (GitHub, Google, etc.)
+
+### Функциональные требования
+
+#### 1. OAuth Configuration
+Добавить в `MCPServerConfig`:
+```kotlin
+data class MCPServerConfig(
+    // ... существующие поля
+    val authType: AuthType = AuthType.NONE,
+    val oauthConfig: OAuthConfig? = null
+)
+
+enum class AuthType {
+    NONE,           // Без авторизации
+    BEARER_TOKEN,   // Статичный Bearer token (текущая реализация)
+    OAUTH2          // OAuth 2.0 flow
+}
+
+data class OAuthConfig(
+    val clientId: String,
+    val clientSecret: String? = null, // Опционально для PKCE
+    val authUrl: String,
+    val tokenUrl: String,
+    val scopes: List<String> = emptyList(),
+    val redirectUri: String = "http://localhost:8080/oauth/callback"
+)
+```
+
+#### 2. OAuth Service
+Создать `OAuthService` для управления OAuth flow:
+- `startAuthFlow()` - запуск OAuth авторизации
+- `handleCallback()` - обработка callback с authorization code
+- `exchangeCodeForToken()` - обмен code на access token
+- `refreshToken()` - обновление токена
+- `revokeToken()` - отзыв токена
+
+#### 3. Token Storage
+Безопасное хранение OAuth токенов:
+- Использовать IntelliJ `PasswordSafe` для хранения токенов
+- Хранить access token, refresh token, expiry time
+- Автоматическое обновление при истечении
+
+#### 4. OAuth UI Flow
+- Открытие браузера для авторизации
+- Локальный HTTP сервер для приема callback
+- Индикатор прогресса авторизации
+- Обработка ошибок и отмены
+
+#### 5. UI Changes
+Обновить `MCPServerDialog`:
+- Выбор типа авторизации (None / Bearer Token / OAuth)
+- Поля для OAuth конфигурации (Client ID, Auth URL, etc.)
+- Кнопка "Authorize" для запуска OAuth flow
+- Индикатор статуса авторизации
+
+### Технические детали
+
+**Компоненты:**
+1. **OAuthService** - управление OAuth flow
+2. **OAuthTokenStorage** - безопасное хранение токенов
+3. **OAuthCallbackServer** - локальный HTTP сервер для callback
+4. **OAuthHttpClient** - HTTP клиент с автоматическим refresh токенов
+5. **OAuthConfigDialog** - UI для настройки OAuth
+
+**OAuth Flow:**
+```
+1. Пользователь нажимает "Authorize" в настройках
+2. Открывается браузер с auth URL
+3. Пользователь авторизуется на сервере
+4. Сервер редиректит на localhost:8080/oauth/callback?code=...
+5. Локальный сервер получает code
+6. Обмениваем code на access_token
+7. Сохраняем токены в PasswordSafe
+8. Используем access_token для MCP запросов
+9. Автоматически обновляем при истечении
+```
+
+**PKCE Support:**
+- Генерация code_verifier и code_challenge
+- Поддержка OAuth без client_secret (более безопасно для desktop приложений)
+
+### Примеры конфигурации
+
+#### GitHub OAuth
+```json
+{
+  "name": "github-remote",
+  "type": "HTTP",
+  "url": "https://api.githubcopilot.com/mcp/",
+  "authType": "OAUTH2",
+  "oauthConfig": {
+    "clientId": "your_client_id",
+    "authUrl": "https://github.com/login/oauth/authorize",
+    "tokenUrl": "https://github.com/login/oauth/access_token",
+    "scopes": ["repo", "user"]
+  },
+  "enabled": true
+}
+```
+
+#### Google OAuth
+```json
+{
+  "name": "google-service",
+  "type": "HTTP",
+  "url": "https://api.google.com/mcp/",
+  "authType": "OAUTH2",
+  "oauthConfig": {
+    "clientId": "your_client_id.apps.googleusercontent.com",
+    "authUrl": "https://accounts.google.com/o/oauth2/v2/auth",
+    "tokenUrl": "https://oauth2.googleapis.com/token",
+    "scopes": ["https://www.googleapis.com/auth/drive.readonly"]
+  },
+  "enabled": true
+}
+```
+
+### Зависимости
+- ✅ Базовая MCP интеграция завершена
+- ✅ HTTP client с headers поддержкой
+- Требуется: OAuth 2.0 библиотека или собственная реализация
+
+### Библиотеки
+Рассмотреть использование:
+- **ScribeJava** - OAuth библиотека для Java
+- **OkHttp** - для HTTP запросов
+- Или собственная реализация на основе Java HttpClient
+
+### Риски
+- Сложность реализации OAuth flow
+- Необходимость регистрации OAuth приложения для каждого сервиса
+- Управление локальным HTTP сервером для callback
+- Безопасность хранения токенов
+
+### Альтернативы
+1. Использовать только локальные MCP серверы (текущее решение)
+2. Попросить пользователя вручную получать токены
+3. Интеграция с системным keychain/credential manager
+
+### Критерии завершения
+- ✅ OAuth 2.0 Authorization Code flow реализован
+- ✅ PKCE поддержка для desktop приложений
+- ✅ Безопасное хранение токенов в PasswordSafe
+- ✅ Автоматический refresh токенов
+- ✅ UI для OAuth конфигурации и авторизации
+- ✅ Работает с Remote GitHub MCP Server
+- ✅ Документация обновлена
+- ✅ Unit тесты для OAuth компонентов
+
+### Связанные задачи
+- Интеграция MCP с Agent (потребует OAuth для некоторых серверов)
+
+---
+
 ## Отслеживание использования токенов
 
 **Приоритет:** Средний  
@@ -150,4 +410,35 @@ Tool Window "Token Usage":
 
 ---
 
-**Дата создания:** 2025-10-02
+## Интеграция MCP с Agent
+
+**Приоритет:** Средний  
+**Статус:** Запланировано  
+**Оценка:** ~4 часа
+
+### Описание
+Интеграция MCP серверов с ChatAgent для автоматического вызова MCP tools агентом.
+
+### Задачи
+- [ ] Добавить в `ChatAgent` поддержку MCP tools
+  - Метод `getAvailableTools()` - получение доступных MCP методов
+  - Метод `callTool()` - вызов MCP метода из агента
+- [ ] Добавить в системный промпт информацию о доступных MCP tools
+- [ ] Реализовать автоматический вызов MCP методов агентом
+- [ ] Добавить форматирование результатов MCP вызовов
+
+### Зависимости
+- Требует завершения базовой интеграции MCP (задачи 1-6 из roadmap 05)
+- Требует работающего `MCPConnectionManager`
+
+### Технические детали
+- Agent должен получать список доступных tools из `MCPConnectionManager`
+- При необходимости вызова tool, agent делегирует вызов в MCP client
+- Результаты вызова форматируются и добавляются в контекст
+- Поддержка tool calling в системном промпте
+
+---
+
+**Дата создания:** 2025-10-02  
+**Последнее обновление:** 2025-10-13  
+**Последнее добавление:** OAuth поддержка для MCP серверов (2025-10-13)
