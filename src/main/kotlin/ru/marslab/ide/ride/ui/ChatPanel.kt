@@ -1,5 +1,7 @@
-﻿package ru.marslab.ide.ride.ui
+package ru.marslab.ide.ride.ui
 
+import ru.marslab.ide.ride.model.chat.ConversationMessage
+import ru.marslab.ide.ride.model.chat.ConversationRole
 import com.intellij.ide.ui.LafManagerListener
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
@@ -294,12 +296,12 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         val conversationHistory = history
             .filter { it.role != MessageRole.SYSTEM }
             .map { message ->
-                ru.marslab.ide.ride.model.ConversationMessage(
+                ru.marslab.ide.ride.model.chat.ConversationMessage(
                     content = message.content,
                     role = when (message.role) {
-                        MessageRole.USER -> ru.marslab.ide.ride.model.ConversationRole.USER
-                        MessageRole.ASSISTANT -> ru.marslab.ide.ride.model.ConversationRole.ASSISTANT
-                        MessageRole.SYSTEM -> ru.marslab.ide.ride.model.ConversationRole.SYSTEM
+                        MessageRole.USER -> ru.marslab.ide.ride.model.chat.ConversationRole.USER
+                        MessageRole.ASSISTANT -> ru.marslab.ide.ride.model.chat.ConversationRole.ASSISTANT
+                        MessageRole.SYSTEM -> ru.marslab.ide.ride.model.chat.ConversationRole.SYSTEM
                     }
                 )
             }

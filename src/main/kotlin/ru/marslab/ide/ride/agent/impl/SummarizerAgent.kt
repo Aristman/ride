@@ -1,5 +1,6 @@
 ﻿package ru.marslab.ide.ride.agent.impl
 
+import ru.marslab.ide.ride.model.chat.Message
 import ru.marslab.ide.ride.agent.Agent
 import ru.marslab.ide.ride.integration.llm.LLMProvider
 import ru.marslab.ide.ride.model.agent.*

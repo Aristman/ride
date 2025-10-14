@@ -1,5 +1,6 @@
 ﻿package ru.marslab.ide.ride.agent.impl
 
+import ru.marslab.ide.ride.model.schema.TaskPlanData
 import com.intellij.openapi.diagnostic.Logger
 import ru.marslab.ide.ride.agent.Agent
 import ru.marslab.ide.ride.agent.formatter.PromptFormatter

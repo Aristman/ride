@@ -1,5 +1,7 @@
-﻿package ru.marslab.ide.ride.agent.validation
+package ru.marslab.ide.ride.agent.validation
 
+import ru.marslab.ide.ride.model.schema.ParsedResponse
+import ru.marslab.ide.ride.model.schema.ResponseSchema
 import ru.marslab.ide.ride.model.schema.ResponseFormat
 
 object ResponseValidatorFactory {
@@ -13,6 +15,6 @@ object ResponseValidatorFactory {
     }
 
     private object NoopValidator : ResponseValidator {
-        override fun validate(parsed: ru.marslab.ide.ride.model.ParsedResponse, schema: ru.marslab.ide.ride.model.ResponseSchema): String? = null
+        override fun validate(parsed: ParsedResponse, schema: ResponseSchema): String? = null
     }
 }

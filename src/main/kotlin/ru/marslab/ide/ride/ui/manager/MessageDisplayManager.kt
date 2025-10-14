@@ -1,13 +1,14 @@
 ﻿package ru.marslab.ide.ride.ui.manager
 
+import com.intellij.openapi.components.service
 import ru.marslab.ide.ride.model.chat.Message
 import ru.marslab.ide.ride.model.chat.MessageRole
+import ru.marslab.ide.ride.model.llm.TokenUsage
+import ru.marslab.ide.ride.service.ChatService
+import ru.marslab.ide.ride.settings.PluginSettings
 import ru.marslab.ide.ride.ui.config.ChatPanelConfig
 import ru.marslab.ide.ride.ui.renderer.ChatContentRenderer
 import java.util.*
-import com.intellij.openapi.components.service
-import ru.marslab.ide.ride.settings.PluginSettings
-import ru.marslab.ide.ride.service.ChatService
 
 /**
  * Управляет отображением сообщений в чате
@@ -144,14 +145,14 @@ class MessageDisplayManager(
     private fun createAssistantStatusHtml(message: Message): String {
         // Проверяем, включен ли анализ неопределенности
         val enableUncertaintyAnalysis = settings.enableUncertaintyAnalysis
-        
+
         val isFinal = message.metadata["isFinal"] as? Boolean ?: true
         val uncertainty = message.metadata["uncertainty"] as? Double ?: 0.0
         val wasParsed = message.metadata["parsedData"] as? Boolean ?: false
         val hasClarifyingQuestions = message.metadata["hasClarifyingQuestions"] as? Boolean ?: false
         val responseTimeMs = message.metadata["responseTimeMs"] as? Long
         val tokensUsed = message.metadata["tokensUsed"] as? Int
-        val tokenUsage = message.metadata["tokenUsage"] as? ru.marslab.ide.ride.model.TokenUsage
+        val tokenUsage = message.metadata["tokenUsage"] as? TokenUsage
 
         return contentRenderer.createStatusHtml(
             isFinal = isFinal,

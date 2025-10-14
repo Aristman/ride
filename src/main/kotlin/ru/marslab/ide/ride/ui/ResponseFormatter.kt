@@ -1,4 +1,4 @@
-﻿package ru.marslab.ide.ride.ui
+package ru.marslab.ide.ride.ui
 
 import ru.marslab.ide.ride.model.schema.XmlResponseData
 import ru.marslab.ide.ride.model.schema.JsonResponseData
@@ -7,7 +7,6 @@ import ru.marslab.ide.ride.model.schema.JsonResponseData
  * Форматирует ответы от агента для отображения в UI с учетом схемы ответа
  */
 object ResponseFormatter {
-
     /**
      * Форматирует данные XmlResponseData для отображения с уточняющими вопросами
      */
