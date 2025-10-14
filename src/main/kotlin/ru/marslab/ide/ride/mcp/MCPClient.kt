@@ -3,6 +3,7 @@ package ru.marslab.ide.ride.mcp
 import com.intellij.openapi.diagnostic.Logger
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.serializer
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -94,8 +95,8 @@ class MCPClient(private val baseUrl: String = "http://localhost:3000") {
     
     // HTTP методы
     
-    private fun post(endpoint: String, body: Any): String {
-        val jsonBody = json.encodeToString(kotlinx.serialization.serializer(), body)
+    private inline fun <reified T : Any> post(endpoint: String, body: T): String {
+        val jsonBody = json.encodeToString(serializer(), body)
         
         val request = HttpRequest.newBuilder()
             .uri(URI.create("$baseUrl$endpoint"))
@@ -107,8 +108,8 @@ class MCPClient(private val baseUrl: String = "http://localhost:3000") {
         return executeRequest(request)
     }
     
-    private fun put(endpoint: String, body: Any): String {
-        val jsonBody = json.encodeToString(kotlinx.serialization.serializer(), body)
+    private inline fun <reified T : Any> put(endpoint: String, body: T): String {
+        val jsonBody = json.encodeToString(serializer(), body)
         
         val request = HttpRequest.newBuilder()
             .uri(URI.create("$baseUrl$endpoint"))

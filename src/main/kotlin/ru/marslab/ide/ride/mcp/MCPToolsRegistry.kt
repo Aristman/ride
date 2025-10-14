@@ -1,4 +1,4 @@
-﻿package ru.marslab.ide.ride.mcp
+package ru.marslab.ide.ride.mcp
 
 import kotlinx.serialization.json.*
 import ru.marslab.ide.ride.model.llm.FunctionTool
@@ -48,11 +48,6 @@ object MCPToolsRegistry {
                     putJsonObject("content") {
                         put("type", "string")
                         put("description", "Content to write to the file")
-                    }
-                    putJsonObject("overwrite") {
-                        put("type", "boolean")
-                        put("description", "Whether to overwrite existing file")
-                        put("default", false)
                     }
                 }
                 putJsonArray("required") {
@@ -155,12 +150,7 @@ object MCPToolsRegistry {
                 putJsonObject("properties") {
                     putJsonObject("path") {
                         put("type", "string")
-                        put("description", "Path for the new directory")
-                    }
-                    putJsonObject("recursive") {
-                        put("type", "boolean")
-                        put("description", "Create parent directories if they don't exist")
-                        put("default", false)
+                        put("description", "Path for the new directory (parent directories will be created automatically)")
                     }
                 }
                 putJsonArray("required") {
