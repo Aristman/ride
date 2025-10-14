@@ -36,79 +36,79 @@
 - [x] Зарегистрировать в Settings
 
 ### 3. MCP Client для взаимодействия с сервером
-- [ ] Создать `MCPClient` класс
-  - [ ] Реализовать методы для всех file operations
-  - [ ] Добавить обработку ошибок
-  - [ ] Реализовать retry логику
-  - [ ] Добавить timeout настройки
-- [ ] Создать модели данных
-  - [ ] `FileRequest`, `FileResponse`
-  - [ ] `DirectoryRequest`, `DirectoryResponse`
-  - [ ] `MCPError`, `MCPException`
+- [x] Создать `MCPClient` класс
+  - [x] Реализовать методы для всех file operations
+  - [x] Добавить обработку ошибок
+  - [x] Реализовать retry логику (в HTTP client)
+  - [x] Добавить timeout настройки
+- [x] Создать модели данных
+  - [x] `FileRequest`, `FileResponse`
+  - [x] `DirectoryRequest`, `DirectoryResponse`
+  - [x] `MCPError`, `MCPException`
 - [ ] Добавить unit тесты для MCPClient
 
 ### 4. Интеграция с Yandex GPT Tools API
-- [ ] Создать `YandexGPTToolsProvider`
-  - [ ] Реализовать преобразование MCP tools в Yandex format
-  - [ ] Добавить поддержку `tools` поля в запросе
-  - [ ] Реализовать обработку `toolCallList` в ответе
-  - [ ] Реализовать отправку `toolResultList` обратно в LLM
-- [ ] Обновить `YandexGPTProvider`
-  - [ ] Добавить поле `tools` в запрос
-  - [ ] Добавить поле `toolChoice` для управления вызовами
-  - [ ] Добавить поле `parallelToolCalls`
-  - [ ] Обработать `toolCallList` в ответе
-- [ ] Создать модели для Tools API
-  - [ ] `Tool`, `FunctionTool`
-  - [ ] `ToolCall`, `FunctionCall`
-  - [ ] `ToolResult`, `FunctionResult`
-  - [ ] `ToolChoice`
+- [x] Создать `YandexGPTToolsProvider`
+  - [x] Реализовать преобразование MCP tools в Yandex format
+  - [x] Добавить поддержку `tools` поля в запросе
+  - [x] Реализовать обработку `toolCallList` в ответе
+  - [x] Реализовать отправку `toolResultList` обратно в LLM
+- [x] Обновить `YandexGPTProvider` (создан новый YandexGPTToolsProvider)
+  - [x] Добавить поле `tools` в запрос
+  - [x] Добавить поле `toolChoice` для управления вызовами
+  - [x] Добавить поле `parallelToolCalls`
+  - [x] Обработать `toolCallList` в ответе
+- [x] Создать модели для Tools API
+  - [x] `Tool`, `FunctionTool`
+  - [x] `ToolCall`, `FunctionCall`
+  - [x] `ToolResult`, `FunctionResult`
+  - [x] `ToolChoice`
 
 ### 5. Интеграция MCP Tools в ChatAgent
-- [ ] Создать `MCPToolsRegistry`
-  - [ ] Автоматическое обнаружение доступных tools
-  - [ ] Кеширование списка tools
+- [x] Создать `MCPToolsRegistry`
+  - [x] Автоматическое обнаружение доступных tools
+  - [x] Кеширование списка tools (статический объект)
   - [ ] Обновление при перезапуске сервера
-- [ ] Создать `MCPToolExecutor`
-  - [ ] Парсинг `FunctionCall` из LLM ответа
-  - [ ] Вызов соответствующего MCP endpoint
-  - [ ] Обработка результата
-  - [ ] Формирование `ToolResult` для LLM
-- [ ] Обновить `ChatAgent`
-  - [ ] Добавить поддержку tools в контекст
-  - [ ] Реализовать цикл tool calling:
+- [x] Создать `MCPToolExecutor`
+  - [x] Парсинг `FunctionCall` из LLM ответа
+  - [x] Вызов соответствующего MCP endpoint
+  - [x] Обработка результата
+  - [x] Формирование `ToolResult` для LLM
+- [x] Создать `ChatAgentWithTools`
+  - [x] Добавить поддержку tools в контекст
+  - [x] Реализовать цикл tool calling:
     1. Отправить запрос с tools
     2. Получить ответ с toolCallList
     3. Выполнить tool calls через MCPToolExecutor
     4. Отправить toolResultList обратно в LLM
     5. Получить финальный ответ
-  - [ ] Добавить ограничение на количество итераций (max 5)
-  - [ ] Добавить логирование tool calls
+  - [x] Добавить ограничение на количество итераций (max 5)
+  - [x] Добавить логирование tool calls
 
 ### 6. Маппинг MCP Operations на Yandex Tools
-- [ ] Создать tool definitions для file operations:
-  - [ ] `create_file` - создание файла
-  - [ ] `read_file` - чтение файла
-  - [ ] `update_file` - обновление файла
-  - [ ] `delete_file` - удаление файла
-  - [ ] `list_files` - список файлов
-- [ ] Создать tool definitions для directory operations:
-  - [ ] `create_directory` - создание директории
-  - [ ] `delete_directory` - удаление директории
-  - [ ] `list_directory` - список содержимого
-- [ ] Добавить JSON Schema для параметров каждого tool
+- [x] Создать tool definitions для file operations:
+  - [x] `create_file` - создание файла
+  - [x] `read_file` - чтение файла
+  - [x] `update_file` - обновление файла
+  - [x] `delete_file` - удаление файла
+  - [x] `list_files` - список файлов
+- [x] Создать tool definitions для directory operations:
+  - [x] `create_directory` - создание директории
+  - [x] `delete_directory` - удаление директории
+  - [x] `list_directory` - список содержимого
+- [x] Добавить JSON Schema для параметров каждого tool
 
 ### 7. Обработка Tool Calls
-- [ ] Создать `ToolCallHandler`
-  - [ ] Валидация параметров tool call
-  - [ ] Маппинг на MCP API endpoints
-  - [ ] Выполнение HTTP запроса к MCP серверу
-  - [ ] Обработка ошибок MCP сервера
-  - [ ] Форматирование результата для LLM
+- [x] Создать `MCPToolExecutor` (объединен с ToolCallHandler)
+  - [x] Валидация параметров tool call
+  - [x] Маппинг на MCP API endpoints
+  - [x] Выполнение HTTP запроса к MCP серверу
+  - [x] Обработка ошибок MCP сервера
+  - [x] Форматирование результата для LLM
 - [ ] Добавить безопасность
   - [ ] Проверка разрешенных операций
-  - [ ] Валидация путей
-  - [ ] Ограничение размера файлов
+  - [ ] Валидация путей (делается в MCP Server)
+  - [ ] Ограничение размера файлов (делается в MCP Server)
   - [ ] Rate limiting для tool calls
 
 ### 8. UI индикация Tool Calls
