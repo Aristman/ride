@@ -1,0 +1,196 @@
+﻿package ru.marslab.ide.ride.mcp
+
+import com.intellij.openapi.diagnostic.Logger
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.*
+import ru.marslab.ide.ride.model.llm.FunctionCall
+import ru.marslab.ide.ride.model.llm.FunctionResult
+import ru.marslab.ide.ride.model.llm.ToolResult
+
+/**
+ * Исполнитель MCP tool calls
+ * Преобразует вызовы функций от LLM в запросы к MCP Server
+ */
+class MCPToolExecutor(private val mcpClient: MCPClient) {
+    
+    private val logger = Logger.getInstance(MCPToolExecutor::class.java)
+    
+    /**
+     * Выполнить tool call и вернуть результат
+     */
+    suspend fun executeTool(functionCall: FunctionCall): ToolResult = withContext(Dispatchers.IO) {
+        logger.info("Executing tool: ${functionCall.name}")
+        println("🔧 MCPToolExecutor: Executing ${functionCall.name}")
+        println("  Arguments: ${functionCall.arguments}")
+
+        try {
+            val result = when (functionCall.name) {
+                "create_file" -> executeCreateFile(functionCall.arguments)
+                "read_file" -> executeReadFile(functionCall.arguments)
+                "update_file" -> executeUpdateFile(functionCall.arguments)
+                "delete_file" -> executeDeleteFile(functionCall.arguments)
+                "list_files" -> executeListFiles(functionCall.arguments)
+                "create_directory" -> executeCreateDirectory(functionCall.arguments)
+                "delete_directory" -> executeDeleteDirectory(functionCall.arguments)
+                "list_directory" -> executeListDirectory(functionCall.arguments)
+                else -> {
+                    logger.warn("Unknown tool: ${functionCall.name}")
+                    "Error: Unknown tool '${functionCall.name}'"
+                }
+            }
+            
+            ToolResult(
+                functionResult = FunctionResult(
+                    name = functionCall.name,
+                    content = result
+                )
+            )
+        } catch (e: Exception) {
+            logger.error("Error executing tool ${functionCall.name}", e)
+            ToolResult(
+                functionResult = FunctionResult(
+                    name = functionCall.name,
+                    content = "Error: ${e.message}"
+                )
+            )
+        }
+    }
+
+    /**
+     * Нормализует путь для совместимости с MCP Server
+     */
+    private fun normalizePath(path: String): String {
+        // Заменяем обратные слэши на прямые
+        return path.replace("\\", "/")
+    }
+
+    private suspend fun executeCreateFile(args: JsonObject): String {
+        val path = args["path"]?.jsonPrimitive?.content
+            ?: return "Error: 'path' parameter is required"
+        val content = args["content"]?.jsonPrimitive?.content
+            ?: return "Error: 'content' parameter is required"
+        val overwrite = args["overwrite"]?.jsonPrimitive?.booleanOrNull ?: false
+
+        // Конвертируем путь для совместимости
+        val normalizedPath = normalizePath(path)
+
+        println("🔧 MCPToolExecutor: create_file")
+        println("  Original path: '$path'")
+        println("  Normalized path: '$normalizedPath'")
+        println("  Path bytes: ${normalizedPath.toByteArray().map { it.toInt() }}")
+        println("  Content length: ${content.length}")
+
+        val response = mcpClient.createFile(normalizedPath, content, overwrite)
+        return "File '$normalizedPath' created successfully. Size: ${response.size} bytes, Checksum: ${response.checksum}"
+    }
+    
+    private suspend fun executeReadFile(args: JsonObject): String {
+        val path = args["path"]?.jsonPrimitive?.content
+            ?: return "Error: 'path' parameter is required"
+        val normalizedPath = normalizePath(path)
+
+        println("🔧 MCPToolExecutor: read_file")
+        println("  Original path: '$path'")
+        println("  Normalized path: '$normalizedPath'")
+
+        val response = mcpClient.readFile(normalizedPath)
+        return """
+            File: ${response.path}
+            Size: ${response.size} bytes
+            Type: ${response.mime_type}
+
+            Content:
+            ${response.content}
+        """.trimIndent()
+    }
+    
+    private suspend fun executeUpdateFile(args: JsonObject): String {
+        val path = args["path"]?.jsonPrimitive?.content
+            ?: return "Error: 'path' parameter is required"
+        val content = args["content"]?.jsonPrimitive?.content
+            ?: return "Error: 'content' parameter is required"
+        val normalizedPath = normalizePath(path)
+
+        println("🔧 MCPToolExecutor: update_file")
+        println("  Original path: '$path'")
+        println("  Normalized path: '$normalizedPath'")
+        println("  Path bytes: ${normalizedPath.toByteArray().map { it.toInt() }}")
+        println("  Content length: ${content.length}")
+
+        val response = mcpClient.updateFile(normalizedPath, content)
+        return "File '$normalizedPath' updated successfully. New size: ${response.size} bytes"
+    }
+
+    private suspend fun executeDeleteFile(args: JsonObject): String {
+        val path = args["path"]?.jsonPrimitive?.content
+            ?: return "Error: 'path' parameter is required"
+        val normalizedPath = normalizePath(path)
+
+        val response = mcpClient.deleteFile(normalizedPath)
+        return response.message
+    }
+    
+    private suspend fun executeListFiles(args: JsonObject): String {
+        val dir = args["dir"]?.jsonPrimitive?.contentOrNull
+        val normalizedDir = dir?.let { normalizePath(it) }
+
+        val response = mcpClient.listFiles(normalizedDir)
+        
+        val filesText = if (response.files.isEmpty()) {
+            "No files"
+        } else {
+            response.files.joinToString("\n") { file ->
+                "  - ${file.name} (${file.size} bytes)"
+            }
+        }
+        
+        val dirsText = if (response.directories.isEmpty()) {
+            "No directories"
+        } else {
+            response.directories.joinToString("\n") { dir ->
+                "  - ${dir.name}/"
+            }
+        }
+        
+        return """
+            Directory: ${response.path}
+            
+            Files:
+            $filesText
+            
+            Directories:
+            $dirsText
+        """.trimIndent()
+    }
+    
+    private suspend fun executeCreateDirectory(args: JsonObject): String {
+        val path = args["path"]?.jsonPrimitive?.content
+            ?: return "Error: 'path' parameter is required"
+        val recursive = args["recursive"]?.jsonPrimitive?.booleanOrNull ?: false
+        val normalizedPath = normalizePath(path)
+
+        val response = mcpClient.createDirectory(normalizedPath, recursive)
+        return "Directory '${response.path}' created successfully"
+    }
+
+    private suspend fun executeDeleteDirectory(args: JsonObject): String {
+        val path = args["path"]?.jsonPrimitive?.content
+            ?: return "Error: 'path' parameter is required"
+        val normalizedPath = normalizePath(path)
+
+        val response = mcpClient.deleteDirectory(normalizedPath)
+        return response.message
+    }
+    
+    private suspend fun executeListDirectory(args: JsonObject): String {
+        val path = args["path"]?.jsonPrimitive?.contentOrNull
+        val normalizedPath = path?.let { normalizePath(it) }
+
+        return executeListFiles(buildJsonObject {
+            if (normalizedPath != null) {
+                put("dir", normalizedPath)
+            }
+        })
+    }
+}

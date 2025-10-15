@@ -31,8 +31,8 @@ class MCPConfigService(private val project: Project) {
     /**
      * Получает путь к конфигурационному файлу
      */
-    fun getConfigPath(): Path {
-        val projectPath = project.basePath ?: throw IllegalStateException("Project path is null")
+    fun getConfigPath(): Path? {
+        val projectPath = project.basePath ?: return null
         val rideDir = Path.of(projectPath, ".ride")
         return rideDir.resolve("mcp.json")
     }
@@ -43,7 +43,7 @@ class MCPConfigService(private val project: Project) {
      * @return Настройки MCP или настройки по умолчанию, если файл не существует
      */
     fun loadConfig(): MCPSettings {
-        val configPath = getConfigPath()
+        val configPath = getConfigPath() ?: return MCPSettings()
         
         if (!configPath.exists()) {
             logger.info("MCP config file not found, creating default config")
@@ -70,7 +70,7 @@ class MCPConfigService(private val project: Project) {
      * @return true если сохранение успешно, false в противном случае
      */
     fun saveConfig(settings: MCPSettings): Boolean {
-        val configPath = getConfigPath()
+        val configPath = getConfigPath() ?: return false
         
         return try {
             // Создаем директорию .ride если не существует
@@ -141,7 +141,7 @@ class MCPConfigService(private val project: Project) {
      * @return true если файл существует
      */
     fun configExists(): Boolean {
-        return getConfigPath().exists()
+        return getConfigPath()?.exists() ?: false
     }
     
     /**
@@ -150,7 +150,7 @@ class MCPConfigService(private val project: Project) {
      * @return true если удаление успешно
      */
     fun deleteConfig(): Boolean {
-        val configPath = getConfigPath()
+        val configPath = getConfigPath() ?: return false
         
         return try {
             if (configPath.exists()) {

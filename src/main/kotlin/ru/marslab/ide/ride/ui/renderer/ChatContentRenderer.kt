@@ -1,5 +1,6 @@
-package ru.marslab.ide.ride.ui.renderer
+﻿package ru.marslab.ide.ride.ui.renderer
 
+import ru.marslab.ide.ride.model.llm.TokenUsage
 import ru.marslab.ide.ride.ui.config.ChatPanelConfig
 import ru.marslab.ide.ride.ui.processor.CodeBlockProcessor
 import ru.marslab.ide.ride.ui.processor.MarkdownProcessor
@@ -33,7 +34,13 @@ class ChatContentRenderer {
         result = tripleBacktickResult.processedText
 
         if (tripleBacktickResult.codeBlocksFound.isNotEmpty()) {
-            println("DEBUG: Found ${tripleBacktickResult.codeBlocksFound.size} triple backtick code blocks: ${tripleBacktickResult.codeBlocksFound.joinToString(", ")}")
+            println(
+                "DEBUG: Found ${tripleBacktickResult.codeBlocksFound.size} triple backtick code blocks: ${
+                    tripleBacktickResult.codeBlocksFound.joinToString(
+                        ", "
+                    )
+                }"
+            )
         }
 
         // 2. Экранируем HTML только для не-JCEF режима (до обработки markdown)
@@ -60,7 +67,7 @@ class ChatContentRenderer {
         responseTimeMs: Long? = null,
         tokensUsed: Int? = null,
         showUncertaintyStatus: Boolean = true,
-        tokenUsage: ru.marslab.ide.ride.model.TokenUsage? = null
+        tokenUsage: TokenUsage? = null
     ): String {
         // Формируем метрики
         val metricsHtml = buildString {
@@ -70,7 +77,7 @@ class ChatContentRenderer {
                     val timeSeconds = responseTimeMs / 1000.0
                     append("⏱️ ${String.format("%.2f", timeSeconds)}s")
                 }
-                
+
                 // Показываем детальную статистику токенов если доступна
                 if (tokenUsage != null && tokenUsage.totalTokens > 0) {
                     if (responseTimeMs != null) append(" | ")
@@ -88,26 +95,41 @@ class ChatContentRenderer {
                 append("</span>")
             }
         }
-        
+
         // Если анализ неопределенности выключен, показываем только метрики с пробелом для сохранения высоты
         if (!showUncertaintyStatus) {
             return "<div class='status status-final'>&nbsp;$metricsHtml</div>"
         }
-        
+
         // Иначе показываем полный статус с неопределенностью
         val actualUncertainty = uncertainty
         val uncertaintyPercent = (actualUncertainty * 100).toInt()
 
         val statusText = when {
             !isFinal || hasClarifyingQuestions -> {
-                "${ChatPanelConfig.StatusTexts.REQUIRE_CLARIFICATION} ${ChatPanelConfig.StatusTexts.UNCERTAINTY_TEMPLATE.format(uncertaintyPercent)}"
+                "${ChatPanelConfig.StatusTexts.REQUIRE_CLARIFICATION} ${
+                    ChatPanelConfig.StatusTexts.UNCERTAINTY_TEMPLATE.format(
+                        uncertaintyPercent
+                    )
+                }"
             }
+
             !wasParsed && actualUncertainty > ChatPanelConfig.IS_FINAL_LEVEL -> {
-                "${ChatPanelConfig.StatusTexts.ANSWER_WITH_PARSING} ${ChatPanelConfig.StatusTexts.UNCERTAINTY_TEMPLATE.format(uncertaintyPercent)}"
+                "${ChatPanelConfig.StatusTexts.ANSWER_WITH_PARSING} ${
+                    ChatPanelConfig.StatusTexts.UNCERTAINTY_TEMPLATE.format(
+                        uncertaintyPercent
+                    )
+                }"
             }
+
             actualUncertainty > ChatPanelConfig.IS_FINAL_LEVEL -> {
-                "${ChatPanelConfig.StatusTexts.LOW_CONFIDENCE_ANSWER} ${ChatPanelConfig.StatusTexts.UNCERTAINTY_TEMPLATE.format(uncertaintyPercent)}"
+                "${ChatPanelConfig.StatusTexts.LOW_CONFIDENCE_ANSWER} ${
+                    ChatPanelConfig.StatusTexts.UNCERTAINTY_TEMPLATE.format(
+                        uncertaintyPercent
+                    )
+                }"
             }
+
             else -> {
                 ChatPanelConfig.StatusTexts.FINAL_ANSWER
             }

@@ -1,8 +1,8 @@
-package ru.marslab.ide.ride.integration.llm
+﻿package ru.marslab.ide.ride.integration.llm
 
-import ru.marslab.ide.ride.model.LLMParameters
-import ru.marslab.ide.ride.model.LLMResponse
-import ru.marslab.ide.ride.model.ConversationMessage
+import ru.marslab.ide.ride.model.llm.LLMParameters
+import ru.marslab.ide.ride.model.llm.LLMResponse
+import ru.marslab.ide.ride.model.chat.ConversationMessage
 
 /**
  * Интерфейс для работы с LLM провайдерами

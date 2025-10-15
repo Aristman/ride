@@ -1,11 +1,13 @@
 package ru.marslab.ide.ride.ui
 
+import ru.marslab.ide.ride.model.chat.ConversationMessage
+import ru.marslab.ide.ride.model.chat.ConversationRole
 import com.intellij.ide.ui.LafManagerListener
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
-import ru.marslab.ide.ride.model.Message
-import ru.marslab.ide.ride.model.MessageRole
+import ru.marslab.ide.ride.model.chat.Message
+import ru.marslab.ide.ride.model.chat.MessageRole
 import ru.marslab.ide.ride.service.ChatService
 import ru.marslab.ide.ride.settings.ChatAppearanceListener
 import ru.marslab.ide.ride.settings.PluginSettings
@@ -171,7 +173,8 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                 }
             )
         } else {
-            chatService.sendMessage(
+            // Используем sendMessageWithTools для поддержки MCP операций
+            chatService.sendMessageWithTools(
                 userMessage = text,
                 project = project,
                 onResponse = { message ->
@@ -194,6 +197,10 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                     messageDisplayManager.removeLastSystemMessage()
                     messageDisplayManager.displaySystemMessage("${ChatPanelConfig.Icons.ERROR} Ошибка: $error")
                     setUIEnabled(true)
+                },
+                onToolExecution = { toolInfo ->
+                    // Показываем индикатор выполнения tool
+                    messageDisplayManager.displaySystemMessage("🔧 $toolInfo")
                 }
             )
         }
@@ -289,12 +296,12 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         val conversationHistory = history
             .filter { it.role != MessageRole.SYSTEM }
             .map { message ->
-                ru.marslab.ide.ride.model.ConversationMessage(
+                ru.marslab.ide.ride.model.chat.ConversationMessage(
                     content = message.content,
                     role = when (message.role) {
-                        MessageRole.USER -> ru.marslab.ide.ride.model.ConversationRole.USER
-                        MessageRole.ASSISTANT -> ru.marslab.ide.ride.model.ConversationRole.ASSISTANT
-                        MessageRole.SYSTEM -> ru.marslab.ide.ride.model.ConversationRole.SYSTEM
+                        MessageRole.USER -> ru.marslab.ide.ride.model.chat.ConversationRole.USER
+                        MessageRole.ASSISTANT -> ru.marslab.ide.ride.model.chat.ConversationRole.ASSISTANT
+                        MessageRole.SYSTEM -> ru.marslab.ide.ride.model.chat.ConversationRole.SYSTEM
                     }
                 )
             }

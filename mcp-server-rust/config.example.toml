@@ -1,0 +1,26 @@
+# MCP Server Configuration Example
+
+# Base directory for file operations
+# All file paths will be relative to this directory
+base_dir = "./data"
+
+# Maximum file size in bytes (10MB by default)
+max_file_size = 10485760
+
+# Allowed file extensions (empty array = all extensions allowed)
+# Example: ["txt", "md", "json", "rs"]
+allowed_extensions = []
+
+# Blocked paths for security (system directories)
+blocked_paths = [
+    "/etc",
+    "/sys",
+    "/proc",
+    "/root",
+    "C:\\Windows",
+    "C:\\System32",
+    "C:\\Program Files"
+]
+
+# Enable verbose logging
+verbose = false

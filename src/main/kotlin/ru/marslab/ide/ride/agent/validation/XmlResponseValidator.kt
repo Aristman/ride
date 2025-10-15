@@ -1,9 +1,9 @@
-package ru.marslab.ide.ride.agent.validation
+﻿package ru.marslab.ide.ride.agent.validation
 
 import org.w3c.dom.Document
-import ru.marslab.ide.ride.model.ParsedResponse
-import ru.marslab.ide.ride.model.ResponseFormat
-import ru.marslab.ide.ride.model.ResponseSchema
+import ru.marslab.ide.ride.model.schema.ParsedResponse
+import ru.marslab.ide.ride.model.schema.ResponseFormat
+import ru.marslab.ide.ride.model.schema.ResponseSchema
 import java.io.ByteArrayInputStream
 import javax.xml.parsers.DocumentBuilderFactory
 

@@ -5,28 +5,17 @@ import com.intellij.openapi.diagnostic.Logger
 import ru.marslab.ide.ride.agent.Agent
 import ru.marslab.ide.ride.agent.UncertaintyAnalyzer
 import ru.marslab.ide.ride.agent.formatter.PromptFormatter
-import ru.marslab.ide.ride.agent.parser.ResponseParserFactory
-import ru.marslab.ide.ride.agent.validation.ResponseValidatorFactory
 import ru.marslab.ide.ride.integration.llm.LLMProvider
 import ru.marslab.ide.ride.integration.llm.TokenCounter
 import ru.marslab.ide.ride.integration.llm.impl.TiktokenCounter
 import ru.marslab.ide.ride.integration.llm.impl.YandexGPTProvider
-import ru.marslab.ide.ride.model.AgentCapabilities
-import ru.marslab.ide.ride.model.AgentRequest
-import ru.marslab.ide.ride.model.AgentResponse
-import ru.marslab.ide.ride.model.AgentSettings
-import ru.marslab.ide.ride.model.ChatContext
-import ru.marslab.ide.ride.model.ConversationMessage
-import ru.marslab.ide.ride.model.ConversationRole
-import ru.marslab.ide.ride.model.LLMParameters
-import ru.marslab.ide.ride.model.Message
-import ru.marslab.ide.ride.model.MessageRole
-import ru.marslab.ide.ride.model.ResponseFormat
-import ru.marslab.ide.ride.model.ResponseSchema
-import ru.marslab.ide.ride.model.UncertaintyResponseSchema
-import ru.marslab.ide.ride.model.XmlResponseData
-import ru.marslab.ide.ride.model.JsonResponseData
-import ru.marslab.ide.ride.model.TextResponseData
+import ru.marslab.ide.ride.model.agent.AgentCapabilities
+import ru.marslab.ide.ride.model.agent.AgentRequest
+import ru.marslab.ide.ride.model.agent.AgentResponse
+import ru.marslab.ide.ride.model.agent.AgentSettings
+import ru.marslab.ide.ride.model.chat.*
+import ru.marslab.ide.ride.model.llm.LLMParameters
+import ru.marslab.ide.ride.model.schema.*
 import ru.marslab.ide.ride.settings.PluginSettings
 import ru.marslab.ide.ride.ui.ResponseFormatter.formatJsonResponseData
 import ru.marslab.ide.ride.ui.ResponseFormatter.formatXmlResponseData
@@ -52,7 +41,7 @@ class ChatAgent(
     )
     private var responseFormat: ResponseFormat? = ResponseFormat.XML
     private var responseSchema: ResponseSchema? = UncertaintyResponseSchema.createXmlSchema()
-    
+
     private val tokenCounter: TokenCounter by lazy {
         if (llmProvider is YandexGPTProvider) {
             (llmProvider as YandexGPTProvider).getTokenCounter()
@@ -60,7 +49,7 @@ class ChatAgent(
             TiktokenCounter.forGPT()
         }
     }
-    
+
     private val summarizerAgent: SummarizerAgent by lazy {
         SummarizerAgent(llmProvider)
     }
@@ -96,13 +85,13 @@ class ChatAgent(
 
         return try {
             val settings = service<PluginSettings>()
-            
+
             // Системный промпт (опционально расширяем инструкциями формата)
             val systemPromptForRequest = buildSystemPrompt()
 
             // Полная история диалога для контекста
             val conversationHistory = buildConversationHistory(context)
-            
+
             // Управляем контекстом: проверяем токены и сжимаем если нужно
             // ВАЖНО: userMessage уже добавлено в conversationHistory в ChatService,
             // поэтому передаём пустую строку чтобы избежать двойного подсчёта
@@ -170,7 +159,7 @@ class ChatAgent(
             if (responseFormat != null) {
                 baseMetadata["format"] = responseFormat!!.name
             }
-            
+
             // Добавляем системное сообщение о сжатии если есть
             if (systemMessage != null) {
                 baseMetadata["systemMessage"] = systemMessage
@@ -246,7 +235,7 @@ class ChatAgent(
     override fun updateSettings(settings: AgentSettings) {
         logger.info("Updating agent settings: $settings")
         this.settings = settings
-        
+
         // Обновляем формат ответа если указан
         if (settings.defaultResponseFormat != responseFormat) {
             responseFormat = settings.defaultResponseFormat
@@ -300,11 +289,11 @@ class ChatAgent(
             ConversationMessage(role, message.content)
         }
     }
-    
+
     /**
      * Управляет контекстом с учётом лимита токенов
      * Сжимает историю если превышен лимит
-     * 
+     *
      * @return Пара: (история для отправки, системное сообщение о сжатии или null)
      */
     private suspend fun manageContext(
@@ -317,28 +306,28 @@ class ChatAgent(
         val pluginSettings = service<PluginSettings>()
         val maxContextTokens = pluginSettings.maxContextTokens
         val enableAutoSummarization = pluginSettings.enableAutoSummarization
-        
+
         println("=== ChatAgent.manageContext() ===")
         println("Настройки:")
         println("  - maxContextTokens: $maxContextTokens")
         println("  - enableAutoSummarization: $enableAutoSummarization")
         println("  - conversationHistory.size: ${conversationHistory.size}")
-        
+
         // Подсчитываем токены в запросе
         val requestTokens = tokenCounter.countRequestTokens(
             systemPrompt = systemPrompt,
             userMessage = userMessage,
             conversationHistory = conversationHistory
         )
-        
+
         println("Подсчёт токенов:")
         println("  - systemPrompt: ${tokenCounter.countTokens(systemPrompt)} токенов")
         println("  - userMessage: ${tokenCounter.countTokens(userMessage)} токенов")
         println("  - conversationHistory: ${tokenCounter.countTokens(conversationHistory)} токенов")
         println("  - ИТОГО requestTokens: $requestTokens")
-        
+
         logger.info("Request tokens: $requestTokens, max context tokens: $maxContextTokens")
-        
+
         // Если не превышен лимит, возвращаем историю как есть
         if (requestTokens <= maxContextTokens) {
             println("✅ Лимит НЕ превышен ($requestTokens <= $maxContextTokens)")
@@ -346,9 +335,9 @@ class ChatAgent(
             println("=================================\n")
             return Pair(conversationHistory, null)
         }
-        
+
         println("⚠️ ЛИМИТ ПРЕВЫШЕН! ($requestTokens > $maxContextTokens)")
-        
+
         // Если превышен лимит и автосжатие выключено, обрезаем старые сообщения
         if (!enableAutoSummarization) {
             println("❌ Автосжатие ВЫКЛЮЧЕНО - обрезаем историю")
@@ -356,12 +345,13 @@ class ChatAgent(
             val truncatedHistory = truncateHistory(
                 systemPrompt, userMessage, conversationHistory, maxContextTokens
             )
-            val systemMessage = "⚠️ История диалога была обрезана из-за превышения лимита токенов ($requestTokens > $maxContextTokens)"
+            val systemMessage =
+                "⚠️ История диалога была обрезана из-за превышения лимита токенов ($requestTokens > $maxContextTokens)"
             println("   Обрезано до ${truncatedHistory.size} сообщений")
             println("=================================\n")
             return Pair(truncatedHistory, systemMessage)
         }
-        
+
         // Сжимаем историю через SummarizerAgent
         println("🔄 Автосжатие ВКЛЮЧЕНО - запускаем SummarizerAgent")
         logger.info("Token limit exceeded, summarizing history...")
@@ -374,60 +364,60 @@ class ChatAgent(
                 }
                 Message(content = msg.content, role = role)
             }
-            
+
             println("   Подготовка к сжатию:")
             println("   - Количество сообщений для сжатия: ${historyMessages.size}")
-            
+
             // Создаём временный контекст для суммаризации
             val summaryContext = ChatContext(
                 project = project,
                 history = historyMessages
             )
-            
+
             val summaryRequest = AgentRequest(
                 request = "Создай краткое резюме истории диалога",
                 context = summaryContext,
                 parameters = LLMParameters.PRECISE
             )
-            
+
             println("   Вызов SummarizerAgent.ask()...")
             val summaryResponse = summarizerAgent.ask(summaryRequest)
-            
+
             if (summaryResponse.success) {
                 println("   ✅ SummarizerAgent вернул успешный результат")
                 println("   Длина резюме: ${summaryResponse.content.length} символов")
-                
+
                 // Создаём сжатую историю: резюме + последние N сообщений
                 val summaryMessage = ConversationMessage(
                     role = ConversationRole.SYSTEM,
                     content = "[РЕЗЮМЕ ПРЕДЫДУЩЕГО ДИАЛОГА]\n${summaryResponse.content}"
                 )
-                
+
                 val recentMessages = conversationHistory.takeLast(2) // Берём последние 2 сообщения
                 val compressedHistory = listOf(summaryMessage) + recentMessages
-                
+
                 val compressedTokens = tokenCounter.countRequestTokens(
                     systemPrompt = systemPrompt,
                     userMessage = "",
                     conversationHistory = compressedHistory
                 )
-                
+
                 println("   Результат сжатия:")
                 println("   - Было сообщений: ${conversationHistory.size}")
                 println("   - Стало сообщений: ${compressedHistory.size} (резюме + 2 последних)")
                 println("   - Было токенов: $requestTokens")
                 println("   - Стало токенов: $compressedTokens")
                 println("   - Экономия: ${requestTokens - compressedTokens} токенов")
-                
+
                 val systemMessage = "🔄 История диалога была сжата для экономии токенов (было: $requestTokens токенов)"
-                
+
                 logger.info("History summarized successfully")
                 println("=================================\n")
                 Pair(compressedHistory, systemMessage)
             } else {
                 println("   ❌ SummarizerAgent вернул ошибку: ${summaryResponse.error}")
                 println("   Fallback: обрезаем историю")
-                
+
                 // Если сжатие не удалось, обрезаем историю
                 logger.warn("Summarization failed, falling back to truncation")
                 val truncatedHistory = truncateHistory(
@@ -441,7 +431,7 @@ class ChatAgent(
         } catch (e: Exception) {
             println("   ❌ ИСКЛЮЧЕНИЕ при сжатии: ${e.javaClass.simpleName}: ${e.message}")
             e.printStackTrace()
-            
+
             logger.error("Error during summarization", e)
             val truncatedHistory = truncateHistory(
                 systemPrompt, userMessage, conversationHistory, settings.maxContextTokens
@@ -452,7 +442,7 @@ class ChatAgent(
             Pair(truncatedHistory, systemMessage)
         }
     }
-    
+
     /**
      * Обрезает историю диалога, удаляя старые сообщения
      */
@@ -463,12 +453,12 @@ class ChatAgent(
         maxTokens: Int
     ): List<ConversationMessage> {
         if (conversationHistory.isEmpty()) return emptyList()
-        
+
         // Начинаем с последних сообщений и добавляем пока не превысим лимит
         val result = mutableListOf<ConversationMessage>()
-        var currentTokens = tokenCounter.countTokens(systemPrompt) + 
-                           tokenCounter.countTokens(userMessage) + 10 // overhead
-        
+        var currentTokens = tokenCounter.countTokens(systemPrompt) +
+                tokenCounter.countTokens(userMessage) + 10 // overhead
+
         for (message in conversationHistory.asReversed()) {
             val messageTokens = tokenCounter.countTokens(message.content) + 4 // overhead
             if (currentTokens + messageTokens > maxTokens) {
@@ -477,7 +467,7 @@ class ChatAgent(
             result.add(0, message)
             currentTokens += messageTokens
         }
-        
+
         return result
     }
 
@@ -508,7 +498,7 @@ class ChatAgent(
 - В message можно использовать markdown, но спецсимволы HTML должны быть экранированы
 - Будь дружелюбным и профессиональным
      """.trimIndent()
-        
+
         /**
          * Упрощенный системный промпт без анализа неопределенности
          */

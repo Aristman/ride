@@ -1,7 +1,7 @@
-package ru.marslab.ide.ride.agent.validation
+﻿package ru.marslab.ide.ride.agent.validation
 
-import ru.marslab.ide.ride.model.ParsedResponse
-import ru.marslab.ide.ride.model.ResponseSchema
+import ru.marslab.ide.ride.model.schema.ParsedResponse
+import ru.marslab.ide.ride.model.schema.ResponseSchema
 
 /**
  * Интерфейс валидатора распарсенных ответов относительно схемы

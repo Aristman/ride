@@ -1,4 +1,4 @@
-package ru.marslab.ide.ride.service
+﻿package ru.marslab.ide.ride.service
 
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.components.Service
@@ -13,8 +13,16 @@ import ru.marslab.ide.ride.agent.OrchestratorStep
 import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceProvider
 import ru.marslab.ide.ride.integration.llm.impl.YandexGPTProvider
 import ru.marslab.ide.ride.agent.impl.ChatAgent
-import ru.marslab.ide.ride.model.*
-import ru.marslab.ide.ride.model.ChatSession
+import ru.marslab.ide.ride.agent.impl.ChatAgentWithTools
+import ru.marslab.ide.ride.integration.llm.impl.YandexGPTConfig
+import ru.marslab.ide.ride.mcp.MCPServerManager
+import ru.marslab.ide.ride.model.agent.*
+import ru.marslab.ide.ride.model.chat.*
+import ru.marslab.ide.ride.model.llm.*
+import ru.marslab.ide.ride.model.task.*
+import ru.marslab.ide.ride.model.schema.*
+import ru.marslab.ide.ride.model.mcp.*
+import ru.marslab.ide.ride.model.chat.ChatSession
 import ru.marslab.ide.ride.settings.PluginSettings
 import ru.marslab.ide.ride.util.TokenEstimator
 import java.time.Instant
@@ -174,6 +182,175 @@ class ChatService {
 
             } catch (e: Exception) {
                 logger.error("Error processing message", e)
+            }
+        }
+    }
+
+    /**
+     * Отправляет сообщение с поддержкой MCP Tools
+     * 
+     * @param userMessage Текст сообщения пользователя
+     * @param project Текущий проект
+     * @param onResponse Callback для получения ответа
+     * @param onError Callback для обработки ошибок
+     * @param onToolExecution Callback для индикации выполнения tool
+     */
+    fun sendMessageWithTools(
+        userMessage: String,
+        project: Project,
+        onResponse: (Message) -> Unit,
+        onError: (String) -> Unit,
+        onToolExecution: ((String) -> Unit)? = null
+    ) {
+        if (userMessage.isBlank()) {
+            onError("Сообщение не может быть пустым")
+            return
+        }
+
+        logger.info("Sending user message with tools support, length: ${userMessage.length}")
+
+        // Проверяем, запущен ли MCP Server
+        val serverManager = MCPServerManager.getInstance()
+        println("🔧 ChatService: MCP Server running: ${serverManager.isServerRunning()}")
+
+        if (!serverManager.isServerRunning()) {
+            println("🔧 ChatService: Starting MCP Server...")
+            val started = serverManager.ensureServerRunning()
+            println("🔧 ChatService: MCP Server start result: $started")
+
+            if (!started) {
+                logger.error("Failed to start MCP Server")
+                onError("Не удалось запустить MCP Server. Файловые операции недоступны.")
+                return
+            }
+        }
+
+        // Создаем сообщение пользователя
+        val userMsg = Message(
+            content = userMessage,
+            role = MessageRole.USER
+        )
+        val history = getCurrentHistory()
+        val wasEmpty = history.getMessageCount() == 0
+
+        if (wasEmpty) {
+            // Добавляем сообщение пользователя для авто-именования сессии
+            history.addMessage(userMsg)
+            val title = deriveTitleFrom(userMessage)
+            updateSessionTitle(currentSessionId, title)
+        }
+
+        // Обрабатываем запрос асинхронно
+        scope.launch {
+            try {
+                // Получаем настройки
+                val settings = service<PluginSettings>()
+                
+                // Создаем конфигурацию для Yandex GPT
+                val config = YandexGPTConfig(
+                    apiKey = settings.getApiKey(),
+                    folderId = settings.folderId,
+                    modelId = "yandexgpt-lite"
+                )
+                
+                // Создаем агента с поддержкой tools
+                val agentWithTools = ChatAgentWithTools(config)
+                
+                // Формируем историю для агента (включаем системные сообщения для контекста)
+                val allMessages = if (wasEmpty) {
+                    // Если история была пустой, пользовательское сообщение уже добавлено
+                    history.getMessages()
+                } else {
+                    // Если история не была пустой, добавляем текущее сообщение
+                    history.getMessages() + userMsg
+                }
+
+                val conversationHistory = allMessages
+                    .map { msg ->
+                        ConversationMessage(
+                            role = when (msg.role) {
+                                MessageRole.USER -> ConversationRole.USER
+                                MessageRole.ASSISTANT -> ConversationRole.ASSISTANT
+                                MessageRole.SYSTEM -> ConversationRole.SYSTEM
+                            },
+                            content = msg.content
+                        )
+                    }
+                
+                // Получаем параметры
+                val llmParameters = LLMParameters(
+                    temperature = settings.temperature,
+                    maxTokens = settings.maxTokens
+                )
+
+                // Измеряем время выполнения
+                val startTime = System.currentTimeMillis()
+                val agentResponse = agentWithTools.processRequest(
+                    userMessage = userMessage,
+                    conversationHistory = conversationHistory,
+                    parameters = llmParameters
+                )
+                val responseTime = System.currentTimeMillis() - startTime
+
+                // Обрабатываем ответ в UI потоке
+                withContext(Dispatchers.EDT) {
+                    if (agentResponse.success) {
+                        // Извлекаем информацию о выполненных tools
+                        val executedTools = agentResponse.metadata["executedTools"] as? String
+                        val iterations = agentResponse.metadata["iterations"] as? String
+                        
+                        // Если были выполнены tools, показываем индикатор
+                        if (!executedTools.isNullOrBlank() && onToolExecution != null) {
+                            onToolExecution("Executed tools: $executedTools")
+                        }
+                        
+                        // Получаем статистику токенов
+                        val inputTokens = agentResponse.metadata["inputTokens"] as? String
+                        val outputTokens = agentResponse.metadata["outputTokens"] as? String
+                        val totalTokens = agentResponse.metadata["totalTokens"] as? String
+                        
+                        val tokenUsage = if (inputTokens != null && outputTokens != null && totalTokens != null) {
+                            TokenUsage(
+                                inputTokens = inputTokens.toIntOrNull() ?: 0,
+                                outputTokens = outputTokens.toIntOrNull() ?: 0,
+                                totalTokens = totalTokens.toIntOrNull() ?: 0
+                            )
+                        } else {
+                            TokenUsage.EMPTY
+                        }
+                        
+                        // Добавляем сообщение пользователя в историю (если еще не добавлено)
+                        if (!wasEmpty) {
+                            getCurrentHistory().addMessage(userMsg)
+                        }
+
+                        // Создаем метаданные
+                        val metadata = mapOf(
+                            "responseTimeMs" to responseTime,
+                            "tokenUsage" to tokenUsage,
+                            "executedTools" to (executedTools ?: "none"),
+                            "toolIterations" to (iterations ?: "0"),
+                            "usedMCPTools" to true
+                        )
+
+                        val assistantMsg = Message(
+                            content = agentResponse.content,
+                            role = MessageRole.ASSISTANT,
+                            metadata = metadata
+                        )
+                        getCurrentHistory().addMessage(assistantMsg)
+                        onResponse(assistantMsg)
+                    } else {
+                        logger.warn("Agent returned error: ${agentResponse.error}")
+                        onError(agentResponse.error ?: "Неизвестная ошибка")
+                    }
+                }
+
+            } catch (e: Exception) {
+                logger.error("Error processing message with tools", e)
+                withContext(Dispatchers.EDT) {
+                    onError("Ошибка: ${e.message}")
+                }
             }
         }
     }

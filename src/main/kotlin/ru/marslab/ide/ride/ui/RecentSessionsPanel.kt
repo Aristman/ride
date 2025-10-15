@@ -1,9 +1,9 @@
-package ru.marslab.ide.ride.ui
+﻿package ru.marslab.ide.ride.ui
 
 import com.intellij.ui.components.JBList
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.SimpleListCellRenderer
-import ru.marslab.ide.ride.model.ChatSession
+import ru.marslab.ide.ride.model.chat.ChatSession
 import ru.marslab.ide.ride.service.ChatService
 import javax.swing.JPanel
 import javax.swing.ListSelectionModel
