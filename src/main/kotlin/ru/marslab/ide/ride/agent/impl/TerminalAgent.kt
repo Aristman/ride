@@ -17,6 +17,7 @@ import ru.marslab.ide.ride.model.terminal.TerminalCommandResult
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
+import java.nio.charset.Charset
 import java.util.concurrent.TimeUnit
 
 /**
@@ -152,6 +153,7 @@ class TerminalAgent : Agent {
                 // Настройка команды для разных ОС
                 val osName = System.getProperty("os.name").lowercase()
                 val actualCommand = if (osName.contains("win")) {
+                    // На Windows запускаем через cmd без смены codepage, чтение делаем в CP866
                     listOf("cmd", "/c", command.command)
                 } else {
                     listOf("/bin/sh", "-c", command.command)
@@ -174,9 +176,10 @@ class TerminalAgent : Agent {
 
                 val process = processBuilder.start()
 
-                // Чтение вывода
-                val stdout = process.inputStream.bufferedReader().use { it.readText() }
-                val stderr = process.errorStream.bufferedReader().use { it.readText() }
+                // Выбираем корректную кодировку вывода для ОС
+                val charset: Charset = if (osName.contains("win")) Charset.forName("CP866") else Charsets.UTF_8
+                val stdout = InputStreamReader(process.inputStream, charset).buffered().use { it.readText() }
+                val stderr = InputStreamReader(process.errorStream, charset).buffered().use { it.readText() }
 
                 // Ожидание завершения с таймаутом
                 val finished = process.waitFor(command.timeout, TimeUnit.MILLISECONDS)
@@ -241,6 +244,7 @@ class TerminalAgent : Agent {
                 // Настройка команды для разных ОС
                 val osName = System.getProperty("os.name").lowercase()
                 val actualCommand = if (osName.contains("win")) {
+                    // На Windows запускаем через cmd без смены codepage, чтение делаем в CP866
                     listOf("cmd", "/c", command.command)
                 } else {
                     listOf("/bin/sh", "-c", command.command)
@@ -260,7 +264,8 @@ class TerminalAgent : Agent {
 
                 // Асинхронное чтение вывода
                 val stdoutJob = async(Dispatchers.IO) {
-                    BufferedReader(InputStreamReader(process.inputStream)).use { reader ->
+                    val charset: Charset = if (osName.contains("win")) Charset.forName("CP866") else Charsets.UTF_8
+                    BufferedReader(InputStreamReader(process.inputStream, charset)).use { reader ->
                         var line: String?
                         while (reader.readLine().also { line = it } != null) {
                             val text = line!! + "\n"
@@ -271,7 +276,8 @@ class TerminalAgent : Agent {
                 }
 
                 val stderrJob = async(Dispatchers.IO) {
-                    BufferedReader(InputStreamReader(process.errorStream)).use { reader ->
+                    val charset: Charset = if (osName.contains("win")) Charset.forName("CP866") else Charsets.UTF_8
+                    BufferedReader(InputStreamReader(process.errorStream, charset)).use { reader ->
                         var line: String?
                         while (reader.readLine().also { line = it } != null) {
                             val text = line!! + "\n"
@@ -285,7 +291,6 @@ class TerminalAgent : Agent {
                 val finished = process.waitFor(command.timeout, TimeUnit.MILLISECONDS)
                 val executionTime = System.currentTimeMillis() - startTime
 
-                // Ожидание завершения чтения потоков
                 stdoutJob.await()
                 stderrJob.await()
 
