@@ -152,57 +152,88 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         setUIEnabled(false)
         messageDisplayManager.displaySystemMessage(ChatPanelConfig.Messages.PROCESSING_REQUEST)
 
-        if (text.startsWith("/plan ")) {
-            val actualMessage = text.removePrefix("/plan ").trim()
-            sendMessageWithOrchestratorMode(
-                project = project,
-                text = actualMessage,
-                onStepComplete = { message ->
-                    messageDisplayManager.removeLastSystemMessage()
-                    messageDisplayManager.displayMessage(message)
-                    updateContextSize()
-                },
-                onError = { error ->
-                    messageDisplayManager.removeLastSystemMessage()
-                    messageDisplayManager.displaySystemMessage("Ошибка: $error")
-                    setUIEnabled(true)
-                },
-                onComplete = {
-                    updateContextSize()
-                    setUIEnabled(true)
-                }
-            )
-        } else {
-            chatService.sendMessage(
-                userMessage = text,
-                project = project,
-                onResponse = { message ->
-                    // Системные сообщения (о сжатии) приходят первыми
-                    if (message.role == MessageRole.SYSTEM) {
-                        messageDisplayManager.displayMessage(message)
-                        // Обновляем счётчик с небольшой задержкой, чтобы история успела обновиться
-                        SwingUtilities.invokeLater {
-                            updateContextSize()
-                        }
-                    } else {
-                        // Ответ ассистента
+        when {
+            text.startsWith("/terminal ") || text.startsWith("/exec ") -> {
+                // Команда терминала
+                val command = text.removePrefix("/terminal ").removePrefix("/exec ").trim()
+                executeTerminalCommand(command)
+            }
+            text.startsWith("/plan ") -> {
+                // Режим планирования с оркестратором
+                val actualMessage = text.removePrefix("/plan ").trim()
+                sendMessageWithOrchestratorMode(
+                    project = project,
+                    text = actualMessage,
+                    onStepComplete = { message ->
                         messageDisplayManager.removeLastSystemMessage()
                         messageDisplayManager.displayMessage(message)
                         updateContextSize()
+                    },
+                    onError = { error ->
+                        messageDisplayManager.removeLastSystemMessage()
+                        messageDisplayManager.displaySystemMessage("Ошибка: $error")
+                        setUIEnabled(true)
+                    },
+                    onComplete = {
+                        updateContextSize()
                         setUIEnabled(true)
                     }
-                },
-                onError = { error ->
-                    messageDisplayManager.removeLastSystemMessage()
-                    messageDisplayManager.displaySystemMessage("${ChatPanelConfig.Icons.ERROR} Ошибка: $error")
-                    setUIEnabled(true)
-                },
+                )
+            }
+            else -> {
+                // Обычное сообщение в чат
+                chatService.sendMessage(
+                    userMessage = text,
+                    project = project,
+                    onResponse = { message ->
+                        // Системные сообщения (о сжатии) приходят первыми
+                        if (message.role == MessageRole.SYSTEM) {
+                            messageDisplayManager.displayMessage(message)
+                            // Обновляем счётчик с небольшой задержкой, чтобы история успела обновиться
+                            SwingUtilities.invokeLater {
+                                updateContextSize()
+                            }
+                        } else {
+                            // Ответ ассистента
+                            messageDisplayManager.removeLastSystemMessage()
+                            messageDisplayManager.displayMessage(message)
+                            updateContextSize()
+                            setUIEnabled(true)
+                        }
+                    },
+                    onError = { error ->
+                        messageDisplayManager.removeLastSystemMessage()
+                        messageDisplayManager.displaySystemMessage("${ChatPanelConfig.Icons.ERROR} Ошибка: $error")
+                        setUIEnabled(true)
+                    },
 //                onToolExecution = { toolInfo ->
 //                     Показываем индикатор выполнения tool
 //                    messageDisplayManager.displaySystemMessage("🔧 $toolInfo")
 //                }
-            )
+                )
+            }
         }
+    }
+
+    /**
+     * Выполняет команду в терминале через TerminalAgent
+     */
+    private fun executeTerminalCommand(command: String) {
+        chatService.executeTerminalCommand(
+            command = command,
+            project = project,
+            onResponse = { message ->
+                messageDisplayManager.removeLastSystemMessage()
+                messageDisplayManager.displayMessage(message)
+                updateContextSize()
+                setUIEnabled(true)
+            },
+            onError = { error ->
+                messageDisplayManager.removeLastSystemMessage()
+                messageDisplayManager.displaySystemMessage("${ChatPanelConfig.Icons.ERROR} Ошибка: $error")
+                setUIEnabled(true)
+            }
+        )
     }
 
     /**

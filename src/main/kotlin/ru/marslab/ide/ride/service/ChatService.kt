@@ -1,4 +1,4 @@
-﻿package ru.marslab.ide.ride.service
+package ru.marslab.ide.ride.service
 
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.components.Service
@@ -500,6 +500,87 @@ class ChatService {
                 logger.error("Error processing message with orchestrator", e)
                 withContext(Dispatchers.EDT) {
                     onError(e.message ?: "Неизвестная ошибка")
+                }
+            }
+        }
+    }
+
+    /**
+     * Выполняет терминальную команду через TerminalAgent
+     * 
+     * @param command Команда для выполнения
+     * @param project Текущий проект
+     * @param onResponse Callback для получения ответа
+     * @param onError Callback для обработки ошибок
+     */
+    fun executeTerminalCommand(
+        command: String,
+        project: Project,
+        onResponse: (Message) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        if (command.isBlank()) {
+            onError("Команда не может быть пустой")
+            return
+        }
+
+        logger.info("Executing terminal command: $command")
+
+        scope.launch {
+            try {
+                // Создаем терминальный агент
+                val terminalAgent = AgentFactory.createTerminalAgent()
+                
+                // Формируем контекст
+                val context = ChatContext(
+                    project = project,
+                    history = getCurrentHistory().getMessages()
+                )
+                
+                // Создаем запрос
+                val request = AgentRequest(
+                    request = command,
+                    context = context,
+                    parameters = LLMParameters.DEFAULT
+                )
+                
+                // Выполняем команду
+                val startTime = System.currentTimeMillis()
+                val response = terminalAgent.ask(request)
+                val responseTime = System.currentTimeMillis() - startTime
+                
+                withContext(Dispatchers.EDT) {
+                    // Всегда показываем результат выполнения команды (даже при ошибке)
+                    val metadata = response.metadata + mapOf(
+                        "agentType" to "terminal",
+                        "responseTimeMs" to responseTime,
+                        "isFinal" to true,
+                        "uncertainty" to 0.0,
+                        "commandSuccess" to response.success
+                    )
+                    
+                    val message = Message(
+                        content = response.content,
+                        role = MessageRole.ASSISTANT,
+                        metadata = metadata
+                    )
+                    
+                    getCurrentHistory().addMessage(message)
+                    onResponse(message)
+                    
+                    // Логируем ошибку, но не прерываем показ результата
+                    if (!response.success) {
+                        logger.warn("Terminal command failed: ${response.error}")
+                    }
+                }
+                
+                // Освобождаем ресурсы
+                terminalAgent.dispose()
+                
+            } catch (e: Exception) {
+                logger.error("Error executing terminal command", e)
+                withContext(Dispatchers.EDT) {
+                    onError("Ошибка: ${e.message}")
                 }
             }
         }

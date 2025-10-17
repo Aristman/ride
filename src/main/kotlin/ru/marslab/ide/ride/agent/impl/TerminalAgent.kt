@@ -36,7 +36,6 @@ class TerminalAgent : Agent {
         responseRules = listOf(
             "Выполнять только безопасные команды",
             "Возвращать полный вывод команды включая stdout и stderr",
-            "Форматировать результат в удобочитаемом виде"
         )
     )
 
@@ -45,7 +44,9 @@ class TerminalAgent : Agent {
     override suspend fun ask(req: AgentRequest): AgentResponse {
         return withContext(Dispatchers.IO) {
             try {
-                val command = parseCommandFromRequest(req.request)
+                // Получаем рабочую директорию из проекта, если доступна
+                val projectBasePath = req.context.project?.basePath
+                val command = parseCommandFromRequest(req.request, projectBasePath)
                 val result = executeCommand(command)
 
                 val responseContent = formatCommandResult(result)
@@ -107,7 +108,7 @@ class TerminalAgent : Agent {
     /**
      * Парсит команду из текстового запроса
      */
-    private fun parseCommandFromRequest(request: String): TerminalCommand {
+    private fun parseCommandFromRequest(request: String, projectBasePath: String? = null): TerminalCommand {
         // Простая логика парсинга - можно расширить
         val trimmed = request.trim()
 
@@ -121,10 +122,13 @@ class TerminalAgent : Agent {
                     dir
                 } else null
             } else null
-        } else null
+        } else {
+            // Используем базовую директорию проекта, если доступна
+            projectBasePath
+        }
 
         // Извлекаем команду (после cd если было)
-        val command = if (workingDir != null && trimmed.startsWith("cd ")) {
+        val command = if (trimmed.startsWith("cd ") && trimmed.contains("&&")) {
             val parts = trimmed.split(" ", limit = 3)
             if (parts.size > 2) parts[2].trim() else ""
         } else trimmed
