@@ -63,8 +63,9 @@ class TerminalAgent : Agent {
                     success = result.success
                 )
 
-                // Сохраняем обратную совместимость через контент
-                val responseContent = formatCommandResult(result)
+                // Создаем базовый текстовый контент для fallback
+                val content = "Command: ${command.command}\nExit Code: ${result.exitCode}\nExecution Time: ${result.executionTime}ms\n\n${result.stdout}${if (result.stderr.isNotEmpty()) "\n\nErrors:\n${result.stderr}" else ""}"
+
                 val metadata = mapOf(
                     "command" to command.command,
                     "exitCode" to result.exitCode,
@@ -73,9 +74,15 @@ class TerminalAgent : Agent {
                 )
 
                 if (result.success) {
-                    AgentResponse.success(responseContent, formattedOutput, metadata)
+                    AgentResponse.success(content, formattedOutput, metadata)
                 } else {
-                    AgentResponse.error("Command failed with exit code ${result.exitCode}", responseContent)
+                    AgentResponse(
+                        content = content,
+                        success = false,
+                        error = "Command failed with exit code ${result.exitCode}",
+                        formattedOutput = formattedOutput,
+                        metadata = metadata
+                    )
                 }
             } catch (e: Exception) {
                 AgentResponse.error("Failed to execute command: ${e.message}")
@@ -98,11 +105,36 @@ class TerminalAgent : Agent {
 
                 emit(AgentEvent.ContentChunk("Command execution completed"))
 
-                val responseContent = formatCommandResult(result)
+                // Используем форматтер для создания форматированного вывода
+                val formattedOutput = terminalOutputFormatter.formatAsHtml(
+                    command = command.command,
+                    exitCode = result.exitCode,
+                    executionTime = result.executionTime,
+                    stdout = result.stdout,
+                    stderr = result.stderr,
+                    success = result.success
+                )
+
+                // Создаем базовый текстовый контент для fallback
+                val content = "Command: ${command.command}\nExit Code: ${result.exitCode}\nExecution Time: ${result.executionTime}ms\n\n${result.stdout}${if (result.stderr.isNotEmpty()) "\n\nErrors:\n${result.stderr}" else ""}"
+
+                val metadata = mapOf(
+                    "command" to command.command,
+                    "exitCode" to result.exitCode,
+                    "executionTime" to result.executionTime,
+                    "workingDir" to (command.workingDir ?: System.getProperty("user.dir"))
+                )
+
                 val response = if (result.success) {
-                    AgentResponse.success(responseContent)
+                    AgentResponse.success(content, formattedOutput, metadata)
                 } else {
-                    AgentResponse.error("Command failed with exit code ${result.exitCode}", responseContent)
+                    AgentResponse(
+                        content = content,
+                        success = false,
+                        error = "Command failed with exit code ${result.exitCode}",
+                        formattedOutput = formattedOutput,
+                        metadata = metadata
+                    )
                 }
 
                 emit(AgentEvent.Completed(response))
@@ -350,38 +382,5 @@ class TerminalAgent : Agent {
                 )
             }
         }
-    }
-
-    /**
-     * Форматирует результат выполнения команды для вывода
-     */
-    private fun formatCommandResult(result: TerminalCommandResult): String {
-        val builder = StringBuilder()
-
-        builder.appendLine("🖥️ **Command Execution Result**")
-        builder.appendLine()
-        builder.appendLine("**Command:** `${result.command}`")
-        builder.appendLine("**Exit Code:** ${result.exitCode}")
-        builder.appendLine("**Execution Time:** ${result.executionTime}ms")
-        builder.appendLine("**Status:** ${if (result.success) "✅ Success" else "❌ Failed"}")
-        builder.appendLine()
-
-        if (result.stdout.isNotEmpty()) {
-            builder.appendLine("**Output:**")
-            builder.appendLine("```")
-            builder.appendLine(result.stdout.trimEnd())
-            builder.appendLine("```")
-            builder.appendLine()
-        }
-
-        if (result.stderr.isNotEmpty()) {
-            builder.appendLine("**Errors:**")
-            builder.appendLine("```")
-            builder.appendLine(result.stderr.trimEnd())
-            builder.appendLine("```")
-            builder.appendLine()
-        }
-
-        return builder.toString()
     }
 }
