@@ -21,13 +21,15 @@ class CodeBlockTemplate : BaseHtmlTemplate() {
         language: String = "",
         fileName: String? = null
     ): String {
-        val variables = mutableMapOf(
-            "content" to content,
-            "language" to if (language.isNotEmpty()) language else "text"
-        )
+        // Значение языка по умолчанию как в прежней логике
+        val actualLanguage = if (language.isBlank()) "text" else language
 
-        if (fileName != null) {
-            variables["fileName"] = fileName
+        val variables = buildMap<String, Any> {
+            put("language", actualLanguage)
+            // Контент кода должен быть экранирован; processTemplate экранирует по умолчанию
+            put("content", content)
+            // Для условной секции {{#fileName}} ... {{/fileName}} пустое значение скрывает блок
+            fileName?.takeIf { it.isNotBlank() }?.let { put("fileName", it) }
         }
 
         return processTemplate(getTemplate(), variables)

@@ -84,6 +84,17 @@
     overflow-y: auto;
 }
 
+/* Accent style for terminal command value */
+.accent-command {
+    font-weight: 700;
+    font-style: italic;
+    background: #000;
+    color: #fff;
+    padding: 2px 6px;
+    border-radius: 4px;
+    display: inline-block;
+}
+
 .terminal-content {
     margin: 0;
     white-space: pre-wrap;

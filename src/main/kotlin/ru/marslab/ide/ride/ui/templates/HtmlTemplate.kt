@@ -29,16 +29,17 @@ abstract class BaseHtmlTemplate : HtmlTemplate {
      */
     protected fun processTemplate(template: String, variables: Map<String, Any>): String {
         var result = template
+        var hasChanges: Boolean
+        var previousResult: String
 
         // Многократная обработка для поддержки вложенных условных блоков
-        var hasChanges: Boolean
         do {
             hasChanges = false
-            val previousResult = result
+            previousResult = result
 
             // Обработка условных блоков
             // {{#condition}}...{{/condition}} - показывается если condition не null/empty/false
-            val conditionalRegex = Regex("""\{\{#(\w+)\}\}(.*?)\{\{/\1\}\}""")
+            val conditionalRegex = Regex("""\{\{#(\w+)\}\}(.*?)\{\{/\1\}\}""", setOf(RegexOption.DOT_MATCHES_ALL))
             result = conditionalRegex.replace(result) { match ->
                 val condition = match.groupValues[1]
                 val content = match.groupValues[2]
@@ -56,9 +57,8 @@ abstract class BaseHtmlTemplate : HtmlTemplate {
 
             // Обработка отрицательных условных блоков
             // {{^condition}}...{{/condition}} - показывается если condition null/empty/false
-            val negativeConditionalRegex = Regex("""\{\{(\^)(\w+)\}\}(.*?)\{\{/\2\}\}""")
+            val negativeConditionalRegex = Regex("""\{\{(\^)\n?(\w+)\}\}(.*?)\{\{/(\2)\}\}""", setOf(RegexOption.DOT_MATCHES_ALL))
             result = negativeConditionalRegex.replace(result) { match ->
-                val negation = match.groupValues[1]
                 val condition = match.groupValues[2]
                 val content = match.groupValues[3]
                 val value = variables[condition]
@@ -78,9 +78,14 @@ abstract class BaseHtmlTemplate : HtmlTemplate {
 
         } while (hasChanges && result != previousResult)
 
-        // Подстановка переменных
+        // Подстановка переменных (без экранирования HTML для специальных переменных)
         variables.forEach { (key, value) ->
-            result = result.replace("{{$key}}", escapeHtml(value.toString()))
+            val stringValue = value.toString()
+            val escapedValue = when (key) {
+                "executionTimeInfo", "outputContent" -> stringValue // Эти переменные уже содержат HTML
+                else -> escapeHtml(stringValue)
+            }
+            result = result.replace("{{$key}}", escapedValue)
         }
 
         return result
