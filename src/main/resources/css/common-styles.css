@@ -1,0 +1,343 @@
+/* Общие стили для обоих режимов (JCEF и fallback) */
+
+/* === CSS переменные для тем === */
+:root {
+    /* Темная тема (по умолчанию) */
+    --bg: #0f1115;
+    --textPrimary: #e6e6e6;
+    --textSecondary: #9aa0a6;
+    --userBg: #e3ecff;
+    --userBorder: #6d8fd8;
+    --codeBg: #2b2b2b;
+    --codeText: #e6e6e6;
+    --codeBorder: #444444;
+    --prefix: #6b6b6b;
+
+    /* Терминальные стили */
+    --terminal-bg: #1e1e1e;
+    --terminal-header-bg: #2d2d2d;
+    --terminal-text: #ffffff;
+    --terminal-info-bg: #252525;
+    --terminal-info-text: #cccccc;
+    --terminal-label: #888888;
+    --terminal-value: #ffffff;
+    --terminal-output: #ffffff;
+    --border-color: #3c3c3c;
+    --success-color: #4ade80;
+    --error-color: #f87171;
+
+    /* Блоки кода */
+    --code-header-bg: #2d2d2d;
+    --language-badge-bg: #4a5568;
+    --language-badge-text: #ffffff;
+    --code-filename: #a0aec0;
+    --button-text: #a0aec0;
+    --button-hover-bg: #4a5568;
+    --button-hover-text: #ffffff;
+    --button-hover-border: #718096;
+    --code-description-bg: #252525;
+    --code-description-text: #a0aec0;
+
+    /* Инструменты */
+    --tool-bg: #1e1e1e;
+    --tool-header-bg: #2d2d30;
+    --tool-name: #ffffff;
+    --operation-badge-bg: #4a5568;
+    --operation-badge-text: #ffffff;
+    --file-info-bg: #252525;
+    --file-info-text: #a0aec0;
+    --file-path-label: #718096;
+    --file-path: #63b3ed;
+    --file-size: #a0aec0;
+    --result-label: #a0aec0;
+    --result-value: #ffffff;
+    --preview-header-bg: #252525;
+    --preview-label: #a0aec0;
+    --error-bg: rgba(248, 113, 113, 0.1);
+    --error-border: #f87171;
+    --error-text: #fca5a5;
+    --metadata-header-bg: #252525;
+    --metadata-hover-bg: #2d2d2d;
+    --metadata-label: #a0aec0;
+    --metadata-arrow: #718096;
+    --metadata-json-bg: #1a1a1a;
+    --metadata-json-text: #a0aec0;
+
+    /* Структурированные блоки */
+    --markdown-text: #ffffff;
+    --structured-bg: #1e1e1e;
+    --structured-header-bg: #2d2d2d;
+    --format-badge-bg: #4a5568;
+    --format-badge-text: #ffffff;
+    --toggle-color: #a0aec0;
+    --structured-text: #a0aec0;
+    --separator-color: #3c3c3c;
+
+    /* Шрифты */
+    --monospace-font: 'Consolas', 'Monaco', 'Courier New', monospace;
+}
+
+/* Светлая тема */
+[data-theme="light"] {
+    --bg: #ffffff;
+    --textPrimary: #333333;
+    --textSecondary: #666666;
+    --userBg: #e3ecff;
+    --userBorder: #6d8fd8;
+    --codeBg: #f8f9fa;
+    --codeText: #333333;
+    --codeBorder: #e9ecef;
+    --prefix: #6c757d;
+
+    /* Терминальные стили */
+    --terminal-bg: #ffffff;
+    --terminal-header-bg: #f5f5f5;
+    --terminal-text: #333333;
+    --terminal-info-bg: #fafafa;
+    --terminal-info-text: #666666;
+    --terminal-label: #999999;
+    --terminal-value: #333333;
+    --terminal-output: #333333;
+    --border-color: #e0e0e0;
+    --success-color: #22c55e;
+    --error-color: #ef4444;
+
+    /* Блоки кода */
+    --code-header-bg: #f8f9fa;
+    --language-badge-bg: #6c757d;
+    --code-filename: #6c757d;
+    --button-text: #6c757d;
+    --button-hover-bg: #e9ecef;
+    --button-hover-text: #333333;
+    --button-hover-border: #6c757d;
+    --code-description-bg: #f8f9fa;
+    --code-description-text: #6c757d;
+
+    /* Инструменты */
+    --tool-bg: #ffffff;
+    --tool-header-bg: #f8f9fa;
+    --tool-name: #333333;
+    --operation-badge-bg: #6c757d;
+    --file-info-bg: #f8f9fa;
+    --file-info-text: #6c757d;
+    --file-path-label: #868e96;
+    --file-path: #0066cc;
+    --file-size: #6c757d;
+    --result-label: #6c757d;
+    --result-value: #333333;
+    --preview-header-bg: #f8f9fa;
+    --preview-label: #6c757d;
+    --error-bg: rgba(239, 68, 68, 0.1);
+    --error-border: #ef4444;
+    --error-color: #ef4444;
+    --error-text: #dc2626;
+    --metadata-header-bg: #f8f9fa;
+    --metadata-hover-bg: #e9ecef;
+    --metadata-label: #6c757d;
+    --metadata-arrow: #868e96;
+    --metadata-json-bg: #f8f9fa;
+    --metadata-json-text: #495057;
+
+    /* Структурированные блоки */
+    --markdown-text: #333333;
+    --structured-bg: #ffffff;
+    --structured-header-bg: #f8f9fa;
+    --format-badge-bg: #6c757d;
+    --toggle-color: #6c757d;
+    --structured-text: #495057;
+    --separator-color: #e0e0e0;
+}
+
+/* === Базовые стили === */
+html, body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--textPrimary);
+    font: 13px -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+}
+
+#messages {
+    padding: 8px;
+}
+
+/* === Сообщения === */
+.msg {
+    margin: 8px 8px 12px 8px;
+}
+
+.prefix {
+    color: var(--prefix);
+    margin-bottom: 4px;
+}
+
+.content {
+}
+
+.msg.user {
+    text-align: right;
+}
+
+.msg.user .prefix {
+    text-align: right;
+}
+
+/* Пузырь справа, содержимое внутри по левому краю */
+.msg.user .content {
+    display: inline-block;
+    background: var(--userBg);
+    border: 1px solid var(--userBorder);
+    padding: 10px 14px;
+    color: inherit;
+    text-align: left;
+    border-radius: 12px;
+}
+
+/* Корректные отступы для списков внутри пользовательского сообщения */
+.msg.user .content ul,
+.msg.user .content ol {
+    margin: 8px 0;
+    padding-left: 20px;
+    padding-right: 0;
+    list-style-position: outside;
+}
+
+.msg.user .content li {
+    margin: 4px 0;
+}
+
+/* === Системные сообщения === */
+.msg.system {
+    text-align: center;
+    margin: 4px 8px;
+}
+
+.msg.system .system-content {
+    display: inline-block;
+    color: var(--textSecondary);
+    font-size: 12px;
+    opacity: 0.8;
+    padding: 4px 12px;
+    border-radius: 4px;
+    background-color: rgba(255, 255, 255, 0.03);
+}
+
+/* === Статусные строки === */
+.status {
+    font-size: 11px;
+    margin-top: 6px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    opacity: 0.8;
+}
+
+.status-final {
+    background-color: rgba(76, 175, 80, 0.2);
+    border: 1px solid rgba(76, 175, 80, 0.3);
+    color: #a5d6a7;
+}
+
+.status-low-confidence {
+    background-color: rgba(255, 152, 0, 0.2);
+    border: 1px solid rgba(255, 152, 0, 0.3);
+    color: #ffcc80;
+}
+
+.status-uncertain {
+    background-color: rgba(33, 150, 243, 0.2);
+    border: 1px solid rgba(33, 150, 243, 0.3);
+    color: #90caf9;
+}
+
+.status .metrics {
+    float: right;
+    font-size: 10px;
+    opacity: 0.7;
+    margin-left: 10px;
+}
+
+/* === Анимации === */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeOut {
+    from {
+        opacity: 1;
+        transform: translateY(0);
+    }
+    to {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+}
+
+.fade-in {
+    animation: fadeIn 0.3s ease-out;
+}
+
+.fade-out {
+    animation: fadeOut 0.3s ease-out;
+    opacity: 0;
+}
+
+.msg.assistant {
+    animation: fadeIn 0.4s ease-out;
+}
+
+/* === Акцентные элементы === */
+.accent-command {
+    font-weight: 700;
+    font-style: italic;
+    background: #000;
+    color: #fff;
+    padding: 2px 6px;
+    border-radius: 4px;
+    display: inline-block;
+}
+
+/* === Markdown стили === */
+h1, h2, h3 {
+    color: var(--textPrimary);
+    margin-top: 16px;
+    margin-bottom: 8px;
+}
+
+h1 { font-size: 1.5em; }
+h2 { font-size: 1.3em; }
+h3 { font-size: 1.1em; }
+
+strong { font-weight: bold; }
+em { font-style: italic; }
+
+code {
+    background-color: rgba(255, 255, 255, 0.1);
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-family: var(--monospace-font);
+}
+
+hr {
+    border: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+    margin: 16px 0;
+}
+
+ul, ol {
+    margin: 4px 0;
+    padding-left: 20px;
+}
+
+li {
+    margin: 2px 0;
+}
+
+p {
+    margin: 4px 0;
+}

@@ -5,6 +5,7 @@ import ru.marslab.ide.ride.settings.PluginSettings
 import ru.marslab.ide.ride.theme.ThemeTokens
 import ru.marslab.ide.ride.ui.chat.JcefChatView
 import ru.marslab.ide.ride.ui.config.ChatPanelConfig
+import ru.marslab.ide.ride.ui.style.CommonStyles
 import java.awt.Dimension
 import javax.swing.JEditorPane
 
@@ -180,322 +181,84 @@ class HtmlDocumentManager(
      */
     private fun initializeFallbackHtml() {
         val fontSize = settings.chatFontSize
-        val codeFontSize = (fontSize - 1).coerceAtLeast(10)
         val theme = ThemeTokens.fromSettings(settings)
+
+        // Получаем общие стили с заменой переменных темы
+        val themeReplacements = mapOf(
+            "bg" to theme.bg,
+            "textPrimary" to theme.textPrimary,
+            "textSecondary" to theme.textSecondary,
+            "userBg" to theme.userBg,
+            "userBorder" to theme.userBorder,
+            "codeBg" to theme.codeBg,
+            "codeText" to theme.codeText,
+            "codeBorder" to theme.codeBorder,
+            "prefix" to theme.prefix
+        )
+
+        val commonStyles = CommonStyles.getFallbackStyles(themeReplacements)
 
         htmlBuffer.append(
             """
                 <html>
                 <head>
-                  <style>
-                    body { font-family: Arial, sans-serif; font-size: ${fontSize}px; }
-                    .msg { margin-top: 8px; margin-left: 8px; margin-right: 8px; margin-bottom: 12px; }
-                    .prefix { color: ${theme.prefix}; margin-bottom: 4px; }
-                    .content { }
-                    .msg.user .prefix { color: ${theme.prefix}; margin-bottom: 6px; }
-                    .msg.user .content { display: inline-block; background-color: ${theme.userBg}; border: 1px solid ${theme.userBorder}; padding: 10px 14px; color: inherit; text-align: left; border-radius: 12px; }
-                    .msg.user .content table.code-block { margin-top: 12px; }
-                    pre { background-color: ${theme.codeBg}; color: ${theme.codeText}; padding: 8px; border: 1px solid ${theme.codeBorder}; margin: 0; white-space: pre-wrap; }
-                    pre code { display: block; font-family: monospace; font-size: ${codeFontSize}px; color: ${theme.codeText}; white-space: pre-wrap; }
-                    code { font-family: monospace; font-size: ${codeFontSize}px; color: ${theme.codeText}; }
-                    table.code-block { width: 100%; border-collapse: collapse; margin-top: 8px; }
-                    table.code-block td { padding: 0; }
-                    td.code-lang { font-size: ${codeFontSize - 1}px; color: ${theme.prefix}; padding: 4px 6px; }
-                    td.code-copy-cell { text-align: right; padding: 4px 6px; }
-                    a.code-copy-link { color: ${theme.prefix}; text-decoration: none; display: inline-block; width: 20px; height: 20px; text-align: center; line-height: 20px; }
-                    a.code-copy-link:hover { background-color: ${theme.userBorder}; }
-                    .code-copy-icon { font-size: ${codeFontSize}px; line-height: 1; font-family: 'Segoe UI Symbol', 'Apple Color Emoji', sans-serif; }
-                    .msg.user { text-align: right; }
-                    .msg.user .prefix { text-align: right; }
-                    /* Пузырь справа, но содержимое внутри по левому краю */
-                    .msg.user .content { text-align: left; }
-                    /* Корректные отступы и переносы для списков внутри пользовательского сообщения */
-                    .msg.user .content ul,
-                    .msg.user .content ol { margin: 8px 0; padding-left: 20px; padding-right: 0; list-style-position: outside; }
-                    .msg.user .content li { margin: 4px 0; }
-                    .msg.after-system { margin-top: 20px; }
-
-                    /* Статусные строки для сообщений ассистента */
-                    .status {
-                        font-size: ${fontSize - 2}px;
-                        margin-top: 6px;
-                        padding: 4px 8px;
-                        border-radius: 4px;
-                        opacity: 0.8;
-                    }
-                    .status-final {
-                        background-color: rgba(76, 175, 80, 0.2);
-                        border: 1px solid rgba(76, 175, 80, 0.3);
-                        color: #a5d6a7;
-                    }
-                    .status-low-confidence {
-                        background-color: rgba(255, 152, 0, 0.15);
-                        border: 1px solid rgba(255, 152, 0, 0.25);
-                        color: #ffb74d;
-                    }
-                    .status-uncertain {
-                        background-color: rgba(33, 150, 243, 0.2);
-                        border: 1px solid rgba(33, 150, 243, 0.3);
-                        color: #90caf9;
-                    }
-                    .status .metrics {
-                        float: right;
-                        font-size: ${fontSize - 4}px;
-                        opacity: 0.7;
-                        margin-left: 10px;
-                    }
-                    
-                    /* Анимации fade-in/fade-out */
-                    @keyframes fadeIn {
-                        from {
-                            opacity: 0;
-                            transform: translateY(10px);
+                    <meta charset='utf-8'>
+                    <style>
+                        /* Дополнительные стили для fallback режима */
+                        body {
+                            font-family: Arial, sans-serif;
+                            font-size: ${fontSize}px;
                         }
-                        to {
-                            opacity: 1;
-                            transform: translateY(0);
+
+                        /* Размеры шрифтов для кода */
+                        pre code {
+                            font-size: ${fontSize - 1}px;
                         }
-                    }
-                    
-                    @keyframes fadeOut {
-                        from {
-                            opacity: 1;
-                            transform: translateY(0);
+                        code {
+                            font-size: ${fontSize - 1}px;
                         }
-                        to {
-                            opacity: 0;
-                            transform: translateY(-10px);
+                        .code-copy-icon {
+                            font-size: ${fontSize - 1}px;
+                            line-height: 1;
+                            font-family: 'Segoe UI Symbol', 'Apple Color Emoji', sans-serif;
                         }
-                    }
-                    
-                    .fade-in {
-                        animation: fadeIn 0.3s ease-out;
-                    }
-                    
-                    .fade-out {
-                        animation: fadeOut 0.3s ease-out;
-                        opacity: 0;
-                    }
-                    
-                    .msg.assistant {
-                        animation: fadeIn 0.4s ease-out;
-                    }
 
-                    /* Стили для форматированного вывода агентов */
-                    .agent-output-container {
-                        margin: 4px 0;
-                    }
+                        /* Таблицы кода */
+                        table.code-block { width: 100%; border-collapse: collapse; margin-top: 8px; }
+                        table.code-block td { padding: 0; }
+                        td.code-lang { font-size: ${fontSize - 2}px; padding: 4px 6px; }
+                        td.code-copy-cell { text-align: right; padding: 4px 6px; }
+                        a.code-copy-link {
+                            text-decoration: none;
+                            display: inline-block;
+                            width: 20px;
+                            height: 20px;
+                            text-align: center;
+                            line-height: 20px;
+                        }
+                        a.code-copy-link:hover {
+                            background-color: ${theme.userBorder};
+                        }
 
-                    .block-separator {
-                        height: 1px;
-                        background-color: ${theme.codeBorder};
-                        margin: 8px 0;
-                    }
+                        /* Размеры статусных строк */
+                        .status {
+                            font-size: ${fontSize - 2}px;
+                        }
+                        .status .metrics {
+                            font-size: ${fontSize - 4}px;
+                        }
 
-                    /* Терминальный вывод */
-                    .terminal-output {
-                        border: 1px solid ${theme.codeBorder};
-                        border-radius: 8px;
-                        background-color: ${theme.codeBg};
-                        font-family: monospace;
-                        margin: 8px 0;
-                        overflow: hidden;
-                    }
+                        /* Отступы после системных сообщений */
+                        .msg.after-system { margin-top: 20px; }
 
-                    .terminal-header {
-                        display: flex;
-                        justify-content: space-between;
-                        align-items: center;
-                        padding: 8px 12px;
-                        background-color: #2d2d2d;
-                        border-bottom: 1px solid ${theme.codeBorder};
-                        color: ${theme.codeText};
-                    }
+                        /* Контейнер для вывода агентов */
+                        .agent-output-container {
+                            margin: 4px 0;
+                        }
 
-                    .terminal-title {
-                        display: flex;
-                        align-items: center;
-                        gap: 8px;
-                    }
-
-                    .terminal-text {
-                        font-weight: 500;
-                        font-size: 13px;
-                    }
-
-                    .status-success {
-                        color: #4ade80;
-                    }
-
-                    .status-error {
-                        color: #f87171;
-                    }
-
-                    .terminal-info {
-                        display: flex;
-                        gap: 16px;
-                        padding: 6px 12px;
-                        background-color: #252525;
-                        border-bottom: 1px solid ${theme.codeBorder};
-                        font-size: 12px;
-                        color: ${theme.prefix};
-                    }
-
-                    .terminal-content {
-                        margin: 0;
-                        white-space: pre-wrap;
-                        word-wrap: break-word;
-                        font-family: monospace;
-                        font-size: 12px;
-                        line-height: 1.4;
-                        color: ${theme.codeText};
-                        padding: 12px;
-                    }
-
-                    /* Блоки кода */
-                    .code-block-container {
-                        border: 1px solid ${theme.codeBorder};
-                        border-radius: 8px;
-                        margin: 8px 0;
-                        background-color: ${theme.codeBg};
-                        overflow: hidden;
-                    }
-
-                    .code-block-header {
-                        display: flex;
-                        justify-content: space-between;
-                        align-items: center;
-                        padding: 8px 12px;
-                        background-color: #2d2d2d;
-                        border-bottom: 1px solid ${theme.codeBorder};
-                    }
-
-                    .code-language {
-                        background-color: ${theme.prefix};
-                        color: ${theme.codeBg};
-                        padding: 2px 8px;
-                        border-radius: 4px;
-                        font-size: 11px;
-                        font-weight: 500;
-                        text-transform: uppercase;
-                    }
-
-                    .code-copy-btn {
-                        background: none;
-                        border: 1px solid ${theme.codeBorder};
-                        border-radius: 4px;
-                        padding: 4px 8px;
-                        color: ${theme.prefix};
-                        cursor: pointer;
-                        font-size: 11px;
-                        font-family: inherit;
-                    }
-
-                    .code-copy-btn:hover {
-                        background-color: ${theme.userBorder};
-                    }
-
-                    .code-content {
-                        margin: 0 !important;
-                        padding: 12px !important;
-                        background: transparent !important;
-                        font-family: monospace !important;
-                        font-size: 12px !important;
-                        line-height: 1.4 !important;
-                        overflow-x: auto !important;
-                        color: ${theme.codeText} !important;
-                    }
-
-                    /* Результаты инструментов */
-                    .tool-result-block {
-                        border: 1px solid ${theme.codeBorder};
-                        border-radius: 8px;
-                        margin: 8px 0;
-                        background-color: ${theme.codeBg};
-                    }
-
-                    .tool-result-header {
-                        display: flex;
-                        justify-content: space-between;
-                        align-items: center;
-                        padding: 10px 12px;
-                        background-color: #2d2d30;
-                        border-bottom: 1px solid ${theme.codeBorder};
-                    }
-
-                    .tool-info {
-                        display: flex;
-                        align-items: center;
-                        gap: 8px;
-                    }
-
-                    .tool-name {
-                        font-weight: 500;
-                        color: ${theme.codeText};
-                        font-size: 13px;
-                    }
-
-                    .operation-type {
-                        background-color: ${theme.prefix};
-                        color: ${theme.codeBg};
-                        padding: 2px 6px;
-                        border-radius: 4px;
-                        font-size: 10px;
-                        text-transform: uppercase;
-                    }
-
-                    .tool-result-content {
-                        padding: 12px;
-                    }
-
-                    .result-value {
-                        color: ${theme.codeText};
-                        font-size: 13px;
-                        white-space: pre-wrap;
-                    }
-
-                    /* Структурированные блоки */
-                    .structured-block {
-                        border: 1px solid ${theme.codeBorder};
-                        border-radius: 6px;
-                        margin: 8px 0;
-                        background-color: ${theme.codeBg};
-                    }
-
-                    .structured-header {
-                        display: flex;
-                        justify-content: space-between;
-                        align-items: center;
-                        padding: 6px 10px;
-                        background-color: #2d2d2d;
-                        border-bottom: 1px solid ${theme.codeBorder};
-                        cursor: pointer;
-                    }
-
-                    .format-label {
-                        background-color: ${theme.prefix};
-                        color: ${theme.codeBg};
-                        padding: 2px 6px;
-                        border-radius: 4px;
-                        font-size: 10px;
-                        text-transform: uppercase;
-                    }
-
-                    .structured-content {
-                        padding: 10px;
-                    }
-
-                    .structured-data {
-                        margin: 0 !important;
-                        padding: 0 !important;
-                        background: transparent !important;
-                        font-family: monospace !important;
-                        font-size: 11px !important;
-                        line-height: 1.4 !important;
-                        color: ${theme.prefix} !important;
-                        overflow-x: auto !important;
-                    }
-                  </style>
+                        /* Общие стили */
+                        ${commonStyles}
+                    </style>
                 </head>
                 <body>
             """.trimIndent()
