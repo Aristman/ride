@@ -280,6 +280,221 @@ class HtmlDocumentManager(
                     .msg.assistant {
                         animation: fadeIn 0.4s ease-out;
                     }
+
+                    /* Стили для форматированного вывода агентов */
+                    .agent-output-container {
+                        margin: 4px 0;
+                    }
+
+                    .block-separator {
+                        height: 1px;
+                        background-color: ${theme.codeBorder};
+                        margin: 8px 0;
+                    }
+
+                    /* Терминальный вывод */
+                    .terminal-output {
+                        border: 1px solid ${theme.codeBorder};
+                        border-radius: 8px;
+                        background-color: ${theme.codeBg};
+                        font-family: monospace;
+                        margin: 8px 0;
+                        overflow: hidden;
+                    }
+
+                    .terminal-header {
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        padding: 8px 12px;
+                        background-color: #2d2d2d;
+                        border-bottom: 1px solid ${theme.codeBorder};
+                        color: ${theme.codeText};
+                    }
+
+                    .terminal-title {
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                    }
+
+                    .terminal-text {
+                        font-weight: 500;
+                        font-size: 13px;
+                    }
+
+                    .status-success {
+                        color: #4ade80;
+                    }
+
+                    .status-error {
+                        color: #f87171;
+                    }
+
+                    .terminal-info {
+                        display: flex;
+                        gap: 16px;
+                        padding: 6px 12px;
+                        background-color: #252525;
+                        border-bottom: 1px solid ${theme.codeBorder};
+                        font-size: 12px;
+                        color: ${theme.prefix};
+                    }
+
+                    .terminal-content {
+                        margin: 0;
+                        white-space: pre-wrap;
+                        word-wrap: break-word;
+                        font-family: monospace;
+                        font-size: 12px;
+                        line-height: 1.4;
+                        color: ${theme.codeText};
+                        padding: 12px;
+                    }
+
+                    /* Блоки кода */
+                    .code-block-container {
+                        border: 1px solid ${theme.codeBorder};
+                        border-radius: 8px;
+                        margin: 8px 0;
+                        background-color: ${theme.codeBg};
+                        overflow: hidden;
+                    }
+
+                    .code-block-header {
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        padding: 8px 12px;
+                        background-color: #2d2d2d;
+                        border-bottom: 1px solid ${theme.codeBorder};
+                    }
+
+                    .code-language {
+                        background-color: ${theme.prefix};
+                        color: ${theme.codeBg};
+                        padding: 2px 8px;
+                        border-radius: 4px;
+                        font-size: 11px;
+                        font-weight: 500;
+                        text-transform: uppercase;
+                    }
+
+                    .code-copy-btn {
+                        background: none;
+                        border: 1px solid ${theme.codeBorder};
+                        border-radius: 4px;
+                        padding: 4px 8px;
+                        color: ${theme.prefix};
+                        cursor: pointer;
+                        font-size: 11px;
+                        font-family: inherit;
+                    }
+
+                    .code-copy-btn:hover {
+                        background-color: ${theme.userBorder};
+                    }
+
+                    .code-content {
+                        margin: 0 !important;
+                        padding: 12px !important;
+                        background: transparent !important;
+                        font-family: monospace !important;
+                        font-size: 12px !important;
+                        line-height: 1.4 !important;
+                        overflow-x: auto !important;
+                        color: ${theme.codeText} !important;
+                    }
+
+                    /* Результаты инструментов */
+                    .tool-result-block {
+                        border: 1px solid ${theme.codeBorder};
+                        border-radius: 8px;
+                        margin: 8px 0;
+                        background-color: ${theme.codeBg};
+                    }
+
+                    .tool-result-header {
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        padding: 10px 12px;
+                        background-color: #2d2d30;
+                        border-bottom: 1px solid ${theme.codeBorder};
+                    }
+
+                    .tool-info {
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                    }
+
+                    .tool-name {
+                        font-weight: 500;
+                        color: ${theme.codeText};
+                        font-size: 13px;
+                    }
+
+                    .operation-type {
+                        background-color: ${theme.prefix};
+                        color: ${theme.codeBg};
+                        padding: 2px 6px;
+                        border-radius: 4px;
+                        font-size: 10px;
+                        text-transform: uppercase;
+                    }
+
+                    .tool-result-content {
+                        padding: 12px;
+                    }
+
+                    .result-value {
+                        color: ${theme.codeText};
+                        font-size: 13px;
+                        white-space: pre-wrap;
+                    }
+
+                    /* Структурированные блоки */
+                    .structured-block {
+                        border: 1px solid ${theme.codeBorder};
+                        border-radius: 6px;
+                        margin: 8px 0;
+                        background-color: ${theme.codeBg};
+                    }
+
+                    .structured-header {
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        padding: 6px 10px;
+                        background-color: #2d2d2d;
+                        border-bottom: 1px solid ${theme.codeBorder};
+                        cursor: pointer;
+                    }
+
+                    .format-label {
+                        background-color: ${theme.prefix};
+                        color: ${theme.codeBg};
+                        padding: 2px 6px;
+                        border-radius: 4px;
+                        font-size: 10px;
+                        text-transform: uppercase;
+                    }
+
+                    .structured-content {
+                        padding: 10px;
+                    }
+
+                    .structured-data {
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        background: transparent !important;
+                        font-family: monospace !important;
+                        font-size: 11px !important;
+                        line-height: 1.4 !important;
+                        color: ${theme.prefix} !important;
+                        overflow-x: auto !important;
+                    }
                   </style>
                 </head>
                 <body>

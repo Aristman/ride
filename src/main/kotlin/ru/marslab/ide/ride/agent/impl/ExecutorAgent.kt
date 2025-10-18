@@ -9,6 +9,7 @@ import ru.marslab.ide.ride.model.llm.*
 import ru.marslab.ide.ride.model.task.*
 import ru.marslab.ide.ride.model.schema.*
 import ru.marslab.ide.ride.model.mcp.*
+import ru.marslab.ide.ride.formatter.CodeBlockFormatter
 
 /**
  * Агент для выполнения задач из плана
@@ -23,6 +24,7 @@ class ExecutorAgent(
 ) : Agent {
 
     private val logger = Logger.getInstance(ExecutorAgent::class.java)
+    private val codeBlockFormatter = CodeBlockFormatter()
     
     override val capabilities: AgentCapabilities = AgentCapabilities(
         stateful = false,
@@ -62,9 +64,13 @@ class ExecutorAgent(
                 )
             }
 
-            // Возвращаем результат выполнения
+            // Используем форматтер для обработки блоков кода в ответе
+            val formattedOutput = codeBlockFormatter.formatAsHtml(llmResponse.content)
+
+            // Возвращаем результат выполнения с форматированным выводом
             AgentResponse.success(
                 content = llmResponse.content,
+                formattedOutput = formattedOutput,
                 metadata = mapOf(
                     "tokensUsed" to llmResponse.tokensUsed,
                     "provider" to llmProvider.getProviderName()

@@ -1,0 +1,33 @@
+<div class="code-block-container">
+    <div class="code-block-header">
+        <div class="code-block-info">
+            {{#if language}}
+                <span class="code-language">{{language}}</span>
+            {{else}}
+                <span class="code-language">text</span>
+            {{/if}}
+            {{#if fileName}}
+                <span class="code-filename">{{fileName}}</span>
+            {{/if}}
+        </div>
+        <div class="code-block-actions">
+            <button class="code-copy-btn" onclick="copyCodeBlock(this)" title="Copy code">
+                <span class="copy-icon">📋</span>
+                <span class="copy-text">Copy</span>
+            </button>
+            {{#if expandable}}
+                <button class="code-expand-btn" onclick="toggleCodeBlock(this)" title="Expand/Collapse">
+                    <span class="expand-icon">▼</span>
+                </button>
+            {{/if}}
+        </div>
+    </div>
+    <div class="code-block-body">
+        <pre class="code-content"><code class="language-{{language}}">{{code}}</code></pre>
+    </div>
+    {{#if description}}
+        <div class="code-block-description">
+            <p>{{description}}</p>
+        </div>
+    {{/if}}
+</div>

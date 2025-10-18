@@ -134,12 +134,13 @@ class ChatService {
                         }
                         
                         // Создаем и сохраняем сообщение ассистента с учетом анализа неопределенности
-                        val metadata = agentResponse.metadata + mapOf(
+                        val metadata = agentResponse.metadata + mapOf<String, Any>(
                             "isFinal" to agentResponse.isFinal,
                             "uncertainty" to (agentResponse.uncertainty ?: 0.0),
                             "responseTimeMs" to responseTime,
                             "tokensUsed" to tokensUsed,
-                            "tokenUsage" to (tokenUsage ?: TokenUsage.EMPTY)
+                            "tokenUsage" to (tokenUsage ?: TokenUsage.EMPTY),
+                            "formattedOutput" to (agentResponse.formattedOutput ?: Unit)
                         )
 
                         // Проверяем наличие системного сообщения о сжатии/обрезке
@@ -325,12 +326,13 @@ class ChatService {
                         }
 
                         // Создаем метаданные
-                        val metadata = mapOf(
+                        val metadata = mapOf<String, Any>(
                             "responseTimeMs" to responseTime,
                             "tokenUsage" to tokenUsage,
                             "executedTools" to (executedTools ?: "none"),
                             "toolIterations" to (iterations ?: "0"),
-                            "usedMCPTools" to true
+                            "usedMCPTools" to true,
+                            "formattedOutput" to (agentResponse.formattedOutput ?: Unit)
                         )
 
                         val assistantMsg = Message(
@@ -551,12 +553,13 @@ class ChatService {
                 
                 withContext(Dispatchers.EDT) {
                     // Всегда показываем результат выполнения команды (даже при ошибке)
-                    val metadata = response.metadata + mapOf(
+                    val metadata = response.metadata + mapOf<String, Any>(
                         "agentType" to "terminal",
                         "responseTimeMs" to responseTime,
                         "isFinal" to true,
                         "uncertainty" to 0.0,
-                        "commandSuccess" to response.success
+                        "commandSuccess" to response.success,
+                        "formattedOutput" to (response.formattedOutput ?: Unit)
                     )
                     
                     val message = Message(

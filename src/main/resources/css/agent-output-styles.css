@@ -1,0 +1,581 @@
+/* Стили для форматированного вывода агентов */
+
+/* === Терминальный вывод === */
+.terminal-output {
+    border: 1px solid var(--border-color, #3c3c3c);
+    border-radius: 8px;
+    background: var(--terminal-bg, #1e1e1e);
+    font-family: var(--monospace-font, 'Consolas', 'Monaco', 'Courier New', monospace);
+    margin: 8px 0;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.terminal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--terminal-header-bg, #2d2d2d);
+    border-bottom: 1px solid var(--border-color, #3c3c3c);
+    color: var(--terminal-text, #ffffff);
+}
+
+.terminal-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.terminal-icon {
+    font-size: 14px;
+}
+
+.terminal-text {
+    font-weight: 500;
+    font-size: 13px;
+}
+
+.terminal-status {
+    font-size: 12px;
+}
+
+.status-success {
+    color: var(--success-color, #4ade80);
+}
+
+.status-error {
+    color: var(--error-color, #f87171);
+}
+
+.terminal-info {
+    display: flex;
+    gap: 16px;
+    padding: 6px 12px;
+    background: var(--terminal-info-bg, #252525);
+    border-bottom: 1px solid var(--border-color, #3c3c3c);
+    font-size: 12px;
+    color: var(--terminal-info-text, #cccccc);
+}
+
+.terminal-command,
+.terminal-exit-code,
+.terminal-execution-time {
+    display: flex;
+    gap: 4px;
+}
+
+.command-label,
+.exit-code-label,
+.execution-time-label {
+    color: var(--terminal-label, #888888);
+}
+
+.command-value,
+.exit-code-value,
+.execution-time-value {
+    color: var(--terminal-value, #ffffff);
+    font-weight: 500;
+}
+
+.terminal-body {
+    padding: 12px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.terminal-content {
+    margin: 0;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-family: inherit;
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--terminal-output, #ffffff);
+}
+
+.terminal-content.error {
+    color: var(--error-color, #f87171);
+}
+
+.terminal-stdout {
+    margin-bottom: 8px;
+}
+
+.terminal-stderr:last-child {
+    margin-bottom: 0;
+}
+
+/* === Блоки кода === */
+.code-block-container {
+    border: 1px solid var(--border-color, #3c3c3c);
+    border-radius: 8px;
+    margin: 12px 0;
+    background: var(--code-bg, #1e1e1e);
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.code-block-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--code-header-bg, #2d2d2d);
+    border-bottom: 1px solid var(--border-color, #3c3c3c);
+}
+
+.code-block-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.code-language {
+    background: var(--language-badge-bg, #4a5568);
+    color: var(--language-badge-text, #ffffff);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+.code-filename {
+    color: var(--code-filename, #a0aec0);
+    font-size: 12px;
+    font-style: italic;
+}
+
+.code-block-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.code-copy-btn,
+.code-expand-btn {
+    background: none;
+    border: 1px solid var(--border-color, #4a5568);
+    border-radius: 4px;
+    padding: 4px 8px;
+    color: var(--button-text, #a0aec0);
+    cursor: pointer;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: all 0.2s ease;
+}
+
+.code-copy-btn:hover,
+.code-expand-btn:hover {
+    background: var(--button-hover-bg, #4a5568);
+    color: var(--button-hover-text, #ffffff);
+    border-color: var(--button-hover-border, #718096);
+}
+
+.copy-icon,
+.expand-icon {
+    font-size: 10px;
+}
+
+.code-block-body {
+    max-height: 300px;
+    overflow: auto;
+}
+
+.code-content {
+    margin: 0 !important;
+    padding: 12px;
+    background: transparent !important;
+    font-family: var(--monospace-font, 'Consolas', 'Monaco', 'Courier New', monospace) !important;
+    font-size: 12px !important;
+    line-height: 1.4 !important;
+    overflow-x: auto !important;
+}
+
+.code-content code {
+    background: transparent !important;
+    padding: 0 !important;
+    font-family: inherit !important;
+    font-size: inherit !important;
+}
+
+.code-block-description {
+    padding: 8px 12px;
+    background: var(--code-description-bg, #252525);
+    border-top: 1px solid var(--border-color, #3c3c3c);
+    font-size: 12px;
+    color: var(--code-description-text, #a0aec0);
+}
+
+.code-block-description p {
+    margin: 0;
+}
+
+/* === Результаты инструментов === */
+.tool-result-block {
+    border: 1px solid var(--border-color, #3c3c3c);
+    border-radius: 8px;
+    margin: 12px 0;
+    background: var(--tool-bg, #1e1e1e);
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.tool-result-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    background: var(--tool-header-bg, #2d2d30);
+    border-bottom: 1px solid var(--border-color, #3c3c3c);
+}
+
+.tool-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.tool-icon {
+    font-size: 14px;
+}
+
+.tool-name {
+    font-weight: 500;
+    color: var(--tool-name, #ffffff);
+    font-size: 13px;
+}
+
+.operation-type {
+    background: var(--operation-badge-bg, #4a5568);
+    color: var(--operation-badge-text, #ffffff);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    text-transform: uppercase;
+}
+
+.file-operation-info {
+    padding: 8px 12px;
+    background: var(--file-info-bg, #252525);
+    border-bottom: 1px solid var(--border-color, #3c3c3c);
+    font-size: 12px;
+    color: var(--file-info-text, #a0aec0);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.file-path-label {
+    color: var(--file-path-label, #718096);
+}
+
+.file-path {
+    color: var(--file-path, #63b3ed);
+    font-family: var(--monospace-font, 'Consolas', 'Monaco', 'Courier New', monospace);
+}
+
+.file-size {
+    color: var(--file-size, #a0aec0);
+    font-size: 11px;
+}
+
+.tool-result-content {
+    padding: 12px;
+}
+
+.result-label {
+    font-weight: 500;
+    color: var(--result-label, #a0aec0);
+    font-size: 12px;
+    margin-bottom: 4px;
+}
+
+.result-value {
+    color: var(--result-value, #ffffff);
+    font-size: 13px;
+    white-space: pre-wrap;
+}
+
+.tool-code-content {
+    border-top: 1px solid var(--border-color, #3c3c3c);
+}
+
+.code-preview-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--preview-header-bg, #252525);
+    border-bottom: 1px solid var(--border-color, #3c3c3c);
+}
+
+.preview-label {
+    color: var(--preview-label, #a0aec0);
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.view-full-btn {
+    background: none;
+    border: 1px solid var(--border-color, #4a5568);
+    border-radius: 4px;
+    padding: 2px 6px;
+    color: var(--button-text, #a0aec0);
+    cursor: pointer;
+    font-size: 10px;
+    transition: all 0.2s ease;
+}
+
+.view-full-btn:hover {
+    background: var(--button-hover-bg, #4a5568);
+    color: var(--button-hover-text, #ffffff);
+}
+
+.code-preview-body {
+    max-height: 200px;
+    overflow: hidden;
+    position: relative;
+}
+
+.preview-content {
+    margin: 0 !important;
+    padding: 12px !important;
+    background: transparent !important;
+    font-family: var(--monospace-font, 'Consolas', 'Monaco', 'Courier New', monospace) !important;
+    font-size: 12px !important;
+    line-height: 1.4 !important;
+    overflow-x: auto !important;
+}
+
+.tool-error-content {
+    padding: 12px;
+    background: var(--error-bg, rgba(248, 113, 113, 0.1));
+    border-top: 1px solid var(--error-border, #f87171);
+}
+
+.error-label {
+    font-weight: 500;
+    color: var(--error-color, #f87171);
+    font-size: 12px;
+    margin-bottom: 4px;
+}
+
+.error-message {
+    color: var(--error-text, #fca5a5);
+    font-size: 13px;
+    white-space: pre-wrap;
+}
+
+.tool-metadata {
+    border-top: 1px solid var(--border-color, #3c3c3c);
+}
+
+.metadata-toggle {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--metadata-header-bg, #252525);
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.metadata-toggle:hover {
+    background: var(--metadata-hover-bg, #2d2d2d);
+}
+
+.metadata-label {
+    color: var(--metadata-label, #a0aec0);
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.metadata-arrow {
+    color: var(--metadata-arrow, #718096);
+    font-size: 10px;
+    transition: transform 0.2s ease;
+}
+
+.metadata-content {
+    border-top: 1px solid var(--border-color, #3c3c3c);
+}
+
+.metadata-json {
+    margin: 0 !important;
+    padding: 12px !important;
+    background: var(--metadata-json-bg, #1a1a1a) !important;
+    font-family: var(--monospace-font, 'Consolas', 'Monaco', 'Courier New', monospace) !important;
+    font-size: 11px !important;
+    line-height: 1.4 !important;
+    color: var(--metadata-json-text, #a0aec0) !important;
+    overflow-x: auto !important;
+}
+
+/* === Множественные блоки === */
+.multi-block-container {
+    margin: 8px 0;
+}
+
+.block-item {
+    margin: 8px 0;
+}
+
+.block-separator {
+    height: 1px;
+    background: var(--separator-color, #3c3c3c);
+    margin: 12px 0;
+}
+
+.markdown-block {
+    margin: 8px 0;
+}
+
+.markdown-content {
+    color: var(--markdown-text, #ffffff);
+}
+
+.html-block {
+    margin: 8px 0;
+}
+
+.structured-block {
+    border: 1px solid var(--border-color, #3c3c3c);
+    border-radius: 6px;
+    margin: 8px 0;
+    background: var(--structured-bg, #1e1e1e);
+}
+
+.structured-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 10px;
+    background: var(--structured-header-bg, #2d2d2d);
+    border-bottom: 1px solid var(--border-color, #3c3c3c);
+    cursor: pointer;
+}
+
+.format-label {
+    background: var(--format-badge-bg, #4a5568);
+    color: var(--format-badge-text, #ffffff);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    text-transform: uppercase;
+}
+
+.toggle-structured {
+    background: none;
+    border: none;
+    color: var(--toggle-color, #a0aec0);
+    cursor: pointer;
+    font-size: 10px;
+    padding: 2px;
+    transition: transform 0.2s ease;
+}
+
+.structured-content {
+    max-height: 300px;
+    overflow: auto;
+}
+
+.structured-data {
+    margin: 0 !important;
+    padding: 10px !important;
+    background: transparent !important;
+    font-family: var(--monospace-font, 'Consolas', 'Monaco', 'Courier New', monospace) !important;
+    font-size: 11px !important;
+    line-height: 1.4 !important;
+    color: var(--structured-text, #a0aec0) !important;
+    overflow-x: auto !important;
+}
+
+/* === Адаптивность и темы === */
+@media (max-width: 768px) {
+    .terminal-info {
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .code-block-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+
+    .tool-result-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+    }
+
+    .file-operation-info {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+    }
+}
+
+/* Светлая тема */
+[data-theme="light"] {
+    --terminal-bg: #ffffff;
+    --terminal-header-bg: #f5f5f5;
+    --terminal-text: #333333;
+    --terminal-info-bg: #fafafa;
+    --terminal-info-text: #666666;
+    --terminal-label: #999999;
+    --terminal-value: #333333;
+    --terminal-output: #333333;
+    --border-color: #e0e0e0;
+    --success-color: #22c55e;
+    --error-color: #ef4444;
+
+    --code-bg: #ffffff;
+    --code-header-bg: #f8f9fa;
+    --language-badge-bg: #6c757d;
+    --language-badge-text: #ffffff;
+    --code-filename: #6c757d;
+    --button-text: #6c757d;
+    --button-hover-bg: #e9ecef;
+    --button-hover-text: #333333;
+    --button-hover-border: #6c757d;
+    --code-description-bg: #f8f9fa;
+    --code-description-text: #6c757d;
+
+    --tool-bg: #ffffff;
+    --tool-header-bg: #f8f9fa;
+    --tool-name: #333333;
+    --operation-badge-bg: #6c757d;
+    --operation-badge-text: #ffffff;
+    --file-info-bg: #f8f9fa;
+    --file-info-text: #6c757d;
+    --file-path-label: #868e96;
+    --file-path: #0066cc;
+    --file-size: #6c757d;
+    --result-label: #6c757d;
+    --result-value: #333333;
+    --preview-header-bg: #f8f9fa;
+    --preview-label: #6c757d;
+    --error-bg: rgba(239, 68, 68, 0.1);
+    --error-border: #ef4444;
+    --error-color: #ef4444;
+    --error-text: #dc2626;
+    --metadata-header-bg: #f8f9fa;
+    --metadata-hover-bg: #e9ecef;
+    --metadata-label: #6c757d;
+    --metadata-arrow: #868e96;
+    --metadata-json-bg: #f8f9fa;
+    --metadata-json-text: #495057;
+
+    --markdown-text: #333333;
+    --structured-bg: #ffffff;
+    --structured-header-bg: #f8f9fa;
+    --format-badge-bg: #6c757d;
+    --format-badge-text: #ffffff;
+    --toggle-color: #6c757d;
+    --structured-text: #495057;
+    --separator-color: #e0e0e0;
+}

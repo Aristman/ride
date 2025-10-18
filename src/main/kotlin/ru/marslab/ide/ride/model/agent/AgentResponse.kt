@@ -1,6 +1,7 @@
 ﻿package ru.marslab.ide.ride.model.agent
 
 import ru.marslab.ide.ride.model.schema.ParsedResponse
+
 /**
  * Ответ от агента на запрос пользователя
  *
@@ -9,6 +10,7 @@ import ru.marslab.ide.ride.model.schema.ParsedResponse
  * @property error Сообщение об ошибке (если success = false)
  * @property metadata Дополнительные метаданные ответа
  * @property parsedContent Распарсенное содержимое (если задан формат ответа)
+ * @property formattedOutput Форматированный вывод для отображения в UI
  * @property isFinal Флаг окончательного ответа (true = ответ полный, false = требуются уточнения)
  * @property uncertainty Уровень неопределенности ответа (0.0 - 1.0)
  */
@@ -18,6 +20,7 @@ data class AgentResponse(
     val error: String? = null,
     val metadata: Map<String, Any> = emptyMap(),
     val parsedContent: ParsedResponse? = null,
+    val formattedOutput: FormattedOutput? = null,
     val isFinal: Boolean = true,
     val uncertainty: Double? = null
 ) {
@@ -100,6 +103,83 @@ data class AgentResponse(
             )
         }
         
+        /**
+         * Создает успешный ответ с форматированным выводом
+         */
+        fun success(
+            content: String,
+            formattedOutput: FormattedOutput,
+            metadata: Map<String, Any> = emptyMap()
+        ): AgentResponse {
+            return AgentResponse(
+                content = content,
+                success = true,
+                metadata = metadata,
+                formattedOutput = formattedOutput
+            )
+        }
+
+        /**
+         * Создает успешный ответ с форматированным выводом и параметрами окончательности
+         */
+        fun success(
+            content: String,
+            formattedOutput: FormattedOutput,
+            isFinal: Boolean = true,
+            uncertainty: Double? = null,
+            metadata: Map<String, Any> = emptyMap()
+        ): AgentResponse {
+            return AgentResponse(
+                content = content,
+                success = true,
+                metadata = metadata,
+                formattedOutput = formattedOutput,
+                isFinal = isFinal,
+                uncertainty = uncertainty
+            )
+        }
+
+        /**
+         * Создает успешный ответ с распарсенным содержимым и форматированным выводом
+         */
+        fun success(
+            content: String,
+            parsedContent: ParsedResponse,
+            formattedOutput: FormattedOutput? = null,
+            isFinal: Boolean = true,
+            uncertainty: Double? = null,
+            metadata: Map<String, Any> = emptyMap()
+        ): AgentResponse {
+            return AgentResponse(
+                content = content,
+                success = true,
+                metadata = metadata,
+                parsedContent = parsedContent,
+                formattedOutput = formattedOutput,
+                isFinal = isFinal,
+                uncertainty = uncertainty
+            )
+        }
+
+        /**
+         * Создает ответ, требующий уточнений (неокончательный)
+         */
+        fun clarification(
+            content: String,
+            uncertainty: Double,
+            formattedOutput: FormattedOutput? = null,
+            metadata: Map<String, Any> = emptyMap()
+        ): AgentResponse {
+            return AgentResponse(
+                content = content,
+                success = true,
+                isFinal = false,
+                uncertainty = uncertainty,
+                formattedOutput = formattedOutput,
+                metadata = metadata
+            )
+        }
+
         /**
          * Создает ответ с ошибкой
          */

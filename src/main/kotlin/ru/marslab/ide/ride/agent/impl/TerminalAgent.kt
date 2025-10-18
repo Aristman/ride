@@ -14,6 +14,7 @@ import ru.marslab.ide.ride.model.agent.AgentResponse
 import ru.marslab.ide.ride.model.agent.AgentSettings
 import ru.marslab.ide.ride.model.terminal.TerminalCommand
 import ru.marslab.ide.ride.model.terminal.TerminalCommandResult
+import ru.marslab.ide.ride.formatter.TerminalOutputFormatter
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
@@ -27,6 +28,8 @@ import java.util.concurrent.TimeUnit
  * включая stdout, stderr, код завершения и время выполнения.
  */
 class TerminalAgent : Agent {
+
+    private val terminalOutputFormatter = TerminalOutputFormatter()
 
     override val capabilities: AgentCapabilities = AgentCapabilities(
         stateful = false,
@@ -50,6 +53,17 @@ class TerminalAgent : Agent {
                 val command = parseCommandFromRequest(req.request, projectBasePath)
                 val result = executeCommand(command)
 
+                // Используем форматтер для создания форматированного вывода
+                val formattedOutput = terminalOutputFormatter.formatAsHtml(
+                    command = command.command,
+                    exitCode = result.exitCode,
+                    executionTime = result.executionTime,
+                    stdout = result.stdout,
+                    stderr = result.stderr,
+                    success = result.success
+                )
+
+                // Сохраняем обратную совместимость через контент
                 val responseContent = formatCommandResult(result)
                 val metadata = mapOf(
                     "command" to command.command,
@@ -59,7 +73,7 @@ class TerminalAgent : Agent {
                 )
 
                 if (result.success) {
-                    AgentResponse.success(responseContent, metadata)
+                    AgentResponse.success(responseContent, formattedOutput, metadata)
                 } else {
                     AgentResponse.error("Command failed with exit code ${result.exitCode}", responseContent)
                 }

@@ -15,6 +15,7 @@ import ru.marslab.ide.ride.model.llm.*
 import ru.marslab.ide.ride.model.task.*
 import ru.marslab.ide.ride.model.schema.*
 import ru.marslab.ide.ride.model.mcp.*
+import ru.marslab.ide.ride.formatter.ToolResultFormatter
 
 /**
  * Chat Agent с поддержкой MCP Tools через Yandex GPT Tools API
@@ -27,6 +28,7 @@ class ChatAgentWithTools(
     private val logger = Logger.getInstance(ChatAgentWithTools::class.java)
     private val toolsProvider = YandexGPTToolsProvider(config)
     private val serverManager = MCPServerManager.getInstance()
+    private val toolResultFormatter = ToolResultFormatter()
     
     private val mcpClient by lazy {
         MCPClient(serverManager.getServerUrl())
@@ -126,11 +128,28 @@ class ChatAgentWithTools(
 
             // Запускаем цикл tool calling
             val result = toolCallingLoop(messages, tools, parameters)
-            
-            AgentResponse.success(
-                content = result.content,
-                metadata = result.metadata
-            )
+
+            // Создаем форматированный вывод для результатов инструментов
+            val formattedOutput = if (result.metadata.containsKey("executedTools") &&
+                                   result.metadata["executedTools"]?.isNotEmpty() == true) {
+                // Извлекаем операции инструментов из результатов и форматируем их
+                createFormattedToolOutput(result.content, result.metadata)
+            } else {
+                null
+            }
+
+            if (formattedOutput != null) {
+                AgentResponse.success(
+                    content = result.content,
+                    formattedOutput = formattedOutput,
+                    metadata = result.metadata.toMap()
+                )
+            } else {
+                AgentResponse.success(
+                    content = result.content,
+                    metadata = result.metadata.toMap()
+                )
+            }
             
         } catch (e: Exception) {
             logger.error("Error processing request with tools", e)
@@ -309,7 +328,50 @@ class ChatAgentWithTools(
             }
         }
     }
-    
+
+    /**
+     * Создает форматированный вывод для результатов инструментов
+     */
+    private fun createFormattedToolOutput(
+        content: String,
+        metadata: Map<String, String>
+    ): ru.marslab.ide.ride.model.agent.FormattedOutput {
+        val blocks = mutableListOf<ru.marslab.ide.ride.model.agent.FormattedOutputBlock>()
+        var order = 0
+
+        // Основной контент ответа
+        if (content.trim().isNotEmpty()) {
+            blocks.add(ru.marslab.ide.ride.model.agent.FormattedOutputBlock.markdown(content, order++))
+        }
+
+        // Информация о выполненных инструментах
+        val executedTools = metadata["executedTools"]
+        if (!executedTools.isNullOrEmpty()) {
+            val toolsInfo = buildString {
+                appendLine("🔧 **Выполненные операции:**")
+                appendLine(executedTools.split(", ").joinToString(", ") { "`$it`" })
+            }
+            blocks.add(ru.marslab.ide.ride.model.agent.FormattedOutputBlock.toolResult(
+                content = toolsInfo,
+                toolName = "MCP Tools",
+                operationType = "multiple",
+                success = true,
+                order = order++
+            ))
+        }
+
+        // Дополнительная статистика
+        val stats = buildString {
+            metadata["iterations"]?.let { appendLine("Итераций: $it") }
+            metadata["totalTokens"]?.let { appendLine("Токенов: $it") }
+        }
+        if (stats.trim().isNotEmpty()) {
+            blocks.add(ru.marslab.ide.ride.model.agent.FormattedOutputBlock.markdown(stats, order++))
+        }
+
+        return ru.marslab.ide.ride.model.agent.FormattedOutput.multiple(blocks)
+    }
+
     private data class ToolCallingResult(
         val content: String,
         val metadata: Map<String, String>

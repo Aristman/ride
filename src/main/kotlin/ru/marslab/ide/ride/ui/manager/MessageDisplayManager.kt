@@ -8,6 +8,8 @@ import ru.marslab.ide.ride.service.ChatService
 import ru.marslab.ide.ride.settings.PluginSettings
 import ru.marslab.ide.ride.ui.config.ChatPanelConfig
 import ru.marslab.ide.ride.ui.renderer.ChatContentRenderer
+import ru.marslab.ide.ride.ui.renderer.AgentOutputRenderer
+import ru.marslab.ide.ride.model.agent.FormattedOutput
 import java.util.*
 
 /**
@@ -15,7 +17,8 @@ import java.util.*
  */
 class MessageDisplayManager(
     private val htmlDocumentManager: HtmlDocumentManager,
-    private val contentRenderer: ChatContentRenderer
+    private val contentRenderer: ChatContentRenderer,
+    private val agentOutputRenderer: AgentOutputRenderer
 ) {
 
     private var lastRole: MessageRole? = null
@@ -105,7 +108,20 @@ class MessageDisplayManager(
      */
     private fun displayAssistantMessage(message: Message) {
         val prefix = createAssistantPrefix(message)
-        val bodyHtml = contentRenderer.renderContentToHtml(message.content, isJcefMode())
+
+        // Проверяем наличие форматированного вывода
+        val formattedOutput = message.metadata["formattedOutput"] as? FormattedOutput
+        val bodyHtml = if (formattedOutput != null) {
+            try {
+                agentOutputRenderer.render(formattedOutput)
+            } catch (e: Exception) {
+                // Fallback на стандартный рендеринг в случае ошибки
+                contentRenderer.renderContentToHtml(message.content, isJcefMode())
+            }
+        } else {
+            contentRenderer.renderContentToHtml(message.content, isJcefMode())
+        }
+
         val statusHtml = createAssistantStatusHtml(message)
         val isAfterSystem = lastRole == MessageRole.SYSTEM
 

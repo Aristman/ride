@@ -19,6 +19,7 @@ import ru.marslab.ide.ride.model.schema.*
 import ru.marslab.ide.ride.settings.PluginSettings
 import ru.marslab.ide.ride.ui.ResponseFormatter.formatJsonResponseData
 import ru.marslab.ide.ride.ui.ResponseFormatter.formatXmlResponseData
+import ru.marslab.ide.ride.formatter.ChatOutputFormatter
 
 /**
  * Универсальная реализация агента для общения с пользователем
@@ -55,6 +56,7 @@ class ChatAgent(
     }
 
     private val logger = Logger.getInstance(ChatAgent::class.java)
+    private val chatOutputFormatter = ChatOutputFormatter()
 
     override val capabilities: AgentCapabilities = AgentCapabilities(
         stateful = true,
@@ -215,9 +217,13 @@ class ChatAgent(
             }
             println("DEBUG finalContent=$finalContent")
 
-            // Возвращаем успешный ответ с учетом неопределенности
+            // Используем форматтер для создания форматированного вывода с множественными блоками
+            val formattedOutput = chatOutputFormatter.formatAsHtml(finalContent)
+
+            // Возвращаем успешный ответ с учетом неопределенности и форматированным выводом
             AgentResponse.success(
                 content = finalContent,
+                formattedOutput = formattedOutput,
                 isFinal = isFinal,
                 uncertainty = uncertainty,
                 metadata = baseMetadata + mapOf("parsedData" to (parsedResponse != null))
