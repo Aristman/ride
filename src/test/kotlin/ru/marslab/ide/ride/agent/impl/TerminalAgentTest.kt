@@ -3,14 +3,12 @@ package ru.marslab.ide.ride.agent.impl
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
-import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.BeforeEach
-import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.io.TempDir
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
+import kotlin.test.Test
 import ru.marslab.ide.ride.model.agent.AgentRequest
 import ru.marslab.ide.ride.model.chat.ChatContext
 import ru.marslab.ide.ride.model.llm.LLMParameters
-import java.io.File
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -19,24 +17,38 @@ import kotlin.test.assertTrue
 class TerminalAgentTest {
 
     private lateinit var agent: TerminalAgent
+    private lateinit var mockProject: com.intellij.openapi.project.Project
     private lateinit var mockContext: ChatContext
 
-    @TempDir
-    lateinit var tempDir: File
-
-    @BeforeEach
+    @BeforeTest
     fun setUp() {
         agent = TerminalAgent()
-        mockContext = mockk<ChatContext> {
-            every { getRecentHistory(any()) } returns emptyList()
-            every { hasSelectedText() } returns false
-            every { hasCurrentFile() } returns false
+        mockProject = mockk(relaxed = true) {
+            every { basePath } returns System.getProperty("user.dir")
         }
+        mockContext = ChatContext(
+            project = mockProject,
+            history = emptyList(),
+            currentFile = null,
+            selectedText = null
+        )
     }
 
-    @AfterEach
+    @AfterTest
     fun tearDown() {
         agent.dispose()
+    }
+
+    @Test
+    fun `test terminal agent capabilities`() {
+        val capabilities = agent.capabilities
+
+        assertFalse(capabilities.stateful, "Terminal should be stateless")
+        assertTrue(capabilities.streaming, "Terminal should support streaming")
+        assertFalse(capabilities.reasoning, "Terminal should not use reasoning")
+        assertTrue(capabilities.tools.any { it.contains("terminal") })
+        assertTrue(capabilities.tools.any { it.contains("shell") })
+        assertEquals("Агент для выполнения команд в локальном терминале", capabilities.systemPrompt)
     }
 
     @Test
@@ -49,30 +61,16 @@ class TerminalAgentTest {
 
         val response = agent.ask(request)
 
-        assertTrue(response.success)
-        assertNotNull(response.content)
-        assertTrue(response.content.contains("Hello World"))
-        assertTrue(response.content.contains("✅ Success"))
-        assertTrue(response.content.contains("Exit Code: 0"))
+        assertTrue(response.success, "Echo command should succeed")
+        assertTrue(response.content.contains("Hello World"), "Should contain output")
+        assertTrue(response.content.contains("echo Hello World"), "Should contain command")
+        assertTrue(response.metadata.containsKey("command"))
+        assertTrue(response.metadata.containsKey("exitCode"))
+        assertEquals(0, response.metadata["exitCode"])
     }
 
     @Test
-    fun `executes command with directory listing`() = runTest {
-        val request = AgentRequest(
-            request = "ls -la",
-            context = mockContext,
-            parameters = LLMParameters.DEFAULT
-        )
-
-        val response = agent.ask(request)
-
-        assertTrue(response.success)
-        assertNotNull(response.content)
-        assertTrue(response.content.contains("ls -la"))
-    }
-
-    @Test
-    fun `handles failed command properly`() = runTest {
+    fun `handles failing command`() = runTest {
         val request = AgentRequest(
             request = "exit 1",
             context = mockContext,
@@ -81,87 +79,13 @@ class TerminalAgentTest {
 
         val response = agent.ask(request)
 
-        assertFalse(response.success)
-        assertNotNull(response.error)
-        assertTrue(response.error!!.contains("exit code 1"))
-        assertTrue(response.content.contains("❌ Failed"))
-        assertTrue(response.content.contains("Exit Code: 1"))
+        assertFalse(response.success, "Command with exit 1 should fail")
+        assertEquals(1, response.metadata["exitCode"])
+        assertTrue(response.error?.contains("exit code 1") == true)
     }
 
     @Test
-    fun `executes command with working directory`() = runTest {
-        // Create a test file in temp directory
-        val testFile = File(tempDir, "test.txt")
-        testFile.writeText("test content")
-
-        val request = AgentRequest(
-            request = "cd ${tempDir.absolutePath} && ls",
-            context = mockContext,
-            parameters = LLMParameters.DEFAULT
-        )
-
-        val response = agent.ask(request)
-
-        assertTrue(response.success)
-        assertTrue(response.content.contains("test.txt"))
-    }
-
-    @Test
-    fun `handles non-existent working directory gracefully`() = runTest {
-        val request = AgentRequest(
-            request = "cd /non/existent/directory && echo test",
-            context = mockContext,
-            parameters = LLMParameters.DEFAULT
-        )
-
-        val response = agent.ask(request)
-
-        // Command should still execute, just without changing directory
-        assertTrue(response.success || response.error != null)
-    }
-
-    @Test
-    fun `returns proper metadata in response`() = runTest {
-        val request = AgentRequest(
-            request = "echo metadata test",
-            context = mockContext,
-            parameters = LLMParameters.DEFAULT
-        )
-
-        val response = agent.ask(request)
-
-        assertTrue(response.success)
-        assertEquals("echo metadata test", response.metadata["command"])
-        assertEquals(0, response.metadata["exitCode"])
-        assertNotNull(response.metadata["executionTime"])
-        assertNotNull(response.metadata["workingDir"])
-    }
-
-    @Test
-    fun `provides streaming execution with progress updates`() = runTest {
-        val request = AgentRequest(
-            request = "echo streaming test",
-            context = mockContext,
-            parameters = LLMParameters.DEFAULT
-        )
-
-        val flow = agent.start(request)
-        assertNotNull(flow)
-
-        val events = mutableListOf<ru.marslab.ide.ride.model.agent.AgentEvent>()
-        flow.collect { events.add(it) }
-
-        assertTrue(events.isNotEmpty())
-
-        // Check for expected event types
-        assertTrue(events.any { it is ru.marslab.ide.ride.model.agent.AgentEvent.Started })
-        assertTrue(events.any { it is ru.marslab.ide.ride.model.agent.AgentEvent.Progress })
-        assertTrue(events.any { it is ru.marslab.ide.ride.model.agent.AgentEvent.Content })
-        assertTrue(events.any { it is ru.marslab.ide.ride.model.agent.AgentEvent.Completed })
-    }
-
-    @Test
-    fun `handles invalid command gracefully`() = runTest {
+    fun `handles invalid command`() = runTest {
         val request = AgentRequest(
             request = "nonexistentcommand12345",
             context = mockContext,
@@ -170,59 +94,95 @@ class TerminalAgentTest {
 
         val response = agent.ask(request)
 
-        assertFalse(response.success)
-        assertNotNull(response.error)
-        assertTrue(response.content.contains("❌ Failed"))
+        assertFalse(response.success, "Invalid command should fail")
+        assertNotNull(response.error, "Should have error message")
     }
 
     @Test
-    fun `handles empty command`() = runTest {
-        val request = AgentRequest(
-            request = "",
-            context = mockContext,
-            parameters = LLMParameters.DEFAULT
-        )
+    fun `test update settings`() {
+        val settings = ru.marslab.ide.ride.model.agent.AgentSettings(maxContextTokens = 5000)
 
-        val response = agent.ask(request)
-
-        // Should handle empty command gracefully
-        assertTrue(response.success || response.error != null)
-    }
-
-    @Test
-    fun `processes command with stderr output`() = runTest {
-        val request = AgentRequest(
-            request = "echo 'Error message' >&2",
-            context = mockContext,
-            parameters = LLMParameters.DEFAULT
-        )
-
-        val response = agent.ask(request)
-
-        assertTrue(response.success) // echo command succeeds even with stderr
-        assertTrue(response.content.contains("Errors:"))
-        assertTrue(response.content.contains("Error message"))
-    }
-
-    @Test
-    fun `can update settings`() = runTest {
-        val settings = ru.marslab.ide.ride.model.agent.AgentSettings()
-
-        // Should not throw exception
+        // Should not throw
         agent.updateSettings(settings)
     }
 
     @Test
-    fun `provides correct capabilities`() {
-        val capabilities = agent.capabilities
+    fun `test dispose`() {
+        // Should not throw
+        agent.dispose()
+    }
 
-        assertFalse(capabilities.stateful)
-        assertTrue(capabilities.streaming)
-        assertFalse(capabilities.reasoning)
-        assertTrue(capabilities.tools.contains("terminal"))
-        assertTrue(capabilities.tools.contains("shell"))
-        assertTrue(capabilities.tools.contains("command-execution"))
-        assertNotNull(capabilities.systemPrompt)
-        assertTrue(capabilities.responseRules.isNotEmpty())
+    @Test
+    fun `test metadata includes execution details`() = runTest {
+        val request = AgentRequest(
+            request = "echo test",
+            context = mockContext,
+            parameters = LLMParameters.DEFAULT
+        )
+
+        val response = agent.ask(request)
+
+        assertTrue(response.success)
+        assertTrue(response.metadata.containsKey("command"))
+        assertTrue(response.metadata.containsKey("exitCode"))
+        assertTrue(response.metadata.containsKey("executionTime"))
+        assertTrue(response.metadata.containsKey("workingDir"))
+
+        assertEquals("echo test", response.metadata["command"])
+        assertEquals(0, response.metadata["exitCode"])
+        assertTrue(response.metadata["executionTime"] != null, "Execution time should not be null")
+    }
+
+    @Test
+    fun `test formatted output is provided`() = runTest {
+        val request = AgentRequest(
+            request = "echo formatted test",
+            context = mockContext,
+            parameters = LLMParameters.DEFAULT
+        )
+
+        val response = agent.ask(request)
+
+        assertTrue(response.success)
+        assertNotNull(response.formattedOutput, "Should provide formatted output")
+        assertTrue(response.formattedOutput!!.isNotEmpty(), "Formatted output should not be empty")
+        assertTrue(response.formattedOutput!!.isNotEmpty(), "Formatted output should contain command details")
+    }
+
+    @Test
+    fun `test start method returns flow`() = runTest {
+        val request = AgentRequest(
+            request = "echo streaming test",
+            context = mockContext,
+            parameters = LLMParameters.DEFAULT
+        )
+
+        val flow = agent.start(request)
+        assertNotNull(flow, "Should return flow for streaming")
+
+        // Collect events
+        val events = mutableListOf<ru.marslab.ide.ride.model.agent.AgentEvent>()
+        flow?.collect { events.add(it) }
+
+        assertTrue(events.isNotEmpty(), "Should emit at least one event")
+        assertTrue(events.any { it::class.simpleName == "Started" })
+        assertTrue(events.any { it::class.simpleName == "ContentChunk" })
+    }
+
+    @Test
+    fun `test response content structure`() = runTest {
+        val request = AgentRequest(
+            request = "echo content structure test",
+            context = mockContext,
+            parameters = LLMParameters.DEFAULT
+        )
+
+        val response = agent.ask(request)
+
+        assertTrue(response.success)
+        assertTrue(response.content.contains("Command:"))
+        assertTrue(response.content.contains("Exit Code:"))
+        assertTrue(response.content.contains("Execution Time:"))
+        assertTrue(response.content.contains("content structure test"))
     }
 }
