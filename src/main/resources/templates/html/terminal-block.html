@@ -8,7 +8,6 @@
       {{statusIcon}} {{statusText}}
     </div>
   </div>
-  {{#commandInfo}}
   <div class="terminal-info">
     <div class="terminal-command">
       <span class="command-label">Command:</span>
@@ -18,20 +17,9 @@
       <span class="exit-code-label">Exit Code:</span>
       <span class="exit-code-value">{{exitCode}}</span>
     </div>
-    {{#executionTime}}
-    <div class="terminal-execution-time">
-      <span class="execution-time-label">Execution Time:</span>
-      <span class="execution-time-value">{{executionTime}}ms</span>
-    </div>
-    {{/executionTime}}
+    {{executionTimeInfo}}
   </div>
-  {{/commandInfo}}
   <div class="terminal-body">
-    {{#content}}
-    <pre class="terminal-content">{{content}}</pre>
-    {{/content}}
-    {{^content}}
-    <pre class="terminal-content">(No output)</pre>
-    {{/content}}
+    {{outputContent}}
   </div>
 </div>

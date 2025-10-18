@@ -23,6 +23,22 @@ class TerminalBlockTemplate : BaseHtmlTemplate() {
         success: Boolean,
         content: String
     ): String {
+        val executionTimeInfo = if (executionTime > 0) {
+            """
+    <div class="terminal-execution-time">
+      <span class="execution-time-label">Execution Time:</span>
+      <span class="execution-time-value">${executionTime}ms</span>
+    </div>""".trimIndent()
+        } else {
+            ""
+        }
+
+        val outputContent = if (content.trim().isNotEmpty()) {
+            """<pre class="terminal-content">${escapeHtml(content)}</pre>"""
+        } else {
+            """<pre class="terminal-content">(No output)</pre>"""
+        }
+
         val variables = mapOf(
             "command" to command,
             "exitCode" to exitCode,
@@ -31,7 +47,8 @@ class TerminalBlockTemplate : BaseHtmlTemplate() {
             "content" to content,
             "statusIcon" to if (success) "✅" else "❌",
             "statusText" to if (success) "Success" else "Error",
-            "commandInfo" to command.isNotEmpty()
+            "executionTimeInfo" to executionTimeInfo,
+            "outputContent" to outputContent
         )
 
         return processTemplate(getTemplate(), variables)

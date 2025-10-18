@@ -39,13 +39,11 @@ class TerminalOutputFormatter {
     private fun buildTerminalContent(stdout: String, stderr: String): String {
         return buildString {
             if (stdout.isNotEmpty()) {
-                appendLine("STDOUT:")
                 appendLine(stdout)
             }
 
             if (stderr.isNotEmpty()) {
                 if (isNotEmpty()) appendLine()
-                appendLine("STDERR:")
                 appendLine(stderr)
             }
 
