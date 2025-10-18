@@ -3,12 +3,14 @@
 import com.intellij.openapi.diagnostic.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import ru.marslab.ide.ride.integration.llm.LLMProvider
 import ru.marslab.ide.ride.integration.llm.impl.YandexGPTConfig
 import ru.marslab.ide.ride.integration.llm.impl.YandexGPTToolsProvider
 import ru.marslab.ide.ride.mcp.MCPClient
 import ru.marslab.ide.ride.mcp.MCPServerManager
 import ru.marslab.ide.ride.mcp.MCPToolExecutor
 import ru.marslab.ide.ride.mcp.MCPToolsRegistry
+import ru.marslab.ide.ride.mcp.PathNormalizer
 import ru.marslab.ide.ride.model.agent.*
 import ru.marslab.ide.ride.model.chat.*
 import ru.marslab.ide.ride.model.llm.*
@@ -22,7 +24,8 @@ import ru.marslab.ide.ride.formatter.ToolResultFormatter
  */
 class ChatAgentWithTools(
     private val config: YandexGPTConfig,
-    private val systemPrompt: String = DEFAULT_SYSTEM_PROMPT
+    private val systemPrompt: String = DEFAULT_SYSTEM_PROMPT,
+    private val llmProvider: LLMProvider? = null
 ) {
     
     private val logger = Logger.getInstance(ChatAgentWithTools::class.java)
@@ -35,7 +38,8 @@ class ChatAgentWithTools(
     }
     
     private val toolExecutor by lazy {
-        MCPToolExecutor(mcpClient)
+        val pathNormalizer = llmProvider?.let { PathNormalizer(it) }
+        MCPToolExecutor(mcpClient, pathNormalizer ?: PathNormalizer(createFallbackProvider()))
     }
     
     companion object {
@@ -84,6 +88,40 @@ class ChatAgentWithTools(
         """
 
         private const val MAX_TOOL_ITERATIONS = 5
+
+        /**
+         * Создает fallback LLM провайдер для PathNormalizer
+         */
+        private fun createFallbackProvider(): LLMProvider {
+            return object : LLMProvider {
+                override suspend fun sendRequest(
+                    systemPrompt: String,
+                    userMessage: String,
+                    conversationHistory: List<ConversationMessage>,
+                    parameters: LLMParameters
+                ): LLMResponse {
+                    // Простая эвристика для базовой нормализации
+                    val path = userMessage.substringAfterLast("Нормализуй путь для").substringBeforeLast(":").trim().trim('"')
+
+                    val normalized = path
+                        .replace("\\", "/")
+                        .replace("\u0001", "/")
+                        .replace(Regex("/+"), "/")
+                        .trim('/')
+                        .ifEmpty { "file.txt" }
+
+                    return LLMResponse(
+                        content = normalized,
+                        success = true,
+                        tokenUsage = TokenUsage(10, 5, 5)
+                    )
+                }
+
+                override fun isAvailable(): Boolean = true
+
+                override fun getProviderName(): String = "Fallback Path Normalizer"
+            }
+        }
     }
     
     /**

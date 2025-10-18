@@ -12,7 +12,10 @@ import ru.marslab.ide.ride.model.llm.ToolResult
  * Исполнитель MCP tool calls
  * Преобразует вызовы функций от LLM в запросы к MCP Server
  */
-class MCPToolExecutor(private val mcpClient: MCPClient) {
+class MCPToolExecutor(
+    private val mcpClient: MCPClient,
+    private val pathNormalizer: PathNormalizer
+) {
     
     private val logger = Logger.getInstance(MCPToolExecutor::class.java)
     
@@ -57,14 +60,7 @@ class MCPToolExecutor(private val mcpClient: MCPClient) {
         }
     }
 
-    /**
-     * Нормализует путь для совместимости с MCP Server
-     */
-    private fun normalizePath(path: String): String {
-        // Заменяем обратные слэши на прямые
-        return path.replace("\\", "/")
-    }
-
+  
     private suspend fun executeCreateFile(args: JsonObject): String {
         val path = args["path"]?.jsonPrimitive?.content
             ?: return "Error: 'path' parameter is required"
@@ -72,13 +68,12 @@ class MCPToolExecutor(private val mcpClient: MCPClient) {
             ?: return "Error: 'content' parameter is required"
         val overwrite = args["overwrite"]?.jsonPrimitive?.booleanOrNull ?: false
 
-        // Конвертируем путь для совместимости
-        val normalizedPath = normalizePath(path)
+        // Нормализуем путь через LLM
+        val normalizedPath = pathNormalizer.normalizePath(path, "create_file")
 
         println("🔧 MCPToolExecutor: create_file")
         println("  Original path: '$path'")
         println("  Normalized path: '$normalizedPath'")
-        println("  Path bytes: ${normalizedPath.toByteArray().map { it.toInt() }}")
         println("  Content length: ${content.length}")
 
         val response = mcpClient.createFile(normalizedPath, content, overwrite)
@@ -88,7 +83,9 @@ class MCPToolExecutor(private val mcpClient: MCPClient) {
     private suspend fun executeReadFile(args: JsonObject): String {
         val path = args["path"]?.jsonPrimitive?.content
             ?: return "Error: 'path' parameter is required"
-        val normalizedPath = normalizePath(path)
+
+        // Нормализуем путь через LLM
+        val normalizedPath = pathNormalizer.normalizePath(path, "read_file")
 
         println("🔧 MCPToolExecutor: read_file")
         println("  Original path: '$path'")
@@ -110,12 +107,13 @@ class MCPToolExecutor(private val mcpClient: MCPClient) {
             ?: return "Error: 'path' parameter is required"
         val content = args["content"]?.jsonPrimitive?.content
             ?: return "Error: 'content' parameter is required"
-        val normalizedPath = normalizePath(path)
+
+        // Нормализуем путь через LLM
+        val normalizedPath = pathNormalizer.normalizePath(path, "update_file")
 
         println("🔧 MCPToolExecutor: update_file")
         println("  Original path: '$path'")
         println("  Normalized path: '$normalizedPath'")
-        println("  Path bytes: ${normalizedPath.toByteArray().map { it.toInt() }}")
         println("  Content length: ${content.length}")
 
         val response = mcpClient.updateFile(normalizedPath, content)
@@ -125,7 +123,7 @@ class MCPToolExecutor(private val mcpClient: MCPClient) {
     private suspend fun executeDeleteFile(args: JsonObject): String {
         val path = args["path"]?.jsonPrimitive?.content
             ?: return "Error: 'path' parameter is required"
-        val normalizedPath = normalizePath(path)
+        val normalizedPath = path.replace("\\", "/").replace("\u0001", "/")
 
         val response = mcpClient.deleteFile(normalizedPath)
         return response.message
@@ -133,7 +131,7 @@ class MCPToolExecutor(private val mcpClient: MCPClient) {
     
     private suspend fun executeListFiles(args: JsonObject): String {
         val dir = args["dir"]?.jsonPrimitive?.contentOrNull
-        val normalizedDir = dir?.let { normalizePath(it) }
+        val normalizedDir = dir?.let { it.replace("\\", "/").replace("\u0001", "/") }
 
         val response = mcpClient.listFiles(normalizedDir)
         
@@ -168,7 +166,7 @@ class MCPToolExecutor(private val mcpClient: MCPClient) {
         val path = args["path"]?.jsonPrimitive?.content
             ?: return "Error: 'path' parameter is required"
         val recursive = args["recursive"]?.jsonPrimitive?.booleanOrNull ?: false
-        val normalizedPath = normalizePath(path)
+        val normalizedPath = path.replace("\\", "/").replace("\u0001", "/")
 
         val response = mcpClient.createDirectory(normalizedPath, recursive)
         return "Directory '${response.path}' created successfully"
@@ -177,7 +175,7 @@ class MCPToolExecutor(private val mcpClient: MCPClient) {
     private suspend fun executeDeleteDirectory(args: JsonObject): String {
         val path = args["path"]?.jsonPrimitive?.content
             ?: return "Error: 'path' parameter is required"
-        val normalizedPath = normalizePath(path)
+        val normalizedPath = path.replace("\\", "/").replace("\u0001", "/")
 
         val response = mcpClient.deleteDirectory(normalizedPath)
         return response.message
@@ -185,7 +183,7 @@ class MCPToolExecutor(private val mcpClient: MCPClient) {
     
     private suspend fun executeListDirectory(args: JsonObject): String {
         val path = args["path"]?.jsonPrimitive?.contentOrNull
-        val normalizedPath = path?.let { normalizePath(it) }
+        val normalizedPath = path?.let { it.replace("\\", "/").replace("\u0001", "/") }
 
         return executeListFiles(buildJsonObject {
             if (normalizedPath != null) {
