@@ -20,15 +20,16 @@ import ru.marslab.ide.ride.model.mcp.*
 import ru.marslab.ide.ride.formatter.ToolResultFormatter
 
 /**
- * Chat Agent с поддержкой MCP Tools через Yandex GPT Tools API
+ * MCP FileSystem Agent - специализированный агент для работы с файловой системой через MCP Tools
+ * Использует Yandex GPT Tools API для выполнения файловых операций
  */
-class ChatAgentWithTools(
+class MCPFileSystemAgent(
     private val config: YandexGPTConfig,
     private val systemPrompt: String = DEFAULT_SYSTEM_PROMPT,
     private val llmProvider: LLMProvider? = null
 ) {
-    
-    private val logger = Logger.getInstance(ChatAgentWithTools::class.java)
+
+    private val logger = Logger.getInstance(MCPFileSystemAgent::class.java)
     private val toolsProvider = YandexGPTToolsProvider(config)
     private val serverManager = MCPServerManager.getInstance()
     private val toolResultFormatter = ToolResultFormatter()

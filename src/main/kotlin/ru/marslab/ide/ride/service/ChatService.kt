@@ -8,20 +8,17 @@ import com.intellij.openapi.project.Project
 import kotlinx.coroutines.*
 import ru.marslab.ide.ride.agent.Agent
 import ru.marslab.ide.ride.agent.AgentFactory
-import ru.marslab.ide.ride.agent.AgentOrchestrator
 import ru.marslab.ide.ride.agent.OrchestratorStep
 import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceProvider
 import ru.marslab.ide.ride.integration.llm.impl.YandexGPTProvider
 import ru.marslab.ide.ride.agent.impl.ChatAgent
-import ru.marslab.ide.ride.agent.impl.ChatAgentWithTools
+import ru.marslab.ide.ride.agent.impl.MCPFileSystemAgent
 import ru.marslab.ide.ride.integration.llm.impl.YandexGPTConfig
 import ru.marslab.ide.ride.mcp.MCPServerManager
 import ru.marslab.ide.ride.model.agent.*
 import ru.marslab.ide.ride.model.chat.*
 import ru.marslab.ide.ride.model.llm.*
-import ru.marslab.ide.ride.model.task.*
 import ru.marslab.ide.ride.model.schema.*
-import ru.marslab.ide.ride.model.mcp.*
 import ru.marslab.ide.ride.model.chat.ChatSession
 import ru.marslab.ide.ride.settings.PluginSettings
 import ru.marslab.ide.ride.util.TokenEstimator
@@ -255,7 +252,7 @@ class ChatService {
                 )
                 
                 // Создаем агента с поддержкой tools
-                val agentWithTools = ChatAgentWithTools(config)
+                val mcpFileSystemAgent = MCPFileSystemAgent(config)
                 
                 // Формируем историю для агента (включаем системные сообщения для контекста)
                 val allMessages = if (wasEmpty) {
@@ -286,7 +283,7 @@ class ChatService {
 
                 // Измеряем время выполнения
                 val startTime = System.currentTimeMillis()
-                val agentResponse = agentWithTools.processRequest(
+                val agentResponse = mcpFileSystemAgent.processRequest(
                     userMessage = userMessage,
                     conversationHistory = conversationHistory,
                     parameters = llmParameters

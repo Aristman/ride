@@ -410,7 +410,7 @@ override suspend fun ask(req: AgentRequest): AgentResponse {
 }
 ```
 
-#### ChatAgentWithTools (файловая операция)
+#### MCPFileSystemAgent (файловая операция)
 
 ```kotlin
 // После выполнения MCP Tool
@@ -796,7 +796,7 @@ class ToolResultFormatter {
 - [ ] Обновить `TerminalAgent` (самый простой)
 - [ ] Обновить `ExecutorAgent`
 - [ ] Обновить `ChatAgent`
-- [ ] Обновить `ChatAgentWithTools`
+- [ ] Обновить `MCPFileSystemAgent`
 - [ ] Интеграционные тесты
 
 **Риски:** Средние. Нужно тщательно тестировать каждый агент.

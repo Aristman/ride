@@ -183,7 +183,7 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                 )
             }
             text.startsWith("/file ") -> {
-                // Команда с поддержкой файлов (используем ChatAgentWithTools)
+                // Команда с поддержкой файлов (используем MCPFileSystemAgent)
                 val actualMessage = text.removePrefix("/file ").trim()
                 sendMessageWithToolsMode(
                     project = project,
@@ -257,7 +257,7 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
     }
 
     /**
-     * Отправляет сообщение с поддержкой MCP Tools через ChatAgentWithTools
+     * Отправляет сообщение с поддержкой MCP Tools через MCPFileSystemAgent
      */
     private fun sendMessageWithToolsMode(
         project: Project,
