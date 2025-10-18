@@ -97,26 +97,5 @@ data class MCPSettings(
          * Создает пустые настройки
          */
         fun empty(): MCPSettings = MCPSettings(emptyList())
-        
-        /**
-         * Создает настройки по умолчанию с примерами
-         */
-        fun default(): MCPSettings = MCPSettings(
-            servers = listOf(
-                MCPServerConfig(
-                    name = "example-stdio",
-                    type = MCPServerType.STDIO,
-                    command = "node",
-                    args = listOf("path/to/mcp-server/index.js"),
-                    enabled = false
-                ),
-                MCPServerConfig(
-                    name = "example-http",
-                    type = MCPServerType.HTTP,
-                    url = "http://localhost:3000/mcp",
-                    enabled = false
-                )
-            )
-        )
     }
 }

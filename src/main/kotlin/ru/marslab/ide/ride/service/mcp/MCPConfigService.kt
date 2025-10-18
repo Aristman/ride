@@ -123,7 +123,7 @@ class MCPConfigService(private val project: Project) {
      * @return Настройки по умолчанию с примерами
      */
     fun getDefaultConfig(): MCPSettings {
-        return MCPSettings.default()
+        return MCPSettings.empty()
     }
     
     /**
