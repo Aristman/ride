@@ -182,6 +182,28 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                     }
                 )
             }
+            text.startsWith("/file ") -> {
+                // Команда с поддержкой файлов (используем ChatAgentWithTools)
+                val actualMessage = text.removePrefix("/file ").trim()
+                sendMessageWithToolsMode(
+                    project = project,
+                    text = actualMessage,
+                    onResponse = { message ->
+                        messageDisplayManager.removeLastSystemMessage()
+                        messageDisplayManager.displayMessage(message)
+                        updateContextSize()
+                    },
+                    onError = { error ->
+                        messageDisplayManager.removeLastSystemMessage()
+                        messageDisplayManager.displaySystemMessage("Ошибка: $error")
+                        setUIEnabled(true)
+                    },
+                    onComplete = {
+                        updateContextSize()
+                        setUIEnabled(true)
+                    }
+                )
+            }
             else -> {
                 // Обычное сообщение в чат
                 chatService.sendMessage(
@@ -207,11 +229,7 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                         messageDisplayManager.removeLastSystemMessage()
                         messageDisplayManager.displaySystemMessage("${ChatPanelConfig.Icons.ERROR} Ошибка: $error")
                         setUIEnabled(true)
-                    },
-//                onToolExecution = { toolInfo ->
-//                     Показываем индикатор выполнения tool
-//                    messageDisplayManager.displaySystemMessage("🔧 $toolInfo")
-//                }
+                    }
                 )
             }
         }
@@ -236,6 +254,33 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                 setUIEnabled(true)
             }
         )
+    }
+
+    /**
+     * Отправляет сообщение с поддержкой MCP Tools через ChatAgentWithTools
+     */
+    private fun sendMessageWithToolsMode(
+        project: Project,
+        text: String,
+        onResponse: (Message) -> Unit,
+        onError: (String) -> Unit,
+        onComplete: () -> Unit
+    ) {
+        chatService.sendMessageWithTools(
+            userMessage = text,
+            project = project,
+            onResponse = { message ->
+                onResponse(message)
+            },
+            onError = { error ->
+                onError(error)
+            },
+            onToolExecution = { toolInfo ->
+                // Показываем индикатор выполнения инструментов
+                messageDisplayManager.displaySystemMessage("🔧 $toolInfo")
+            }
+        )
+        onComplete()
     }
 
     /**

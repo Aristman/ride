@@ -32,70 +32,7 @@ class TerminalOutputFormatter {
         return FormattedOutput.single(terminalBlock)
     }
 
-    /**
-     * Создает HTML-представление терминального окна
-     */
-    fun createTerminalWindow(
-        command: String,
-        exitCode: Int,
-        executionTime: Long,
-        stdout: String,
-        stderr: String,
-        success: Boolean = exitCode == 0
-    ): String {
-        return buildString {
-            appendLine("<div class=\"terminal-output\">")
-            appendLine("  <div class=\"terminal-header\">")
-            appendLine("    <div class=\"terminal-title\">")
-            appendLine("      <span class=\"terminal-icon\">🖥️</span>")
-            appendLine("      <span class=\"terminal-text\">Terminal Output</span>")
-            appendLine("    </div>")
-            appendLine("    <div class=\"terminal-status\">")
-            if (success) {
-                appendLine("      <span class=\"status-success\">✅ Success</span>")
-            } else {
-                appendLine("      <span class=\"status-error\">❌ Error</span>")
-            }
-            appendLine("    </div>")
-            appendLine("  </div>")
-
-            appendLine("  <div class=\"terminal-info\">")
-            appendLine("    <div class=\"terminal-command\">")
-            appendLine("      <span class=\"command-label\">Command:</span>")
-            appendLine("      <span class=\"command-value\">${escapeHtml(command)}</span>")
-            appendLine("    </div>")
-            appendLine("    <div class=\"terminal-exit-code\">")
-            appendLine("      <span class=\"exit-code-label\">Exit Code:</span>")
-            appendLine("      <span class=\"exit-code-value\">$exitCode</span>")
-            appendLine("    </div>")
-            appendLine("    <div class=\"terminal-execution-time\">")
-            appendLine("      <span class=\"execution-time-label\">Execution Time:</span>")
-            appendLine("      <span class=\"execution-time-value\">${executionTime}ms</span>")
-            appendLine("    </div>")
-            appendLine("  </div>")
-
-            if (stdout.isNotEmpty()) {
-                appendLine("  <div class=\"terminal-stdout\">")
-                appendLine("    <pre class=\"terminal-content\">${escapeHtml(stdout)}</pre>")
-                appendLine("  </div>")
-            }
-
-            if (stderr.isNotEmpty()) {
-                appendLine("  <div class=\"terminal-stderr\">")
-                appendLine("    <pre class=\"terminal-content error\">${escapeHtml(stderr)}</pre>")
-                appendLine("  </div>")
-            }
-
-            if (stdout.isEmpty() && stderr.isEmpty()) {
-                appendLine("  <div class=\"terminal-output-content\">")
-                appendLine("    <pre class=\"terminal-content\">(No output)</pre>")
-                appendLine("  </div>")
-            }
-
-            appendLine("</div>")
-        }
-    }
-
+  
     /**
      * Создает содержимое для терминального блока
      */

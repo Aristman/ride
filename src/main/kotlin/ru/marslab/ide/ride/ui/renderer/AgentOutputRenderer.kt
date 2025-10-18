@@ -3,12 +3,21 @@ package ru.marslab.ide.ride.ui.renderer
 import ru.marslab.ide.ride.model.agent.AgentOutputType
 import ru.marslab.ide.ride.model.agent.FormattedOutput
 import ru.marslab.ide.ride.model.agent.FormattedOutputBlock
+import ru.marslab.ide.ride.ui.templates.*
+import ru.marslab.ide.ride.ui.renderer.ChatContentRenderer
 
 /**
  * Рендерер для форматированного вывода агентов
  */
 class AgentOutputRenderer {
     // Убираем зависимость от MessageDisplayManager для избежания циклической зависимости
+
+    // HTML шаблоны для разных типов блоков
+    private val terminalTemplate = TerminalBlockTemplate()
+    private val codeBlockTemplate = CodeBlockTemplate()
+    private val toolResultTemplate = ToolResultTemplate()
+    private val structuredBlockTemplate = StructuredBlockTemplate()
+    private val interactionScriptsTemplate = InteractionScriptsTemplate()
 
     /**
      * Рендерит форматированный вывод в HTML
@@ -51,50 +60,13 @@ class AgentOutputRenderer {
         val executionTime = metadata["executionTime"] as? Long ?: 0L
         val success = metadata["success"] as? Boolean ?: true
 
-        return buildString {
-            appendLine("<div class=\"terminal-output\">")
-            appendLine("  <div class=\"terminal-header\">")
-            appendLine("    <div class=\"terminal-title\">")
-            appendLine("      <span class=\"terminal-icon\">🖥️</span>")
-            appendLine("      <span class=\"terminal-text\">Terminal Output</span>")
-            appendLine("    </div>")
-            appendLine("    <div class=\"terminal-status\">")
-            if (success) {
-                appendLine("      <span class=\"status-success\">✅ Success</span>")
-            } else {
-                appendLine("      <span class=\"status-error\">❌ Error</span>")
-            }
-            appendLine("    </div>")
-            appendLine("  </div>")
-
-            if (command.isNotEmpty()) {
-                appendLine("  <div class=\"terminal-info\">")
-                appendLine("    <div class=\"terminal-command\">")
-                appendLine("      <span class=\"command-label\">Command:</span>")
-                appendLine("      <span class=\"command-value\">${escapeHtml(command)}</span>")
-                appendLine("    </div>")
-                appendLine("    <div class=\"terminal-exit-code\">")
-                appendLine("      <span class=\"exit-code-label\">Exit Code:</span>")
-                appendLine("      <span class=\"exit-code-value\">$exitCode</span>")
-                appendLine("    </div>")
-                if (executionTime > 0) {
-                    appendLine("    <div class=\"terminal-execution-time\">")
-                    appendLine("      <span class=\"execution-time-label\">Execution Time:</span>")
-                    appendLine("      <span class=\"execution-time-value\">${executionTime}ms</span>")
-                    appendLine("    </div>")
-                }
-                appendLine("  </div>")
-            }
-
-            appendLine("  <div class=\"terminal-body\">")
-            if (block.content.trim().isNotEmpty()) {
-                appendLine("    <pre class=\"terminal-content\">${escapeHtml(block.content)}</pre>")
-            } else {
-                appendLine("    <pre class=\"terminal-content\">(No output)</pre>")
-            }
-            appendLine("  </div>")
-            appendLine("</div>")
-        }
+        return terminalTemplate.render(
+            command = command,
+            exitCode = exitCode,
+            executionTime = executionTime,
+            success = success,
+            content = block.content
+        )
     }
 
     /**
@@ -104,31 +76,11 @@ class AgentOutputRenderer {
         val language = block.metadata["language"] as? String ?: ""
         val fileName = block.metadata["fileName"] as? String
 
-        return buildString {
-            appendLine("<div class=\"code-block-container\">")
-            appendLine("  <div class=\"code-block-header\">")
-            appendLine("    <div class=\"code-block-info\">")
-            if (language.isNotEmpty()) {
-                appendLine("      <span class=\"code-language\">$language</span>")
-            } else {
-                appendLine("      <span class=\"code-language\">text</span>")
-            }
-            if (fileName != null) {
-                appendLine("      <span class=\"code-filename\">$fileName</span>")
-            }
-            appendLine("    </div>")
-            appendLine("    <div class=\"code-block-actions\">")
-            appendLine("      <button class=\"code-copy-btn\" onclick=\"copyCodeBlock(this)\" title=\"Copy code\">")
-            appendLine("        <span class=\"copy-icon\">📋</span>")
-            appendLine("        <span class=\"copy-text\">Copy</span>")
-            appendLine("      </button>")
-            appendLine("    </div>")
-            appendLine("  </div>")
-            appendLine("  <div class=\"code-block-body\">")
-            appendLine("    <pre class=\"code-content\"><code class=\"language-$language\">${escapeHtml(block.content)}</code></pre>")
-            appendLine("  </div>")
-            appendLine("</div>")
-        }
+        return codeBlockTemplate.render(
+            content = block.content,
+            language = language,
+            fileName = fileName
+        )
     }
 
     /**
@@ -139,33 +91,12 @@ class AgentOutputRenderer {
         val operationType = block.metadata["operationType"] as? String ?: ""
         val success = block.metadata["success"] as? Boolean ?: true
 
-        return buildString {
-            appendLine("<div class=\"tool-result-block\">")
-            appendLine("  <div class=\"tool-result-header\">")
-            appendLine("    <div class=\"tool-info\">")
-            appendLine("      <span class=\"tool-icon\">🔧</span>")
-            appendLine("      <span class=\"tool-name\">$toolName</span>")
-            if (operationType.isNotEmpty()) {
-                appendLine("      <span class=\"operation-type\">$operationType</span>")
-            }
-            appendLine("    </div>")
-            appendLine("    <div class=\"tool-status\">")
-            if (success) {
-                appendLine("      <span class=\"status-success\">✅ Успешно</span>")
-            } else {
-                appendLine("      <span class=\"status-error\">❌ Ошибка</span>")
-            }
-            appendLine("    </div>")
-            appendLine("  </div>")
-
-            if (block.content.trim().isNotEmpty()) {
-                appendLine("  <div class=\"tool-result-content\">")
-                appendLine("    <div class=\"result-value\">${escapeHtml(block.content)}</div>")
-                appendLine("  </div>")
-            }
-
-            appendLine("</div>")
-        }
+        return toolResultTemplate.render(
+            content = block.content,
+            toolName = toolName,
+            operationType = operationType,
+            success = success
+        )
     }
 
     /**
@@ -178,7 +109,7 @@ class AgentOutputRenderer {
             contentRenderer.renderContentToHtml(block.content, true)
         } catch (e: Exception) {
             // Fallback если рендерер недоступен
-            "<div class=\"markdown-block\"><div class=\"markdown-content\">${escapeHtml(block.content)}</div></div>"
+            "<div class=\"markdown-block\"><div class=\"markdown-content\">${terminalTemplate.escapeHtml(block.content)}</div></div>"
         }
     }
 
@@ -188,17 +119,10 @@ class AgentOutputRenderer {
     private fun renderStructuredBlock(block: FormattedOutputBlock): String {
         val format = block.metadata["format"] as? String ?: "json"
 
-        return buildString {
-            appendLine("<div class=\"structured-block\">")
-            appendLine("  <div class=\"structured-header\">")
-            appendLine("    <span class=\"format-label\">$format</span>")
-            appendLine("    <button class=\"toggle-structured\" onclick=\"toggleStructured(this)\">▼</button>")
-            appendLine("  </div>")
-            appendLine("  <div class=\"structured-content\">")
-            appendLine("    <pre class=\"structured-data\"><code class=\"language-$format\">${escapeHtml(block.content)}</code></pre>")
-            appendLine("  </div>")
-            appendLine("</div>")
-        }
+        return structuredBlockTemplate.render(
+            content = block.content,
+            format = format
+        )
     }
 
     /**
@@ -213,18 +137,7 @@ class AgentOutputRenderer {
         }
     }
 
-    /**
-     * Экранирует HTML-символы
-     */
-    private fun escapeHtml(text: String): String {
-        return text
-            .replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-            .replace("\"", "&quot;")
-            .replace("'", "&#x27;")
-    }
-
+    
     /**
      * Рендерит несколько блоков с разделителями
      */
@@ -263,70 +176,6 @@ class AgentOutputRenderer {
      * Создает JavaScript код для интерактивности элементов
      */
     fun createInteractionScripts(): String {
-        return """
-            <script>
-            function copyCodeBlock(button) {
-                const container = button.closest('.code-block-container');
-                const codeElement = container.querySelector('.code-content code');
-                const text = codeElement.textContent;
-
-                navigator.clipboard.writeText(text).then(() => {
-                    const originalText = button.querySelector('.copy-text').textContent;
-                    button.querySelector('.copy-text').textContent = 'Copied!';
-                    button.style.background = 'var(--success-color, #4ade80)';
-
-                    setTimeout(() => {
-                        button.querySelector('.copy-text').textContent = originalText;
-                        button.style.background = '';
-                    }, 2000);
-                }).catch(err => {
-                    console.error('Failed to copy text: ', err);
-                });
-            }
-
-            function toggleStructured(button) {
-                const container = button.closest('.structured-block');
-                const content = container.querySelector('.structured-content');
-                const arrow = button.querySelector('.toggle-structured');
-
-                if (content.style.display === 'none') {
-                    content.style.display = 'block';
-                    arrow.textContent = '▼';
-                } else {
-                    content.style.display = 'none';
-                    arrow.textContent = '▶';
-                }
-            }
-
-            function toggleMetadata(button) {
-                const container = button.closest('.tool-metadata');
-                const content = container.querySelector('.metadata-content');
-                const arrow = button.querySelector('.metadata-arrow');
-
-                if (content.style.display === 'none') {
-                    content.style.display = 'block';
-                    arrow.textContent = '▼';
-                } else {
-                    content.style.display = 'none';
-                    arrow.textContent = '▶';
-                }
-            }
-
-            function viewFullContent(button) {
-                const container = button.closest('.tool-code-content');
-                const preview = container.querySelector('.code-preview-body');
-                const fullContent = container.querySelector('.full-code-content');
-
-                if (fullContent) {
-                    preview.style.display = 'none';
-                    fullContent.style.display = 'block';
-                    button.textContent = 'Hide';
-                } else {
-                    preview.style.display = 'block';
-                    button.textContent = 'View Full';
-                }
-            }
-            </script>
-        """.trimIndent()
+        return interactionScriptsTemplate.createScripts()
     }
 }
