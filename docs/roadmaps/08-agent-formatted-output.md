@@ -228,28 +228,168 @@
   - Изменение файла: diff-представление
   - Удаление файла: подтверждение операции
 
-### 8. Обновление UI-слоя
+### 8. Обновление ChatService
 
-- [ ] Создать `AgentOutputRenderer`:
+**Файл:** `src/main/kotlin/ru/marslab/ide/ride/service/ChatService.kt`
+
+- [ ] Обновить метод `sendMessage()`:
   ```kotlin
-  class AgentOutputRenderer {
+  // Добавить 1 строку в metadata:
+  val assistantMsg = Message(
+      content = agentResponse.content,
+      role = MessageRole.ASSISTANT,
+      metadata = agentResponse.metadata + mapOf(
+          "isFinal" to agentResponse.isFinal,
+          "uncertainty" to (agentResponse.uncertainty ?: 0.0),
+          "responseTimeMs" to responseTime,
+          "tokensUsed" to tokensUsed,
+          "tokenUsage" to tokenUsage,
+          "formattedOutput" to agentResponse.formattedOutput  // ⭐ ДОБАВИТЬ
+      )
+  )
+  ```
+
+- [ ] Обновить метод `sendMessageWithTools()`:
+  - Добавить `"formattedOutput" to agentResponse.formattedOutput` в metadata
+  - Аналогично `sendMessage()`
+
+- [ ] Обновить метод `executeTerminalCommand()`:
+  - Добавить `"formattedOutput" to agentResponse.formattedOutput` в metadata
+  - Аналогично `sendMessage()`
+
+**Объём изменений:** 3 строки кода (по 1 в каждом методе)
+
+**Риски:** Минимальные. Простое добавление в map, не ломает существующий функционал.
+
+---
+
+### 9. Обновление UI-слоя
+
+#### 9.1. Создание AgentOutputRenderer
+
+**Файл:** `src/main/kotlin/ru/marslab/ide/ride/ui/renderer/AgentOutputRenderer.kt` (новый)
+
+- [ ] Создать класс `AgentOutputRenderer`:
+  ```kotlin
+  class AgentOutputRenderer(
+      private val messageDisplayManager: MessageDisplayManager
+  ) {
       fun render(formattedOutput: FormattedOutput): String
-      fun renderTerminal(output: FormattedOutput): String
-      fun renderCodeBlocks(output: FormattedOutput): String
-      fun renderMarkdown(content: String): String
+      private fun renderTerminalBlock(block: FormattedOutputBlock): String
+      private fun renderCodeBlock(block: FormattedOutputBlock): String
+      private fun renderToolResultBlock(block: FormattedOutputBlock): String
+      private fun renderMarkdownBlock(block: FormattedOutputBlock): String
+      private fun renderStructuredBlock(block: FormattedOutputBlock): String
   }
   ```
 
-- [ ] Обновить `MessageDisplayManager`:
-  - Проверять наличие `formattedOutput` в `AgentResponse`
-  - Использовать `AgentOutputRenderer` для специализированного рендеринга
-  - Fallback на обычный markdown-рендеринг для обратной совместимости
+- [ ] Реализовать метод `render()`:
+  - Сортировать блоки по `order`
+  - Рендерить каждый блок в зависимости от типа
+  - Добавлять разделители между блоками
+  - Обрабатывать ошибки с fallback на `rawContent`
 
-- [ ] Обновить `ChatContentRenderer`:
-  - Добавить поддержку новых CSS-классов
-  - Интегрировать с `AgentOutputRenderer`
+- [ ] Реализовать `renderTerminalBlock()`:
+  - Создавать HTML с классом `.terminal-output`
+  - Отображать метаданные команды (command, exitCode, executionTime)
+  - Разделять stdout/stderr с разными стилями
+  - Добавлять иконки статуса (✅/❌)
 
-### 9. Стилизация и темы
+- [ ] Реализовать `renderCodeBlock()`:
+  - Создавать HTML с классом `.code-block-container`
+  - Добавлять заголовок с языком программирования
+  - Регистрировать код для копирования
+  - Добавлять кнопку "Copy"
+
+- [ ] Реализовать `renderToolResultBlock()`:
+  - Создавать HTML с классом `.tool-result-block`
+  - Отображать название инструмента и статус
+  - Форматировать результат операции
+  - Поддержка файловых операций (создание, чтение, изменение, удаление)
+
+- [ ] Реализовать `renderMarkdownBlock()`:
+  - Использовать существующий `ChatContentRenderer`
+  - Обрабатывать markdown-разметку
+  - Поддержка вложенных элементов
+
+- [ ] Реализовать `renderStructuredBlock()`:
+  - Форматирование JSON/XML данных
+  - Подсветка синтаксиса
+  - Сворачиваемые секции для больших данных
+
+**Объём работы:** ~300 строк кода
+
+**Риски:** Низкие. Новый класс, не затрагивает существующий код.
+
+#### 9.2. Обновление MessageDisplayManager
+
+**Файл:** `src/main/kotlin/ru/marslab/ide/ride/ui/manager/MessageDisplayManager.kt`
+
+- [ ] Добавить поле `agentOutputRenderer` в конструктор:
+  ```kotlin
+  class MessageDisplayManager(
+      private val htmlDocumentManager: HtmlDocumentManager,
+      private val contentRenderer: ChatContentRenderer,
+      private val agentOutputRenderer: AgentOutputRenderer  // ⭐ ДОБАВИТЬ
+  ) {
+      // ...
+  }
+  ```
+
+- [ ] Обновить метод `displayAssistantMessage()`:
+  ```kotlin
+  private fun displayAssistantMessage(message: Message) {
+      val prefix = createAssistantPrefix(message)
+      
+      // ⭐ ДОБАВИТЬ ПРОВЕРКУ formattedOutput
+      val formattedOutput = message.metadata["formattedOutput"] as? FormattedOutput
+      val bodyHtml = if (formattedOutput != null) {
+          agentOutputRenderer.render(formattedOutput)
+      } else {
+          contentRenderer.renderContentToHtml(message.content, isJcefMode())
+      }
+      
+      val statusHtml = createAssistantStatusHtml(message)
+      val isAfterSystem = lastRole == MessageRole.SYSTEM
+
+      val messageHtml = contentRenderer.createMessageBlock(
+          role = ChatPanelConfig.RoleClasses.ASSISTANT,
+          prefix = prefix,
+          content = bodyHtml,
+          statusHtml = statusHtml,
+          isUser = false,
+          isAfterSystem = isAfterSystem
+      )
+
+      htmlDocumentManager.appendHtml(messageHtml)
+  }
+  ```
+
+- [ ] Обновить инициализацию в `ChatPanel`:
+  - Создать экземпляр `AgentOutputRenderer`
+  - Передать в конструктор `MessageDisplayManager`
+
+**Объём изменений:** 
+- 1 новое поле в конструкторе
+- 6 строк кода в методе `displayAssistantMessage()`
+- 2 строки для инициализации в `ChatPanel`
+
+**Риски:** Низкие. Fallback на старый рендеринг гарантирует совместимость.
+
+#### 9.3. ChatContentRenderer — без изменений
+
+**Файл:** `src/main/kotlin/ru/marslab/ide/ride/ui/renderer/ChatContentRenderer.kt`
+
+- [x] Оставить без изменений
+  - Все существующие методы продолжают работать
+  - Используется как fallback для старых агентов
+  - Используется для рендеринга markdown-блоков
+
+**Объём изменений:** 0 строк
+
+**Риски:** Нет.
+
+### 10. Стилизация и темы
 
 - [ ] Добавить CSS для терминального окна:
   - Темная тема (по умолчанию)
@@ -276,7 +416,7 @@
   - `.block-separator` - разделитель между блоками
   - Анимации переходов между блоками
 
-### 10. Тестирование и документация
+### 11. Тестирование и документация
 
 - [ ] Написать unit-тесты:
   - `TerminalOutputFormatterTest`
@@ -308,7 +448,7 @@
   - Обработка вложенных блоков
   - Fallback на сырой контент при ошибках
 
-### 11. Обратная совместимость
+### 12. Обратная совместимость
 
 - [ ] Обеспечить работу существующего кода:
   - `formattedOutput` опционален в `AgentResponse`
@@ -326,17 +466,18 @@
 2. Создание HTML-шаблонов (задача 2)
 3. Классификация агентов (задача 3)
 4. Доработка TerminalAgent (задача 4)
-5. Обновление UI-слоя (задача 8)
+5. Обновление ChatService (задача 8) ⭐
+6. Обновление UI-слоя (задача 9) ⭐
 
 ### Средний приоритет
-6. Доработка ExecutorAgent (задача 5)
-7. Доработка ChatAgent (задача 6)
-8. Доработка ChatAgentWithTools (задача 7)
-9. Стилизация и темы (задача 9)
+7. Доработка ExecutorAgent (задача 5)
+8. Доработка ChatAgent (задача 6)
+9. Доработка ChatAgentWithTools (задача 7)
+10. Стилизация и темы (задача 10)
 
 ### Низкий приоритет
-10. Тестирование и документация (задача 10)
-11. Обратная совместимость (задача 11)
+11. Тестирование и документация (задача 11)
+12. Обратная совместимость (задача 12)
 
 ## Ожидаемый результат
 
