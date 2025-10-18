@@ -5,36 +5,32 @@ package ru.marslab.ide.ride.ui.templates
  */
 class CodeBlockTemplate : BaseHtmlTemplate() {
 
+    companion object {
+        private const val TEMPLATE_FILE = "code-block.html"
+        private var cachedTemplate: String? = null
+
+        private fun getTemplate(): String {
+            return cachedTemplate ?: TemplateLoader.loadHtmlTemplate(TEMPLATE_FILE).also {
+                cachedTemplate = it
+            }
+        }
+    }
+
     fun render(
         content: String,
         language: String = "",
         fileName: String? = null
     ): String {
-        return buildString {
-            appendLine("<div class=\"code-block-container\">")
-            appendLine("  <div class=\"code-block-header\">")
-            appendLine("    <div class=\"code-block-info\">")
-            if (language.isNotEmpty()) {
-                appendLine("      <span class=\"code-language\">$language</span>")
-            } else {
-                appendLine("      <span class=\"code-language\">text</span>")
-            }
-            if (fileName != null) {
-                appendLine("      <span class=\"code-filename\">$fileName</span>")
-            }
-            appendLine("    </div>")
-            appendLine("    <div class=\"code-block-actions\">")
-            appendLine("      <button class=\"code-copy-btn\" onclick=\"copyCodeBlock(this)\" title=\"Copy code\">")
-            appendLine("        <span class=\"copy-icon\">📋</span>")
-            appendLine("        <span class=\"copy-text\">Copy</span>")
-            appendLine("      </button>")
-            appendLine("    </div>")
-            appendLine("  </div>")
-            appendLine("  <div class=\"code-block-body\">")
-            appendLine("    <pre class=\"code-content\"><code class=\"language-$language\">${escapeHtml(content)}</code></pre>")
-            appendLine("  </div>")
-            appendLine("</div>")
+        val variables = mutableMapOf(
+            "content" to content,
+            "language" to if (language.isNotEmpty()) language else "text"
+        )
+
+        if (fileName != null) {
+            variables["fileName"] = fileName
         }
+
+        return processTemplate(getTemplate(), variables)
     }
 
     override fun render(variables: Map<String, Any>): String {

@@ -24,13 +24,48 @@ abstract class BaseHtmlTemplate : HtmlTemplate {
     }
 
     /**
-     * Подставляет переменные в шаблон
+     * Подставляет переменные в шаблон с поддержкой простых условных блоков
+     * Формат: {{variable}} для подстановки, {{#condition}}...{{/condition}} для условных блоков
      */
-    protected fun substituteVariables(template: String, variables: Map<String, Any>): String {
+    protected fun processTemplate(template: String, variables: Map<String, Any>): String {
         var result = template
-        variables.forEach { (key, value) ->
-            result = result.replace("{{$key}}", value.toString())
+
+        // Обработка условных блоков (простая реализация)
+        // {{#condition}}...{{/condition}} - показывается если condition не null/empty/false
+        val conditionalRegex = Regex("""\{\{#(\w+)\}\}(.*?)\{\{/\1\}\}""")
+        result = conditionalRegex.replace(result) { match ->
+            val condition = match.groupValues[1]
+            val content = match.groupValues[2]
+            val value = variables[condition]
+
+            when {
+                value == null || value == false || value.toString().isEmpty() -> ""
+                value is Collection<*> && value.isEmpty() -> ""
+                else -> content
+            }
         }
+
+        // Обработка отрицательных условных блоков
+        // {{^condition}}...{{/condition}} - показывается если condition null/empty/false
+        val negativeConditionalRegex = Regex("""\{\{(\^)(\w+)\}\}(.*?)\{\{/\2\}\}""")
+        result = negativeConditionalRegex.replace(result) { match ->
+            val negation = match.groupValues[1]
+            val condition = match.groupValues[2]
+            val content = match.groupValues[3]
+            val value = variables[condition]
+
+            when {
+                value == null || value == false || value.toString().isEmpty() -> content
+                value is Collection<*> && value.isEmpty() -> content
+                else -> ""
+            }
+        }
+
+        // Подстановка переменных
+        variables.forEach { (key, value) ->
+            result = result.replace("{{$key}}", escapeHtml(value.toString()))
+        }
+
         return result
     }
 }

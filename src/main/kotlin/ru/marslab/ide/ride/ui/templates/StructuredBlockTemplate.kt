@@ -5,21 +5,27 @@ package ru.marslab.ide.ride.ui.templates
  */
 class StructuredBlockTemplate : BaseHtmlTemplate() {
 
+    companion object {
+        private const val TEMPLATE_FILE = "structured-block.html"
+        private var cachedTemplate: String? = null
+
+        private fun getTemplate(): String {
+            return cachedTemplate ?: TemplateLoader.loadHtmlTemplate(TEMPLATE_FILE).also {
+                cachedTemplate = it
+            }
+        }
+    }
+
     fun render(
         content: String,
         format: String = "json"
     ): String {
-        return buildString {
-            appendLine("<div class=\"structured-block\">")
-            appendLine("  <div class=\"structured-header\">")
-            appendLine("    <span class=\"format-label\">$format</span>")
-            appendLine("    <button class=\"toggle-structured\" onclick=\"toggleStructured(this)\">▼</button>")
-            appendLine("  </div>")
-            appendLine("  <div class=\"structured-content\">")
-            appendLine("    <pre class=\"structured-data\"><code class=\"language-$format\">${escapeHtml(content)}</code></pre>")
-            appendLine("  </div>")
-            appendLine("</div>")
-        }
+        val variables = mapOf(
+            "content" to content,
+            "format" to format
+        )
+
+        return processTemplate(getTemplate(), variables)
     }
 
     override fun render(variables: Map<String, Any>): String {

@@ -5,6 +5,17 @@ package ru.marslab.ide.ride.ui.templates
  */
 class TerminalBlockTemplate : BaseHtmlTemplate() {
 
+    companion object {
+        private const val TEMPLATE_FILE = "terminal-block.html"
+        private var cachedTemplate: String? = null
+
+        private fun getTemplate(): String {
+            return cachedTemplate ?: TemplateLoader.loadHtmlTemplate(TEMPLATE_FILE).also {
+                cachedTemplate = it
+            }
+        }
+    }
+
     fun render(
         command: String,
         exitCode: Int,
@@ -12,50 +23,18 @@ class TerminalBlockTemplate : BaseHtmlTemplate() {
         success: Boolean,
         content: String
     ): String {
-        return buildString {
-            appendLine("<div class=\"terminal-output\">")
-            appendLine("  <div class=\"terminal-header\">")
-            appendLine("    <div class=\"terminal-title\">")
-            appendLine("      <span class=\"terminal-icon\">🖥️</span>")
-            appendLine("      <span class=\"terminal-text\">Terminal Output</span>")
-            appendLine("    </div>")
-            appendLine("    <div class=\"terminal-status\">")
-            if (success) {
-                appendLine("      <span class=\"status-success\">✅ Success</span>")
-            } else {
-                appendLine("      <span class=\"status-error\">❌ Error</span>")
-            }
-            appendLine("    </div>")
-            appendLine("  </div>")
+        val variables = mapOf(
+            "command" to command,
+            "exitCode" to exitCode,
+            "executionTime" to executionTime,
+            "success" to success,
+            "content" to content,
+            "statusIcon" to if (success) "✅" else "❌",
+            "statusText" to if (success) "Success" else "Error",
+            "commandInfo" to command.isNotEmpty()
+        )
 
-            if (command.isNotEmpty()) {
-                appendLine("  <div class=\"terminal-info\">")
-                appendLine("    <div class=\"terminal-command\">")
-                appendLine("      <span class=\"command-label\">Command:</span>")
-                appendLine("      <span class=\"command-value\">${escapeHtml(command)}</span>")
-                appendLine("    </div>")
-                appendLine("    <div class=\"terminal-exit-code\">")
-                appendLine("      <span class=\"exit-code-label\">Exit Code:</span>")
-                appendLine("      <span class=\"exit-code-value\">$exitCode</span>")
-                appendLine("    </div>")
-                if (executionTime > 0) {
-                    appendLine("    <div class=\"terminal-execution-time\">")
-                    appendLine("      <span class=\"execution-time-label\">Execution Time:</span>")
-                    appendLine("      <span class=\"execution-time-value\">${executionTime}ms</span>")
-                    appendLine("    </div>")
-                }
-                appendLine("  </div>")
-            }
-
-            appendLine("  <div class=\"terminal-body\">")
-            if (content.trim().isNotEmpty()) {
-                appendLine("    <pre class=\"terminal-content\">${escapeHtml(content)}</pre>")
-            } else {
-                appendLine("    <pre class=\"terminal-content\">(No output)</pre>")
-            }
-            appendLine("  </div>")
-            appendLine("</div>")
-        }
+        return processTemplate(getTemplate(), variables)
     }
 
     override fun render(variables: Map<String, Any>): String {

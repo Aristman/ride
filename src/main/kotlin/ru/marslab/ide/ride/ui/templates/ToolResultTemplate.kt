@@ -5,39 +5,34 @@ package ru.marslab.ide.ride.ui.templates
  */
 class ToolResultTemplate : BaseHtmlTemplate() {
 
+    companion object {
+        private const val TEMPLATE_FILE = "tool-result.html"
+        private var cachedTemplate: String? = null
+
+        private fun getTemplate(): String {
+            return cachedTemplate ?: TemplateLoader.loadHtmlTemplate(TEMPLATE_FILE).also {
+                cachedTemplate = it
+            }
+        }
+    }
+
     fun render(
         content: String,
         toolName: String,
         operationType: String = "",
         success: Boolean = true
     ): String {
-        return buildString {
-            appendLine("<div class=\"tool-result-block\">")
-            appendLine("  <div class=\"tool-result-header\">")
-            appendLine("    <div class=\"tool-info\">")
-            appendLine("      <span class=\"tool-icon\">🔧</span>")
-            appendLine("      <span class=\"tool-name\">$toolName</span>")
-            if (operationType.isNotEmpty()) {
-                appendLine("      <span class=\"operation-type\">$operationType</span>")
-            }
-            appendLine("    </div>")
-            appendLine("    <div class=\"tool-status\">")
-            if (success) {
-                appendLine("      <span class=\"status-success\">✅ Успешно</span>")
-            } else {
-                appendLine("      <span class=\"status-error\">❌ Ошибка</span>")
-            }
-            appendLine("    </div>")
-            appendLine("  </div>")
+        val variables = mutableMapOf(
+            "content" to content,
+            "toolName" to toolName,
+            "success" to success
+        )
 
-            if (content.trim().isNotEmpty()) {
-                appendLine("  <div class=\"tool-result-content\">")
-                appendLine("    <div class=\"result-value\">${escapeHtml(content)}</div>")
-                appendLine("  </div>")
-            }
-
-            appendLine("</div>")
+        if (operationType.isNotEmpty()) {
+            variables["operationType"] = operationType
         }
+
+        return processTemplate(getTemplate(), variables)
     }
 
     override fun render(variables: Map<String, Any>): String {
