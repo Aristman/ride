@@ -2,6 +2,7 @@ package ru.marslab.ide.ride.actions
 
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
@@ -11,6 +12,7 @@ import kotlinx.coroutines.runBlocking
 import ru.marslab.ide.ride.agent.AgentFactory
 import ru.marslab.ide.ride.model.codeanalysis.AnalysisType
 import ru.marslab.ide.ride.model.codeanalysis.CodeAnalysisRequest
+import ru.marslab.ide.ride.model.codeanalysis.CodeAnalysisResult
 import ru.marslab.ide.ride.model.codeanalysis.ReportFormat
 import java.io.File
 
@@ -27,6 +29,10 @@ class AnalyzeCodeAction : AnAction("Analyze Code", "Запустить анал�
 
         // Запускаем анализ в фоновом режиме
         ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Анализ кода", true) {
+            private var analysisResult: CodeAnalysisResult? = null
+            private var reportFile: File? = null
+            private var error: Exception? = null
+
             override fun run(indicator: ProgressIndicator) {
                 indicator.text = "Инициализация анализа..."
                 indicator.isIndeterminate = false
@@ -55,24 +61,47 @@ class AnalyzeCodeAction : AnAction("Analyze Code", "Запустить анал�
                     indicator.fraction = 0.9
 
                     // Сохраняем отчет
-                    val reportFile = File(project.basePath, "code-analysis-report.md")
-                    reportFile.writeText(report)
+                    val file = File(project.basePath, "code-analysis-report.md")
+                    file.writeText(report)
 
                     indicator.fraction = 1.0
 
-                    // Показываем результат
-                    Messages.showInfoMessage(
-                        project,
-                        "Анализ завершен!\n\n" +
-                        "Найдено проблем: ${result.findings.size}\n" +
-                        "Отчет сохранен: ${reportFile.absolutePath}",
-                        "Анализ кода"
-                    )
+                    // Сохраняем результаты для показа в EDT
+                    analysisResult = result
+                    reportFile = file
 
                 } catch (ex: Exception) {
+                    error = ex
+                }
+            }
+
+            override fun onSuccess() {
+                // Показываем результат в EDT
+                ApplicationManager.getApplication().invokeLater {
+                    if (error != null) {
+                        Messages.showErrorDialog(
+                            project,
+                            "Ошибка при анализе: ${error?.message}",
+                            "Ошибка анализа кода"
+                        )
+                    } else if (analysisResult != null && reportFile != null) {
+                        Messages.showInfoMessage(
+                            project,
+                            "Анализ завершен!\n\n" +
+                            "Найдено проблем: ${analysisResult!!.findings.size}\n" +
+                            "Отчет сохранен: ${reportFile!!.absolutePath}",
+                            "Анализ кода"
+                        )
+                    }
+                }
+            }
+
+            override fun onThrowable(error: Throwable) {
+                // Показываем ошибку в EDT
+                ApplicationManager.getApplication().invokeLater {
                     Messages.showErrorDialog(
                         project,
-                        "Ошибка при анализе: ${ex.message}",
+                        "Ошибка при анализе: ${error.message}",
                         "Ошибка анализа кода"
                     )
                 }
