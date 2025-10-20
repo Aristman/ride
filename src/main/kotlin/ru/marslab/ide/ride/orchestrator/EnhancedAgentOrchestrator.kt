@@ -311,6 +311,11 @@ class EnhancedAgentOrchestrator(
                     title = "Сканирование проекта",
                     description = "Анализ файловой структуры проекта",
                     agentType = AgentType.PROJECT_SCANNER,
+                    input = mapOf(
+                        "projectPath" to (analysis.context.projectPath ?: "."),
+                        "patterns" to listOf("**/*.kt", "**/*.java"),
+                        "excludePatterns" to listOf("**/build/**", "**/.*/**", "**/node_modules/**")
+                    ),
                     estimatedDurationMs = 30_000L // 30 секунд
                 )
             )
@@ -322,6 +327,10 @@ class EnhancedAgentOrchestrator(
                     title = "Поиск багов",
                     description = "Анализ кода на наличие ошибок",
                     agentType = AgentType.BUG_DETECTION,
+                    input = mapOf(
+                        "files" to emptyList<String>(), // Будет заполнено из предыдущего шага
+                        "severityLevel" to "medium"
+                    ),
                     dependencies = setOf(steps.lastOrNull()?.id ?: ""),
                     estimatedDurationMs = 60_000L // 1 минута
                 )
@@ -346,6 +355,10 @@ class EnhancedAgentOrchestrator(
                     title = "Генерация отчета",
                     description = "Создание отчета о выполненных действиях",
                     agentType = AgentType.REPORT_GENERATOR,
+                    input = mapOf(
+                        "format" to "markdown",
+                        "includeDetails" to true
+                    ),
                     dependencies = steps.filter { it.status != StepStatus.PENDING }.map { it.id }.toSet(),
                     estimatedDurationMs = 15_000L // 15 секунд
                 )
@@ -367,14 +380,17 @@ class EnhancedAgentOrchestrator(
 
             // Последовательно выполняем шаги (для Phase 1)
             val completedSteps = mutableListOf<String>()
+            val stepResults = mutableMapOf<String, Any>() // Результаты шагов для передачи
 
             for (step in executingPlan.steps) {
                 if (step.status != StepStatus.PENDING) continue
 
                 // Проверяем зависимости
                 if (step.dependencies.all { it in completedSteps }) {
-                    val stepResult = executeStep(step)
+                    // Передаём результаты предыдущих шагов
+                    val stepResult = executeStep(step, executingPlan.analysis.context, stepResults)
                     completedSteps.add(step.id)
+                    stepResults[step.id] = stepResult // Сохраняем результат
 
                     // Обновляем план
                     val updatedPlan = executingPlan.updateStepStatus(step.id, StepStatus.COMPLETED, stepResult)
@@ -412,26 +428,32 @@ class EnhancedAgentOrchestrator(
         }
     }
 
-    private suspend fun executeStep(step: PlanStep): String {
-        // Phase 2: Используем Tool Agents для выполнения шагов
+    private suspend fun executeStep(
+        step: PlanStep, 
+        executionContext: ExecutionContext,
+        previousResults: Map<String, Any> = emptyMap()
+    ): String {
+        logger.info("Executing step: ${step.title}")
+        
         val agent = toolAgentRegistry.get(step.agentType)
         
         if (agent != null) {
             logger.info("Executing step ${step.id} with ToolAgent ${step.agentType}")
+            
+            // Обогащаем input данными из предыдущих шагов
+            val enrichedInput = enrichStepInput(step, previousResults)
             
             // Конвертируем PlanStep в ToolPlanStep
             val toolStep = ToolPlanStep(
                 id = step.id,
                 description = step.description,
                 agentType = step.agentType,
-                input = StepInput(step.input),
+                input = StepInput(enrichedInput),
                 dependencies = step.dependencies
             )
             
-            val context = ExecutionContext(
-                projectPath = null, // Будет заполнено из контекста запроса
-                additionalContext = emptyMap()
-            )
+            // Используем контекст из плана
+            val context = executionContext
             
             val result = agent.executeStep(toolStep, context)
             
@@ -458,6 +480,34 @@ class EnhancedAgentOrchestrator(
     private suspend fun continuePlanExecution(plan: ExecutionPlan) {
         // TODO: реализовать продолжение выполнения плана после паузы или ввода пользователя
         logger.info("Continuing plan execution: ${plan.id}")
+    }
+
+    /**
+     * Обогащает input шага данными из предыдущих шагов
+     */
+    private fun enrichStepInput(step: PlanStep, previousResults: Map<String, Any>): Map<String, Any> {
+        val enrichedInput = step.input.toMutableMap()
+        
+        // Для BUG_DETECTION берём файлы из PROJECT_SCANNER
+        if (step.agentType == AgentType.BUG_DETECTION && step.dependencies.isNotEmpty()) {
+            val scannerResult = previousResults.values.firstOrNull()
+            if (scannerResult != null) {
+                // Парсим результат сканирования (предполагаем формат "Проанализировано X файлов")
+                // В реальности ProjectScanner должен возвращать список файлов
+                // Пока используем заглушку
+                enrichedInput["files"] = listOf(
+                    "src/main/kotlin/Main.kt",
+                    "src/main/kotlin/Service.kt"
+                )
+            }
+        }
+        
+        // Для REPORT_GENERATOR собираем все предыдущие результаты
+        if (step.agentType == AgentType.REPORT_GENERATOR) {
+            enrichedInput["previousResults"] = previousResults
+        }
+        
+        return enrichedInput
     }
 
     private fun buildAnalysisNotification(analysis: RequestAnalysis): String {

@@ -217,7 +217,41 @@ class EnhancedChatAgent(
         fun create(llmProvider: LLMProvider): EnhancedChatAgent {
             val baseChatAgent = ChatAgent(llmProvider)
             val orchestrator = EnhancedAgentOrchestrator(llmProvider)
+            
+            // Регистрируем все доступные ToolAgents
+            registerToolAgents(orchestrator, llmProvider)
+            
             return EnhancedChatAgent(baseChatAgent, orchestrator)
+        }
+        
+        /**
+         * Регистрирует все ToolAgents в оркестраторе
+         */
+        private fun registerToolAgents(
+            orchestrator: EnhancedAgentOrchestrator,
+            llmProvider: LLMProvider
+        ) {
+            val registry = orchestrator.getToolAgentRegistry()
+            
+            // Регистрируем все Tool Agents из Phase 2
+            registry.register(
+                ru.marslab.ide.ride.agent.tools.ProjectScannerToolAgent()
+            )
+            registry.register(
+                ru.marslab.ide.ride.agent.tools.CodeChunkerToolAgent()
+            )
+            registry.register(
+                ru.marslab.ide.ride.agent.tools.BugDetectionToolAgent()
+            )
+            registry.register(
+                ru.marslab.ide.ride.agent.tools.CodeQualityToolAgent()
+            )
+            registry.register(
+                ru.marslab.ide.ride.agent.tools.ArchitectureToolAgent()
+            )
+            registry.register(
+                ru.marslab.ide.ride.agent.tools.ReportGeneratorToolAgent()
+            )
         }
     }
 }
