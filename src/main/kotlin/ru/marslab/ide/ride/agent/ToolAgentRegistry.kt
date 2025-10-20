@@ -85,6 +85,16 @@ class ToolAgentRegistry {
     }
     
     /**
+     * Получает агента для выполнения шага (алиас для findForStep)
+     * 
+     * @param step Шаг для обработки
+     * @return Агент или null, если подходящий не найден
+     */
+    fun getAgentForStep(step: ToolPlanStep): ToolAgent? {
+        return findForStep(step)
+    }
+    
+    /**
      * Возвращает список всех зарегистрированных агентов
      * 
      * @return Список агентов
