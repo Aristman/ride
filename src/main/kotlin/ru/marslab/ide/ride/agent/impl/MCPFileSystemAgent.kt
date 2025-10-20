@@ -3,37 +3,44 @@
 import com.intellij.openapi.diagnostic.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import ru.marslab.ide.ride.integration.llm.LLMProvider
 import ru.marslab.ide.ride.integration.llm.impl.YandexGPTConfig
 import ru.marslab.ide.ride.integration.llm.impl.YandexGPTToolsProvider
 import ru.marslab.ide.ride.mcp.MCPClient
 import ru.marslab.ide.ride.mcp.MCPServerManager
 import ru.marslab.ide.ride.mcp.MCPToolExecutor
 import ru.marslab.ide.ride.mcp.MCPToolsRegistry
+import ru.marslab.ide.ride.mcp.PathNormalizer
 import ru.marslab.ide.ride.model.agent.*
 import ru.marslab.ide.ride.model.chat.*
 import ru.marslab.ide.ride.model.llm.*
 import ru.marslab.ide.ride.model.task.*
 import ru.marslab.ide.ride.model.schema.*
 import ru.marslab.ide.ride.model.mcp.*
+import ru.marslab.ide.ride.formatter.ToolResultFormatter
 
 /**
- * Chat Agent с поддержкой MCP Tools через Yandex GPT Tools API
+ * MCP FileSystem Agent - специализированный агент для работы с файловой системой через MCP Tools
+ * Использует Yandex GPT Tools API для выполнения файловых операций
  */
-class ChatAgentWithTools(
+class MCPFileSystemAgent(
     private val config: YandexGPTConfig,
-    private val systemPrompt: String = DEFAULT_SYSTEM_PROMPT
+    private val systemPrompt: String = DEFAULT_SYSTEM_PROMPT,
+    private val llmProvider: LLMProvider? = null
 ) {
-    
-    private val logger = Logger.getInstance(ChatAgentWithTools::class.java)
+
+    private val logger = Logger.getInstance(MCPFileSystemAgent::class.java)
     private val toolsProvider = YandexGPTToolsProvider(config)
     private val serverManager = MCPServerManager.getInstance()
+    private val toolResultFormatter = ToolResultFormatter()
     
     private val mcpClient by lazy {
         MCPClient(serverManager.getServerUrl())
     }
     
     private val toolExecutor by lazy {
-        MCPToolExecutor(mcpClient)
+        val pathNormalizer = llmProvider?.let { PathNormalizer(it) }
+        MCPToolExecutor(mcpClient, pathNormalizer ?: PathNormalizer(createFallbackProvider()))
     }
     
     companion object {
@@ -82,6 +89,40 @@ class ChatAgentWithTools(
         """
 
         private const val MAX_TOOL_ITERATIONS = 5
+
+        /**
+         * Создает fallback LLM провайдер для PathNormalizer
+         */
+        private fun createFallbackProvider(): LLMProvider {
+            return object : LLMProvider {
+                override suspend fun sendRequest(
+                    systemPrompt: String,
+                    userMessage: String,
+                    conversationHistory: List<ConversationMessage>,
+                    parameters: LLMParameters
+                ): LLMResponse {
+                    // Простая эвристика для базовой нормализации
+                    val path = userMessage.substringAfterLast("Нормализуй путь для").substringBeforeLast(":").trim().trim('"')
+
+                    val normalized = path
+                        .replace("\\", "/")
+                        .replace("\u0001", "/")
+                        .replace(Regex("/+"), "/")
+                        .trim('/')
+                        .ifEmpty { "file.txt" }
+
+                    return LLMResponse(
+                        content = normalized,
+                        success = true,
+                        tokenUsage = TokenUsage(10, 5, 5)
+                    )
+                }
+
+                override fun isAvailable(): Boolean = true
+
+                override fun getProviderName(): String = "Fallback Path Normalizer"
+            }
+        }
     }
     
     /**
@@ -126,11 +167,28 @@ class ChatAgentWithTools(
 
             // Запускаем цикл tool calling
             val result = toolCallingLoop(messages, tools, parameters)
-            
-            AgentResponse.success(
-                content = result.content,
-                metadata = result.metadata
-            )
+
+            // Создаем форматированный вывод для результатов инструментов
+            val formattedOutput = if (result.metadata.containsKey("executedTools") &&
+                                   result.metadata["executedTools"]?.isNotEmpty() == true) {
+                // Извлекаем операции инструментов из результатов и форматируем их
+                createFormattedToolOutput(result.content, result.metadata)
+            } else {
+                null
+            }
+
+            if (formattedOutput != null) {
+                AgentResponse.success(
+                    content = result.content,
+                    formattedOutput = formattedOutput,
+                    metadata = result.metadata.toMap()
+                )
+            } else {
+                AgentResponse.success(
+                    content = result.content,
+                    metadata = result.metadata.toMap()
+                )
+            }
             
         } catch (e: Exception) {
             logger.error("Error processing request with tools", e)
@@ -309,7 +367,50 @@ class ChatAgentWithTools(
             }
         }
     }
-    
+
+    /**
+     * Создает форматированный вывод для результатов инструментов
+     */
+    private fun createFormattedToolOutput(
+        content: String,
+        metadata: Map<String, String>
+    ): ru.marslab.ide.ride.model.agent.FormattedOutput {
+        val blocks = mutableListOf<ru.marslab.ide.ride.model.agent.FormattedOutputBlock>()
+        var order = 0
+
+        // Основной контент ответа
+        if (content.trim().isNotEmpty()) {
+            blocks.add(ru.marslab.ide.ride.model.agent.FormattedOutputBlock.markdown(content, order++))
+        }
+
+        // Информация о выполненных инструментах
+        val executedTools = metadata["executedTools"]
+        if (!executedTools.isNullOrEmpty()) {
+            val toolsInfo = buildString {
+                appendLine("🔧 **Выполненные операции:**")
+                appendLine(executedTools.split(", ").joinToString(", ") { "`$it`" })
+            }
+            blocks.add(ru.marslab.ide.ride.model.agent.FormattedOutputBlock.toolResult(
+                content = toolsInfo,
+                toolName = "MCP Tools",
+                operationType = "multiple",
+                success = true,
+                order = order++
+            ))
+        }
+
+        // Дополнительная статистика
+        val stats = buildString {
+            metadata["iterations"]?.let { appendLine("Итераций: $it") }
+            metadata["totalTokens"]?.let { appendLine("Токенов: $it") }
+        }
+        if (stats.trim().isNotEmpty()) {
+            blocks.add(ru.marslab.ide.ride.model.agent.FormattedOutputBlock.markdown(stats, order++))
+        }
+
+        return ru.marslab.ide.ride.model.agent.FormattedOutput.multiple(blocks)
+    }
+
     private data class ToolCallingResult(
         val content: String,
         val metadata: Map<String, String>

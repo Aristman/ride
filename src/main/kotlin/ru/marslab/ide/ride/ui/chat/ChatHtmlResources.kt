@@ -1,6 +1,7 @@
 package ru.marslab.ide.ride.ui.chat
 
 import com.intellij.openapi.diagnostic.thisLogger
+import ru.marslab.ide.ride.ui.style.CommonStyles
 
 /**
  * Управление HTML-ресурсами чата
@@ -12,9 +13,7 @@ internal object ChatHtmlResources {
      * Загружает CSS стили из ресурсов
      */
     fun loadCss(): String {
-        return this::class.java.getResourceAsStream("/chat/chat.css")
-            ?.use { it.bufferedReader().readText() }
-            ?: error("Не удалось загрузить chat.css")
+        return CommonStyles.getJcefStyles()
     }
 
     /**

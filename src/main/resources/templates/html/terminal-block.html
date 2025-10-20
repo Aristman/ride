@@ -1,0 +1,25 @@
+<div class="terminal-output">
+  <div class="terminal-header">
+    <div class="terminal-title">
+      <span class="terminal-icon">🖥️</span>
+      <span class="terminal-text">Terminal Output</span>
+    </div>
+    <div class="terminal-status">
+      {{statusIcon}} {{statusText}}
+    </div>
+  </div>
+  <div class="terminal-info">
+    <div class="terminal-command">
+      <span class="command-label">Command:</span>
+      <span class="command-value accent-command">{{command}}</span>
+    </div>
+  </div>
+  <div class="terminal-body">
+    {{outputContent}}
+  </div>
+    <div class="terminal-exit-code">
+        <span class="exit-code-label">Exit Code:</span>
+        <span class="exit-code-value">{{exitCode}}</span>
+    </div>
+    {{executionTimeInfo}}
+</div>

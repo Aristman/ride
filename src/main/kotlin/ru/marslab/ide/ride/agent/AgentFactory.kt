@@ -2,6 +2,7 @@
 
 import com.intellij.openapi.components.service
 import ru.marslab.ide.ride.agent.impl.ChatAgent
+import ru.marslab.ide.ride.agent.impl.TerminalAgent
 import ru.marslab.ide.ride.integration.llm.LLMProvider
 import ru.marslab.ide.ride.integration.llm.impl.YandexGPTConfig
 import ru.marslab.ide.ride.integration.llm.impl.YandexGPTProvider
@@ -194,5 +195,14 @@ object AgentFactory {
         }
         
         return AgentOrchestrator(llmProvider, llmProvider)
+    }
+
+    /**
+     * Создает терминальный агент для выполнения локальных команд
+     *
+     * @return TerminalAgent готовый к использованию
+     */
+    fun createTerminalAgent(): Agent {
+        return TerminalAgent()
     }
 }

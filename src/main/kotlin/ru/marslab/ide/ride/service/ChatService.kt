@@ -1,4 +1,4 @@
-﻿package ru.marslab.ide.ride.service
+package ru.marslab.ide.ride.service
 
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.components.Service
@@ -8,20 +8,17 @@ import com.intellij.openapi.project.Project
 import kotlinx.coroutines.*
 import ru.marslab.ide.ride.agent.Agent
 import ru.marslab.ide.ride.agent.AgentFactory
-import ru.marslab.ide.ride.agent.AgentOrchestrator
 import ru.marslab.ide.ride.agent.OrchestratorStep
 import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceProvider
 import ru.marslab.ide.ride.integration.llm.impl.YandexGPTProvider
 import ru.marslab.ide.ride.agent.impl.ChatAgent
-import ru.marslab.ide.ride.agent.impl.ChatAgentWithTools
+import ru.marslab.ide.ride.agent.impl.MCPFileSystemAgent
 import ru.marslab.ide.ride.integration.llm.impl.YandexGPTConfig
 import ru.marslab.ide.ride.mcp.MCPServerManager
 import ru.marslab.ide.ride.model.agent.*
 import ru.marslab.ide.ride.model.chat.*
 import ru.marslab.ide.ride.model.llm.*
-import ru.marslab.ide.ride.model.task.*
 import ru.marslab.ide.ride.model.schema.*
-import ru.marslab.ide.ride.model.mcp.*
 import ru.marslab.ide.ride.model.chat.ChatSession
 import ru.marslab.ide.ride.settings.PluginSettings
 import ru.marslab.ide.ride.util.TokenEstimator
@@ -134,12 +131,13 @@ class ChatService {
                         }
                         
                         // Создаем и сохраняем сообщение ассистента с учетом анализа неопределенности
-                        val metadata = agentResponse.metadata + mapOf(
+                        val metadata = agentResponse.metadata + mapOf<String, Any>(
                             "isFinal" to agentResponse.isFinal,
                             "uncertainty" to (agentResponse.uncertainty ?: 0.0),
                             "responseTimeMs" to responseTime,
                             "tokensUsed" to tokensUsed,
-                            "tokenUsage" to (tokenUsage ?: TokenUsage.EMPTY)
+                            "tokenUsage" to (tokenUsage ?: TokenUsage.EMPTY),
+                            "formattedOutput" to (agentResponse.formattedOutput ?: Unit)
                         )
 
                         // Проверяем наличие системного сообщения о сжатии/обрезке
@@ -254,7 +252,7 @@ class ChatService {
                 )
                 
                 // Создаем агента с поддержкой tools
-                val agentWithTools = ChatAgentWithTools(config)
+                val mcpFileSystemAgent = MCPFileSystemAgent(config)
                 
                 // Формируем историю для агента (включаем системные сообщения для контекста)
                 val allMessages = if (wasEmpty) {
@@ -285,7 +283,7 @@ class ChatService {
 
                 // Измеряем время выполнения
                 val startTime = System.currentTimeMillis()
-                val agentResponse = agentWithTools.processRequest(
+                val agentResponse = mcpFileSystemAgent.processRequest(
                     userMessage = userMessage,
                     conversationHistory = conversationHistory,
                     parameters = llmParameters
@@ -325,12 +323,13 @@ class ChatService {
                         }
 
                         // Создаем метаданные
-                        val metadata = mapOf(
+                        val metadata = mapOf<String, Any>(
                             "responseTimeMs" to responseTime,
                             "tokenUsage" to tokenUsage,
                             "executedTools" to (executedTools ?: "none"),
                             "toolIterations" to (iterations ?: "0"),
-                            "usedMCPTools" to true
+                            "usedMCPTools" to true,
+                            "formattedOutput" to (agentResponse.formattedOutput ?: Unit)
                         )
 
                         val assistantMsg = Message(
@@ -500,6 +499,88 @@ class ChatService {
                 logger.error("Error processing message with orchestrator", e)
                 withContext(Dispatchers.EDT) {
                     onError(e.message ?: "Неизвестная ошибка")
+                }
+            }
+        }
+    }
+
+    /**
+     * Выполняет терминальную команду через TerminalAgent
+     * 
+     * @param command Команда для выполнения
+     * @param project Текущий проект
+     * @param onResponse Callback для получения ответа
+     * @param onError Callback для обработки ошибок
+     */
+    fun executeTerminalCommand(
+        command: String,
+        project: Project,
+        onResponse: (Message) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        if (command.isBlank()) {
+            onError("Команда не может быть пустой")
+            return
+        }
+
+        logger.info("Executing terminal command: $command")
+
+        scope.launch {
+            try {
+                // Создаем терминальный агент
+                val terminalAgent = AgentFactory.createTerminalAgent()
+                
+                // Формируем контекст
+                val context = ChatContext(
+                    project = project,
+                    history = getCurrentHistory().getMessages()
+                )
+                
+                // Создаем запрос
+                val request = AgentRequest(
+                    request = command,
+                    context = context,
+                    parameters = LLMParameters.DEFAULT
+                )
+                
+                // Выполняем команду
+                val startTime = System.currentTimeMillis()
+                val response = terminalAgent.ask(request)
+                val responseTime = System.currentTimeMillis() - startTime
+                
+                withContext(Dispatchers.EDT) {
+                    // Всегда показываем результат выполнения команды (даже при ошибке)
+                    val metadata = response.metadata + mapOf<String, Any>(
+                        "agentType" to "terminal",
+                        "responseTimeMs" to responseTime,
+                        "isFinal" to true,
+                        "uncertainty" to 0.0,
+                        "commandSuccess" to response.success,
+                        "formattedOutput" to (response.formattedOutput ?: Unit)
+                    )
+                    
+                    val message = Message(
+                        content = response.content,
+                        role = MessageRole.ASSISTANT,
+                        metadata = metadata
+                    )
+                    
+                    getCurrentHistory().addMessage(message)
+                    onResponse(message)
+                    
+                    // Логируем ошибку, но не прерываем показ результата
+                    if (!response.success) {
+                        logger.warn("Terminal command failed: ${response.error}")
+                    }
+                }
+                
+                // Освобождаем ресурсы
+                terminalAgent.dispose()
+                
+            } catch (e: Exception) {
+                logger.error("Error executing terminal command", e)
+                withContext(Dispatchers.EDT) {
+                    onError("Ошибка: ${e.message}")
                 }
             }
         }

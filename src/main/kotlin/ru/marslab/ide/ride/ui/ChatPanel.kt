@@ -19,6 +19,7 @@ import ru.marslab.ide.ride.ui.config.ChatPanelConfig
 import ru.marslab.ide.ride.ui.manager.HtmlDocumentManager
 import ru.marslab.ide.ride.ui.manager.MessageDisplayManager
 import ru.marslab.ide.ride.ui.renderer.ChatContentRenderer
+import ru.marslab.ide.ride.ui.renderer.AgentOutputRenderer
 import java.awt.BorderLayout
 import javax.swing.*
 
@@ -79,7 +80,8 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         // Инициализируем менеджеры и рендереры
         htmlDocumentManager = HtmlDocumentManager(settings, jcefView)
         contentRenderer = ChatContentRenderer()
-        messageDisplayManager = MessageDisplayManager(htmlDocumentManager, contentRenderer)
+        val agentOutputRenderer = AgentOutputRenderer()
+        messageDisplayManager = MessageDisplayManager(htmlDocumentManager, contentRenderer, agentOutputRenderer)
         uiBuilder = ChatUiBuilder(chatService, htmlDocumentManager) { this }
 
         // Инициализация HTML/темы
@@ -152,58 +154,133 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         setUIEnabled(false)
         messageDisplayManager.displaySystemMessage(ChatPanelConfig.Messages.PROCESSING_REQUEST)
 
-        if (text.startsWith("/plan ")) {
-            val actualMessage = text.removePrefix("/plan ").trim()
-            sendMessageWithOrchestratorMode(
-                project = project,
-                text = actualMessage,
-                onStepComplete = { message ->
-                    messageDisplayManager.removeLastSystemMessage()
-                    messageDisplayManager.displayMessage(message)
-                    updateContextSize()
-                },
-                onError = { error ->
-                    messageDisplayManager.removeLastSystemMessage()
-                    messageDisplayManager.displaySystemMessage("Ошибка: $error")
-                    setUIEnabled(true)
-                },
-                onComplete = {
-                    updateContextSize()
-                    setUIEnabled(true)
-                }
-            )
-        } else {
-            // Используем sendMessageWithTools для поддержки MCP операций
-            chatService.sendMessageWithTools(
-                userMessage = text,
-                project = project,
-                onResponse = { message ->
-                    // Системные сообщения (о сжатии) приходят первыми
-                    if (message.role == MessageRole.SYSTEM) {
-                        messageDisplayManager.displayMessage(message)
-                        // Обновляем счётчик с небольшой задержкой, чтобы история успела обновиться
-                        SwingUtilities.invokeLater {
-                            updateContextSize()
-                        }
-                    } else {
-                        // Ответ ассистента
+        when {
+            text.startsWith("/terminal ") || text.startsWith("/exec ") -> {
+                // Команда терминала
+                val command = text.removePrefix("/terminal ").removePrefix("/exec ").trim()
+                executeTerminalCommand(command)
+            }
+            text.startsWith("/plan ") -> {
+                // Режим планирования с оркестратором
+                val actualMessage = text.removePrefix("/plan ").trim()
+                sendMessageWithOrchestratorMode(
+                    project = project,
+                    text = actualMessage,
+                    onStepComplete = { message ->
                         messageDisplayManager.removeLastSystemMessage()
                         messageDisplayManager.displayMessage(message)
                         updateContextSize()
+                    },
+                    onError = { error ->
+                        messageDisplayManager.removeLastSystemMessage()
+                        messageDisplayManager.displaySystemMessage("Ошибка: $error")
+                        setUIEnabled(true)
+                    },
+                    onComplete = {
+                        updateContextSize()
                         setUIEnabled(true)
                     }
-                },
-                onError = { error ->
-                    messageDisplayManager.removeLastSystemMessage()
-                    messageDisplayManager.displaySystemMessage("${ChatPanelConfig.Icons.ERROR} Ошибка: $error")
-                    setUIEnabled(true)
-                },
-                onToolExecution = { toolInfo ->
-                    // Показываем индикатор выполнения tool
-                    messageDisplayManager.displaySystemMessage("🔧 $toolInfo")
-                }
-            )
+                )
+            }
+            text.startsWith("/file ") -> {
+                // Команда с поддержкой файлов (используем MCPFileSystemAgent)
+                val actualMessage = text.removePrefix("/file ").trim()
+                sendMessageWithToolsMode(
+                    project = project,
+                    text = actualMessage,
+                    onResponse = { message ->
+                        messageDisplayManager.removeLastSystemMessage()
+                        messageDisplayManager.displayMessage(message)
+                        updateContextSize()
+                    },
+                    onError = { error ->
+                        messageDisplayManager.removeLastSystemMessage()
+                        messageDisplayManager.displaySystemMessage("Ошибка: $error")
+                        setUIEnabled(true)
+                    },
+                    onComplete = {
+                        updateContextSize()
+                        setUIEnabled(true)
+                    }
+                )
+            }
+            else -> {
+                // Обычное сообщение в чат
+                chatService.sendMessage(
+                    userMessage = text,
+                    project = project,
+                    onResponse = { message ->
+                        // Системные сообщения (о сжатии) приходят первыми
+                        if (message.role == MessageRole.SYSTEM) {
+                            messageDisplayManager.displayMessage(message)
+                            // Обновляем счётчик с небольшой задержкой, чтобы история успела обновиться
+                            SwingUtilities.invokeLater {
+                                updateContextSize()
+                            }
+                        } else {
+                            // Ответ ассистента
+                            messageDisplayManager.removeLastSystemMessage()
+                            messageDisplayManager.displayMessage(message)
+                            updateContextSize()
+                            setUIEnabled(true)
+                        }
+                    },
+                    onError = { error ->
+                        messageDisplayManager.removeLastSystemMessage()
+                        messageDisplayManager.displaySystemMessage("${ChatPanelConfig.Icons.ERROR} Ошибка: $error")
+                        setUIEnabled(true)
+                    }
+                )
+            }
         }
+    }
+
+    /**
+     * Выполняет команду в терминале через TerminalAgent
+     */
+    private fun executeTerminalCommand(command: String) {
+        chatService.executeTerminalCommand(
+            command = command,
+            project = project,
+            onResponse = { message ->
+                messageDisplayManager.removeLastSystemMessage()
+                messageDisplayManager.displayMessage(message)
+                updateContextSize()
+                setUIEnabled(true)
+            },
+            onError = { error ->
+                messageDisplayManager.removeLastSystemMessage()
+                messageDisplayManager.displaySystemMessage("${ChatPanelConfig.Icons.ERROR} Ошибка: $error")
+                setUIEnabled(true)
+            }
+        )
+    }
+
+    /**
+     * Отправляет сообщение с поддержкой MCP Tools через MCPFileSystemAgent
+     */
+    private fun sendMessageWithToolsMode(
+        project: Project,
+        text: String,
+        onResponse: (Message) -> Unit,
+        onError: (String) -> Unit,
+        onComplete: () -> Unit
+    ) {
+        chatService.sendMessageWithTools(
+            userMessage = text,
+            project = project,
+            onResponse = { message ->
+                onResponse(message)
+            },
+            onError = { error ->
+                onError(error)
+            },
+            onToolExecution = { toolInfo ->
+                // Показываем индикатор выполнения инструментов
+                messageDisplayManager.displaySystemMessage("🔧 $toolInfo")
+            }
+        )
+        onComplete()
     }
 
     /**
