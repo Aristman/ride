@@ -1,4 +1,4 @@
-﻿package ru.marslab.ide.ride.agent
+package ru.marslab.ide.ride.agent
 
 import com.intellij.openapi.components.service
 import ru.marslab.ide.ride.agent.impl.ChatAgent
@@ -204,5 +204,36 @@ object AgentFactory {
      */
     fun createTerminalAgent(): Agent {
         return TerminalAgent()
+    }
+
+    /**
+     * Создает агента для анализа кода
+     *
+     * @param project Проект для анализа
+     * @return CodeAnalysisAgent готовый к использованию
+     */
+    fun createCodeAnalysisAgent(project: com.intellij.openapi.project.Project): ru.marslab.ide.ride.codeanalysis.CodeAnalysisAgent {
+        val settings = service<PluginSettings>()
+        val llmProvider: LLMProvider = when (settings.selectedProvider) {
+            PluginSettings.PROVIDER_YANDEX -> {
+                val apiKey = settings.getApiKey()
+                val folderId = settings.folderId
+                val modelId = settings.yandexModelId
+                createYandexGPTProvider(apiKey, folderId, modelId)
+            }
+            PluginSettings.PROVIDER_HUGGINGFACE -> {
+                val hfToken = settings.getHuggingFaceToken()
+                val modelId = settings.huggingFaceModelId
+                createHuggingFaceProvider(hfToken, modelId)
+            }
+            else -> {
+                val apiKey = settings.getApiKey()
+                val folderId = settings.folderId
+                val modelId = settings.yandexModelId
+                createYandexGPTProvider(apiKey, folderId, modelId)
+            }
+        }
+        
+        return ru.marslab.ide.ride.codeanalysis.impl.CodeAnalysisAgentImpl(project, llmProvider)
     }
 }

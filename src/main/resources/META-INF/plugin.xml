@@ -118,6 +118,11 @@
                     class="ru.marslab.ide.ride.actions.SetResponseFormatAction"
                     text="Set Response Format..."
                     description="Choose agent response format (JSON/XML/TEXT) and optional schema"/>
+            <action id="Ride.AnalyzeCodeAction"
+                    class="ru.marslab.ide.ride.actions.AnalyzeCodeAction"
+                    text="Analyze Code..."
+                    description="Запустить анализ кода проекта"/>
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
         </group>
 
         <!-- Toolbar actions for Tool Window -->
