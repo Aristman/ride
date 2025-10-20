@@ -3,10 +3,12 @@ package ru.marslab.ide.ride.actions
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.module.ModuleManager
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.roots.ModuleRootManager
 import com.intellij.openapi.ui.Messages
 import kotlinx.coroutines.runBlocking
 import ru.marslab.ide.ride.agent.AgentFactory
@@ -23,6 +25,29 @@ class AnalyzeCodeAction : AnAction("Analyze Code", "Запустить анал�
 
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
+        
+        // Отладочная информация о проекте
+        println("=== Project Info ===")
+        println("Project name: ${project.name}")
+        println("Base path: ${project.basePath}")
+        println("Project file: ${project.projectFile}")
+        println("Project dir: ${project.projectFilePath}")
+        println("Is open: ${project.isOpen}")
+        println("Is initialized: ${project.isInitialized}")
+        
+        // Проверяем модули
+        val moduleManager = ModuleManager.getInstance(project)
+        println("\n=== Modules (${moduleManager.modules.size}) ===")
+        moduleManager.modules.forEach { module ->
+            println("Module: ${module.name}")
+            println("  Path: ${module.moduleFilePath}")
+            val rootManager = ModuleRootManager.getInstance(module)
+            println("  Content roots (${rootManager.contentRoots.size}):")
+            rootManager.contentRoots.forEach { root ->
+                println("    - ${root.path}")
+            }
+        }
+        println("===================\n")
 
         // Показываем диалог выбора типов анализа
         val analysisTypes = showAnalysisTypeDialog(project) ?: return

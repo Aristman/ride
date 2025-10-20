@@ -1,8 +1,12 @@
 package ru.marslab.ide.ride.codeanalysis.scanner
 
+import com.intellij.openapi.module.ModuleManager
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.roots.ModuleRootManager
 import com.intellij.openapi.roots.ProjectFileIndex
+import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
+import java.io.File
 import java.nio.file.FileSystems
 import java.nio.file.PathMatcher
 
@@ -26,33 +30,109 @@ class ProjectScanner(
         excludePatterns: List<String>
     ): List<VirtualFile> {
         println("  ProjectScanner.scanProject() called")
+        println("    Project: ${project.name}")
+        println("    Base path: ${project.basePath}")
+        println("    Project file: ${project.projectFile}")
+        println("    Is open: ${project.isOpen}")
+        println("    Is initialized: ${project.isInitialized}")
         println("    Include patterns: $filePatterns")
         println("    Exclude patterns: $excludePatterns")
         
-        val files = mutableListOf<VirtualFile>()
         val includeMatchers = filePatterns.map { createGlobMatcher(it) }
         val excludeMatchers = excludePatterns.map { createGlobMatcher(it) }
         
         println("    Created ${includeMatchers.size} include matchers and ${excludeMatchers.size} exclude matchers")
 
-        var totalFiles = 0
-        var includedFiles = 0
-        ProjectFileIndex.getInstance(project).iterateContent { file ->
-            totalFiles++
-            if (!file.isDirectory && shouldIncludeFile(file, includeMatchers, excludeMatchers)) {
-                files.add(file)
-                includedFiles++
-                if (includedFiles <= 5) {
-                    println("      Included: ${file.path}")
-                }
-            }
-            true
+        // Пытаемся получить файлы через ProjectFileIndex
+        val projectFileIndex = ProjectFileIndex.getInstance(project)
+        println("    ProjectFileIndex initialized: $projectFileIndex")
+        
+        // Получаем корневые директории проекта через ModuleManager
+        val moduleManager = ModuleManager.getInstance(project)
+        val projectRoots = moduleManager.modules.flatMap { module ->
+            ModuleRootManager.getInstance(module).contentRoots.toList()
+        }
+        
+        println("    Found ${projectRoots.size} project roots:")
+        projectRoots.forEachIndexed { index, root ->
+            println("      Root $index: ${root.path}")
+            println("        Exists: ${root.exists()}")
+            println("        Is directory: ${root.isDirectory}")
+            println("        Children: ${if (root.isDirectory) root.children?.size ?: 0 else 0}")
         }
 
-        println("    Scanned $totalFiles files, included ${files.size} files")
-        return files
+        // Собираем все файлы из корневых директорий
+        val allFiles = mutableListOf<VirtualFile>()
+        
+        // Если есть корневые директории, используем их
+        if (projectRoots.isNotEmpty()) {
+            projectRoots.forEach { root ->
+                if (root.isDirectory) {
+                    collectFiles(root, allFiles, includeMatchers, excludeMatchers)
+                }
+            }
+        } else {
+            // Если корневых директорий нет, используем базовый путь проекта
+            val baseDir = project.basePath?.let { com.intellij.openapi.vfs.VfsUtil.findFileByIoFile(File(it), true) }
+            if (baseDir != null) {
+                collectFiles(baseDir, allFiles, includeMatchers, excludeMatchers)
+            }
+        }
+        
+        println("    Found ${allFiles.size} files matching the patterns")
+        if (allFiles.size <= 10) {
+            allFiles.take(10).forEachIndexed { index, file ->
+                println("      File $index: ${file.path}")
+            }
+        } else {
+            allFiles.take(5).forEachIndexed { index, file ->
+                println("      File $index: ${file.path}")
+            }
+            println("      ... and ${allFiles.size - 5} more files")
+        }
+        
+        return allFiles
     }
-
+    
+    /**
+     * Рекурсивно собирает файлы из директории, соответствующие паттернам
+     */
+    private fun collectFiles(
+        dir: VirtualFile,
+        result: MutableList<VirtualFile>,
+        includeMatchers: List<PathMatcher>,
+        excludeMatchers: List<PathMatcher>
+    ) {
+        try {
+            if (!dir.isDirectory) {
+                if (shouldIncludeFile(dir, includeMatchers, excludeMatchers)) {
+                    result.add(dir)
+                }
+                return
+            }
+            
+            // Пропускаем скрытые директории (начинающиеся с .)
+            if (dir.name.startsWith(".")) {
+                return
+            }
+            
+            // Рекурсивно обходим дочерние элементы
+            dir.children?.forEach { child ->
+                if (child.isDirectory) {
+                    // Пропускаем исключенные директории
+                    val path = java.nio.file.Paths.get(child.path)
+                    if (excludeMatchers.none { it.matches(path) }) {
+                        collectFiles(child, result, includeMatchers, excludeMatchers)
+                    }
+                } else if (shouldIncludeFile(child, includeMatchers, excludeMatchers)) {
+                    result.add(child)
+                }
+            }
+        } catch (e: Exception) {
+            println("      Error scanning ${dir.path}: ${e.message}")
+        }
+    }
+    
     /**
      * Проверяет, должен ли файл быть включен в анализ
      */
@@ -62,14 +142,15 @@ class ProjectScanner(
         excludeMatchers: List<PathMatcher>
     ): Boolean {
         val path = file.path
+        val pathObj = java.nio.file.Paths.get(path)
         
         // Проверяем исключения
-        if (excludeMatchers.any { it.matches(java.nio.file.Paths.get(path)) }) {
+        if (excludeMatchers.any { it.matches(pathObj) }) {
             return false
         }
         
         // Проверяем включения
-        return includeMatchers.any { it.matches(java.nio.file.Paths.get(path)) }
+        return includeMatchers.any { it.matches(pathObj) }
     }
 
     /**
