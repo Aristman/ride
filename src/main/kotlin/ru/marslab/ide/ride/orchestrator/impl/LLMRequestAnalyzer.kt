@@ -63,7 +63,7 @@ class LLMRequestAnalyzer(
 
             // Парсим результаты
             val taskType = parseTaskType(analysisData)
-            val requiredTools = parseRequiredTools(analysisData)
+            val parsedRequiredTools = parseRequiredTools(analysisData)
             val estimatedComplexity = parseComplexityLevel(analysisData)
             val estimatedSteps = parseEstimatedSteps(analysisData)
             val requiresUserInput = parseRequiresUserInput(analysisData)
@@ -84,9 +84,12 @@ class LLMRequestAnalyzer(
                 confidence
             }
 
+            // Обогащаем список инструментов на основе типа задачи, чтобы обеспечить полноту плана
+            val finalRequiredTools = enrichRequiredTools(taskType, parsedRequiredTools)
+
             val result = RequestAnalysis(
                 taskType = taskType,
-                requiredTools = requiredTools,
+                requiredTools = finalRequiredTools,
                 context = request.context,
                 parameters = parameters,
                 requiresUserInput = requiresUserInput || uncertaintyScore > UNCERTAINTY_THRESHOLD,
@@ -257,6 +260,50 @@ class LLMRequestAnalyzer(
         }
 
         return parameters
+    }
+
+    /**
+     * Обогащает список инструментов на основе типа задачи для полноты плана.
+     * LLM может не перечислить все инструменты явно, поэтому добавляем недостающие.
+     */
+    private fun enrichRequiredTools(
+        taskType: TaskType,
+        parsed: Set<AgentType>
+    ): Set<AgentType> {
+        val tools = parsed.toMutableSet()
+
+        // Всегда добавляем REPORT_GENERATOR для итогового результата
+        tools.add(AgentType.REPORT_GENERATOR)
+
+        when (taskType) {
+            TaskType.BUG_FIX -> {
+                tools.add(AgentType.PROJECT_SCANNER)
+                tools.add(AgentType.BUG_DETECTION)
+                tools.add(AgentType.CODE_QUALITY)
+                // CODE_FIXER не добавляем, т.к. агент отсутствует в реализации/регистрации
+            }
+            TaskType.CODE_ANALYSIS -> {
+                tools.add(AgentType.PROJECT_SCANNER)
+                tools.add(AgentType.CODE_QUALITY)
+            }
+            TaskType.ARCHITECTURE_ANALYSIS -> {
+                tools.add(AgentType.PROJECT_SCANNER)
+                tools.add(AgentType.ARCHITECTURE_ANALYSIS)
+            }
+            TaskType.PERFORMANCE_OPTIMIZATION -> {
+                tools.add(AgentType.PROJECT_SCANNER)
+                tools.add(AgentType.PERFORMANCE_ANALYZER)
+            }
+            TaskType.REPORT_GENERATION -> {
+                tools.add(AgentType.PROJECT_SCANNER)
+            }
+            else -> {
+                // Для остальных типов хотя бы сканер + отчёт
+                tools.add(AgentType.PROJECT_SCANNER)
+            }
+        }
+
+        return tools
     }
 
     companion object {

@@ -73,8 +73,16 @@ class EnhancedAgentOrchestrator(
             val analysis = requestAnalyzer.analyze(userRequest)
             logger.info("Request analysis completed: ${analysis.taskType}")
 
+            // Валидируем доступность требуемых ToolAgents и отфильтровываем отсутствующие
+            val availableTools = analysis.requiredTools.filter { toolAgentRegistry.isAvailable(it) }.toSet()
+            val missingTools = analysis.requiredTools - availableTools
+            if (missingTools.isNotEmpty()) {
+                logger.warn("Some required ToolAgents are not available and will be skipped: $missingTools")
+            }
+            val adjustedAnalysis = analysis.copy(requiredTools = availableTools)
+
             // 2. Создаем план выполнения
-            val plan = createExecutionPlan(userRequest, analysis)
+            val plan = createExecutionPlan(userRequest, adjustedAnalysis)
 
             // 3. Сохраняем план
             planStorage.save(plan)
@@ -84,7 +92,7 @@ class EnhancedAgentOrchestrator(
             progressTracker.startTracking(plan)
 
             // 5. Переводим план в состояние анализа
-            val updatedPlan = stateMachine.transition(plan, PlanEvent.Start(analysis))
+            val updatedPlan = stateMachine.transition(plan, PlanEvent.Start(adjustedAnalysis))
             activePlans[plan.id] = updatedPlan
 
             // 6. Отправляем уведомление о начале анализа
@@ -306,20 +314,21 @@ class EnhancedAgentOrchestrator(
         // Базовая генерация шагов на основе анализа
         val steps = mutableListOf<PlanStep>()
 
+        var scannerStepId: String? = null
         if (analysis.requiredTools.contains(AgentType.PROJECT_SCANNER)) {
-            steps.add(
-                PlanStep(
-                    title = "Сканирование проекта",
-                    description = "Анализ файловой структуры проекта",
-                    agentType = AgentType.PROJECT_SCANNER,
-                    input = mapOf(
-                        "projectPath" to (analysis.context.projectPath ?: "."),
-                        "patterns" to listOf("**/*.kt", "**/*.java"),
-                        "excludePatterns" to listOf("**/build/**", "**/.*/**", "**/node_modules/**")
-                    ),
-                    estimatedDurationMs = 30_000L // 30 секунд
-                )
+            val scanStep = PlanStep(
+                title = "Сканирование проекта",
+                description = "Анализ файловой структуры проекта",
+                agentType = AgentType.PROJECT_SCANNER,
+                input = mapOf(
+                    "projectPath" to (analysis.context.projectPath ?: "."),
+                    "patterns" to listOf("**/*.kt", "**/*.java"),
+                    "excludePatterns" to listOf("**/build/**", "**/.*/**", "**/node_modules/**")
+                ),
+                estimatedDurationMs = 30_000L // 30 секунд
             )
+            steps.add(scanStep)
+            scannerStepId = scanStep.id
         }
 
         if (analysis.requiredTools.contains(AgentType.BUG_DETECTION)) {
@@ -333,8 +342,26 @@ class EnhancedAgentOrchestrator(
                         "severityLevel" to "medium",
                         "projectPath" to (analysis.context.projectPath ?: ".") // Для enrichStepInput
                     ),
-                    dependencies = setOf(steps.lastOrNull()?.id ?: ""),
+                    // зависим от сканера, чтобы можно было выполнять параллельно с проверкой качества
+                    dependencies = scannerStepId?.let { setOf(it) } ?: emptySet(),
                     estimatedDurationMs = 60_000L // 1 минута
+                )
+            )
+        }
+
+        if (analysis.requiredTools.contains(AgentType.CODE_QUALITY)) {
+            steps.add(
+                PlanStep(
+                    title = "Проверка качества кода",
+                    description = "Статический анализ качества кода",
+                    agentType = AgentType.CODE_QUALITY,
+                    input = mapOf(
+                        "files" to emptyList<String>(),
+                        "projectPath" to (analysis.context.projectPath ?: ".")
+                    ),
+                    // зависим только от сканера, чтобы идти параллельно с BUG_DETECTION
+                    dependencies = scannerStepId?.let { setOf(it) } ?: emptySet(),
+                    estimatedDurationMs = 45_000L
                 )
             )
         }
@@ -352,6 +379,8 @@ class EnhancedAgentOrchestrator(
         }
 
         if (analysis.requiredTools.contains(AgentType.REPORT_GENERATOR)) {
+            // Отчёт должен зависеть от всех предыдущих шагов, чтобы выполняться последним
+            val dependencyIds = steps.map { it.id }.toSet()
             steps.add(
                 PlanStep(
                     title = "Генерация отчета",
@@ -361,7 +390,7 @@ class EnhancedAgentOrchestrator(
                         "format" to "markdown",
                         "includeDetails" to true
                     ),
-                    dependencies = steps.filter { it.status != StepStatus.PENDING }.map { it.id }.toSet(),
+                    dependencies = dependencyIds,
                     estimatedDurationMs = 15_000L // 15 секунд
                 )
             )
@@ -533,49 +562,46 @@ class EnhancedAgentOrchestrator(
      */
     private fun enrichStepInput(step: PlanStep, previousResults: Map<String, Any>): Map<String, Any> {
         val enrichedInput = step.input.toMutableMap()
-        
-        // Для BUG_DETECTION берём файлы из PROJECT_SCANNER
-        if (step.agentType == AgentType.BUG_DETECTION && step.dependencies.isNotEmpty()) {
-            // Ищем результат от PROJECT_SCANNER в зависимостях
-            val scannerStepId = step.dependencies.firstOrNull()
-            val scannerResult = if (scannerStepId != null) {
-                previousResults[scannerStepId]
-            } else {
-                previousResults.values.firstOrNull()
-            }
-            
-            if (scannerResult != null) {
-                logger.info("Scanner result type: ${scannerResult::class.simpleName}")
-                logger.info("Scanner result: $scannerResult")
-                
-                // Пытаемся извлечь список файлов из результата
-                // ProjectScanner возвращает строку вида "Проанализировано X файлов"
-                // Но реальные файлы хранятся в StepOutput
-                // TODO: передавать структурированные данные между шагами
-                
-                // Пока используем файлы из текущего проекта
-                val projectPath = step.input["projectPath"] as? String
-                if (projectPath != null) {
-                    val projectDir = java.io.File(projectPath)
-                    val kotlinFiles = projectDir.walkTopDown()
-                        .filter { it.extension == "kt" && !it.path.contains("build") }
-                        .take(10) // Ограничиваем для производительности
-                        .map { it.absolutePath }
-                        .toList()
-                    
-                    if (kotlinFiles.isNotEmpty()) {
-                        enrichedInput["files"] = kotlinFiles
-                        logger.info("Found ${kotlinFiles.size} Kotlin files for analysis")
+
+        fun collectProjectFiles(projectPath: String?, maxCount: Int = 50): List<String> {
+            if (projectPath.isNullOrBlank()) return emptyList()
+            return try {
+                val root = java.io.File(projectPath)
+                if (!root.exists() || !root.isDirectory) return emptyList()
+                root.walkTopDown()
+                    .filter { it.isFile }
+                    .filter { f ->
+                        val p = f.path.replace('\\', '/')
+                        (p.endsWith(".kt") || p.endsWith(".java")) &&
+                                !p.contains("/build/") &&
+                                !p.contains("/.git/") &&
+                                !p.contains("/out/") &&
+                                !p.contains("/node_modules/")
                     }
+                    .take(maxCount)
+                    .map { it.absolutePath }
+                    .toList()
+            } catch (_: Exception) { emptyList() }
+        }
+
+        // Для BUG_DETECTION/CODE_QUALITY гарантируем непустой 'files'
+        if (step.agentType == AgentType.BUG_DETECTION || step.agentType == AgentType.CODE_QUALITY) {
+            val filesFromInput = (enrichedInput["files"] as? List<*>)?.filterIsInstance<String>() ?: emptyList()
+            if (filesFromInput.isEmpty()) {
+                val projectPath = step.input["projectPath"] as? String
+                val resolved = collectProjectFiles(projectPath)
+                if (resolved.isNotEmpty()) {
+                    enrichedInput["files"] = resolved
+                    logger.info("enrichStepInput: provided ${resolved.size} files for ${step.agentType}")
                 }
             }
         }
-        
+
         // Для REPORT_GENERATOR собираем все предыдущие результаты
         if (step.agentType == AgentType.REPORT_GENERATOR) {
             enrichedInput["previousResults"] = previousResults
         }
-        
+
         return enrichedInput
     }
 
