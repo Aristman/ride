@@ -16,7 +16,7 @@ class CodeChunkerTest {
     @Test
     fun `should not chunk small file`() {
         val tokenCounter = mockk<TokenCounter>()
-        every { tokenCounter.countTokens(any()) } returns 10
+        every { tokenCounter.countTokens(any<String>()) } returns 10
 
         val chunker = CodeChunker(tokenCounter, maxTokensPerChunk = 1000)
         
@@ -37,7 +37,7 @@ class CodeChunkerTest {
     fun `should chunk large file`() {
         val tokenCounter = mockk<TokenCounter>()
         // Симулируем, что каждая строка = 100 токенов
-        every { tokenCounter.countTokens(any()) } returns 100
+        every { tokenCounter.countTokens(any<String>()) } returns 100
 
         val chunker = CodeChunker(tokenCounter, maxTokensPerChunk = 250)
         
@@ -59,7 +59,7 @@ class CodeChunkerTest {
     @Test
     fun `should detect if chunking is needed`() {
         val tokenCounter = mockk<TokenCounter>()
-        every { tokenCounter.countTokens(any()) } returns 5000
+        every { tokenCounter.countTokens(any<String>()) } returns 5000
 
         val chunker = CodeChunker(tokenCounter, maxTokensPerChunk = 4000)
         

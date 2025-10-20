@@ -1,9 +1,9 @@
 package ru.marslab.ide.ride.agent
 
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
-import io.mockk.coEvery
-import io.mockk.every
-import io.mockk.mockk
+import io.mockk.*
 import kotlinx.coroutines.test.runTest
 import ru.marslab.ide.ride.agent.impl.ChatAgent
 import ru.marslab.ide.ride.integration.llm.LLMProvider
@@ -15,13 +15,31 @@ import ru.marslab.ide.ride.model.chat.MessageRole
 import ru.marslab.ide.ride.model.llm.LLMParameters
 import ru.marslab.ide.ride.model.llm.LLMResponse
 import ru.marslab.ide.ride.model.llm.TokenUsage
+import ru.marslab.ide.ride.settings.PluginSettings
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ChatAgentTest {
-    
+
+    private val mockPluginSettings = mockk<PluginSettings>(relaxed = true)
+    private val mockApplication = mockk<com.intellij.openapi.application.Application>(relaxed = true)
+
+    init {
+        // Mock the ApplicationManager and Application
+        mockkStatic("com.intellij.openapi.application.ApplicationManager")
+        every { ApplicationManager.getApplication() } returns mockApplication
+        every { mockApplication.getService(PluginSettings::class.java) } returns mockPluginSettings
+
+        // Mock the PluginSettings service
+        mockkStatic("com.intellij.openapi.components.ServiceKt")
+        every { service<PluginSettings>() } returns mockPluginSettings
+        every { mockPluginSettings.enableUncertaintyAnalysis } returns false
+        every { mockPluginSettings.maxContextTokens } returns 8000
+        every { mockPluginSettings.enableAutoSummarization } returns false // Disable to avoid SummarizerAgent
+    }
+
     @Test
     fun `test successful request processing`() = runTest {
         // Arrange
@@ -62,6 +80,7 @@ class ChatAgentTest {
         // Arrange
         val mockProvider = mockk<LLMProvider>()
         every { mockProvider.isAvailable() } returns false
+        every { mockProvider.getProviderName() } returns "Test Provider"
 
         val agent = ChatAgent(mockProvider)
         val mockProject = mockk<Project>(relaxed = true)
@@ -91,6 +110,7 @@ class ChatAgentTest {
         // Arrange
         val mockProvider = mockk<LLMProvider>()
         every { mockProvider.isAvailable() } returns true
+        every { mockProvider.getProviderName() } returns "Test Provider"
         coEvery {
             mockProvider.sendRequest(any(), any(), any(), any())
         } returns LLMResponse.error("API Error")
