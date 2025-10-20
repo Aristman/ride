@@ -167,6 +167,45 @@ class EnhancedAgentOrchestrator(
     }
 
     /**
+     * Возобновляет выполнение плана с callback для уведомлений о шагах
+     */
+    suspend fun resumePlanWithCallback(
+        planId: String,
+        userInput: String,
+        onStepComplete: suspend (OrchestratorStep) -> Unit
+    ): AgentResponse {
+        return try {
+            // Обрабатываем пользовательский ввод
+            val inputHandled = handleUserInput(planId, userInput)
+            if (!inputHandled) {
+                return AgentResponse.error(
+                    error = "Не удалось обработать пользовательский ввод",
+                    content = "План $planId не найден или не ожидает ввода"
+                )
+            }
+
+            // Получаем обновлённый план
+            val plan = activePlans[planId] ?: planStorage.load(planId)
+            if (plan == null) {
+                return AgentResponse.error(
+                    error = "План не найден",
+                    content = "План $planId не существует"
+                )
+            }
+
+            // Продолжаем выполнение плана
+            executePlan(plan, onStepComplete)
+
+        } catch (e: Exception) {
+            logger.error("Failed to resume plan with callback $planId", e)
+            AgentResponse.error(
+                error = e.message ?: "Неизвестная ошибка",
+                content = "Произошла ошибка при возобновлении плана"
+            )
+        }
+    }
+
+    /**
      * Отменяет выполнение плана
      */
     suspend fun cancelPlan(planId: String): Boolean {
