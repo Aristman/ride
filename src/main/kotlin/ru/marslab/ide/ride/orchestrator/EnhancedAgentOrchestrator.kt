@@ -3,6 +3,7 @@ package ru.marslab.ide.ride.orchestrator
 import com.intellij.openapi.diagnostic.Logger
 import kotlinx.coroutines.*
 import ru.marslab.ide.ride.agent.OrchestratorStep
+import ru.marslab.ide.ride.agent.ToolAgentRegistry
 import ru.marslab.ide.ride.agent.UncertaintyAnalyzer
 import ru.marslab.ide.ride.integration.llm.LLMProvider
 import ru.marslab.ide.ride.model.agent.AgentRequest
@@ -10,6 +11,8 @@ import ru.marslab.ide.ride.model.agent.AgentResponse
 import ru.marslab.ide.ride.model.chat.ChatContext
 import ru.marslab.ide.ride.model.llm.LLMParameters
 import ru.marslab.ide.ride.model.orchestrator.*
+import ru.marslab.ide.ride.model.tool.StepInput
+import ru.marslab.ide.ride.model.tool.ToolPlanStep
 import ru.marslab.ide.ride.orchestrator.impl.InMemoryPlanStorage
 import ru.marslab.ide.ride.orchestrator.impl.LLMRequestAnalyzer
 import java.util.*
@@ -17,11 +20,12 @@ import java.util.*
 /**
  * Расширенный оркестратор с поддержкой интерактивности и персистентности
  *
- * Интегрирует все компоненты Phase 1:
+ * Интегрирует все компоненты Phase 1 и Phase 2:
  * - RequestAnalyzer для анализа запросов
  * - PlanStateMachine для управления состояниями
  * - PlanStorage для персистентности
  * - ProgressTracker для отслеживания прогресса
+ * - ToolAgentRegistry для управления Tool Agents
  */
 class EnhancedAgentOrchestrator(
     private val llmProvider: LLMProvider,
@@ -29,7 +33,8 @@ class EnhancedAgentOrchestrator(
     private val planStorage: PlanStorage = InMemoryPlanStorage(),
     private val requestAnalyzer: RequestAnalyzer = LLMRequestAnalyzer(llmProvider, uncertaintyAnalyzer),
     private val stateMachine: PlanStateMachine = PlanStateMachine(),
-    private val progressTracker: ProgressTracker = ProgressTracker()
+    private val progressTracker: ProgressTracker = ProgressTracker(),
+    private val toolAgentRegistry: ToolAgentRegistry = ToolAgentRegistry()
 ) : StateChangeListener, ProgressListener {
 
     private val logger = Logger.getInstance(EnhancedAgentOrchestrator::class.java)
@@ -230,6 +235,14 @@ class EnhancedAgentOrchestrator(
         coroutineScope.cancel()
         stateMachine.removeListener(this)
         progressTracker.removeListener(this)
+        toolAgentRegistry.clear()
+    }
+    
+    /**
+     * Возвращает реестр Tool Agents для регистрации агентов
+     */
+    fun getToolAgentRegistry(): ToolAgentRegistry {
+        return toolAgentRegistry
     }
 
     // Приватные методы
@@ -361,15 +374,45 @@ class EnhancedAgentOrchestrator(
     }
 
     private suspend fun executeStep(step: PlanStep): String {
-        // Для Phase 1 имитируем выполнение шага
-        delay(step.estimatedDurationMs)
+        // Phase 2: Используем Tool Agents для выполнения шагов
+        val agent = toolAgentRegistry.get(step.agentType)
+        
+        if (agent != null) {
+            logger.info("Executing step ${step.id} with ToolAgent ${step.agentType}")
+            
+            // Конвертируем PlanStep в ToolPlanStep
+            val toolStep = ToolPlanStep(
+                id = step.id,
+                description = step.description,
+                agentType = step.agentType,
+                input = StepInput(step.input),
+                dependencies = step.dependencies
+            )
+            
+            val context = ExecutionContext(
+                projectPath = null, // Будет заполнено из контекста запроса
+                additionalContext = emptyMap()
+            )
+            
+            val result = agent.executeStep(toolStep, context)
+            
+            return if (result.success) {
+                result.output.data.toString()
+            } else {
+                throw Exception(result.error ?: "Step execution failed")
+            }
+        } else {
+            // Fallback: имитируем выполнение шага (для агентов, которые еще не зарегистрированы)
+            logger.warn("No ToolAgent found for ${step.agentType}, using fallback")
+            delay(step.estimatedDurationMs)
 
-        return when (step.agentType) {
-            AgentType.PROJECT_SCANNER -> "Проанализировано ${Random().nextInt(100, 500)} файлов"
-            AgentType.BUG_DETECTION -> "Найдено ${Random().nextInt(0, 10)} потенциальных проблем"
-            AgentType.CODE_FIXER -> "Исправлено ${Random().nextInt(0, 5)} проблем"
-            AgentType.REPORT_GENERATOR -> "Отчет сгенерирован успешно"
-            else -> "Шаг ${step.title} выполнен"
+            return when (step.agentType) {
+                AgentType.PROJECT_SCANNER -> "Проанализировано ${Random().nextInt(100, 500)} файлов"
+                AgentType.BUG_DETECTION -> "Найдено ${Random().nextInt(0, 10)} потенциальных проблем"
+                AgentType.CODE_FIXER -> "Исправлено ${Random().nextInt(0, 5)} проблем"
+                AgentType.REPORT_GENERATOR -> "Отчет сгенерирован успешно"
+                else -> "Шаг ${step.title} выполнен"
+            }
         }
     }
 
