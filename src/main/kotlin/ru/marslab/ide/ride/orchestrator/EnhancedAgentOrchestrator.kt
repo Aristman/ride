@@ -330,7 +330,8 @@ class EnhancedAgentOrchestrator(
                     agentType = AgentType.BUG_DETECTION,
                     input = mapOf(
                         "files" to emptyList<String>(), // Будет заполнено из предыдущего шага
-                        "severityLevel" to "medium"
+                        "severityLevel" to "medium",
+                        "projectPath" to (analysis.context.projectPath ?: ".") // Для enrichStepInput
                     ),
                     dependencies = setOf(steps.lastOrNull()?.id ?: ""),
                     estimatedDurationMs = 60_000L // 1 минута
@@ -535,15 +536,38 @@ class EnhancedAgentOrchestrator(
         
         // Для BUG_DETECTION берём файлы из PROJECT_SCANNER
         if (step.agentType == AgentType.BUG_DETECTION && step.dependencies.isNotEmpty()) {
-            val scannerResult = previousResults.values.firstOrNull()
+            // Ищем результат от PROJECT_SCANNER в зависимостях
+            val scannerStepId = step.dependencies.firstOrNull()
+            val scannerResult = if (scannerStepId != null) {
+                previousResults[scannerStepId]
+            } else {
+                previousResults.values.firstOrNull()
+            }
+            
             if (scannerResult != null) {
-                // Парсим результат сканирования (предполагаем формат "Проанализировано X файлов")
-                // В реальности ProjectScanner должен возвращать список файлов
-                // Пока используем заглушку
-                enrichedInput["files"] = listOf(
-                    "src/main/kotlin/Main.kt",
-                    "src/main/kotlin/Service.kt"
-                )
+                logger.info("Scanner result type: ${scannerResult::class.simpleName}")
+                logger.info("Scanner result: $scannerResult")
+                
+                // Пытаемся извлечь список файлов из результата
+                // ProjectScanner возвращает строку вида "Проанализировано X файлов"
+                // Но реальные файлы хранятся в StepOutput
+                // TODO: передавать структурированные данные между шагами
+                
+                // Пока используем файлы из текущего проекта
+                val projectPath = step.input["projectPath"] as? String
+                if (projectPath != null) {
+                    val projectDir = java.io.File(projectPath)
+                    val kotlinFiles = projectDir.walkTopDown()
+                        .filter { it.extension == "kt" && !it.path.contains("build") }
+                        .take(10) // Ограничиваем для производительности
+                        .map { it.absolutePath }
+                        .toList()
+                    
+                    if (kotlinFiles.isNotEmpty()) {
+                        enrichedInput["files"] = kotlinFiles
+                        logger.info("Found ${kotlinFiles.size} Kotlin files for analysis")
+                    }
+                }
             }
         }
         
