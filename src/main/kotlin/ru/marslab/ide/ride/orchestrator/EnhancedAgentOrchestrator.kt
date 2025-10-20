@@ -349,6 +349,42 @@ class EnhancedAgentOrchestrator(
             )
         }
 
+        if (analysis.requiredTools.contains(AgentType.ARCHITECTURE_ANALYSIS)) {
+            steps.add(
+                PlanStep(
+                    title = "Анализ архитектуры",
+                    description = "Оценка структуры и архитектуры проекта",
+                    agentType = AgentType.ARCHITECTURE_ANALYSIS,
+                    input = mapOf(
+                        "files" to emptyList<String>(),
+                        "projectPath" to (analysis.context.projectPath ?: ".")
+                    ),
+                    // зависит только от сканирования, выполняется параллельно с другими анализами
+                    dependencies = scannerStepId?.let { setOf(it) } ?: emptySet(),
+                    estimatedDurationMs = 45_000L
+                )
+            )
+        }
+
+        if (analysis.requiredTools.contains(AgentType.LLM_REVIEW)) {
+            steps.add(
+                PlanStep(
+                    title = "LLM обзор кода",
+                    description = "Анализ кода LLM-агентом для выявления потенциальных проблем",
+                    agentType = AgentType.LLM_REVIEW,
+                    input = mapOf(
+                        "files" to emptyList<String>(),
+                        "projectPath" to (analysis.context.projectPath ?: "."),
+                        "maxFindingsPerFile" to 20,
+                        "maxCharsPerFile" to 8000
+                    ),
+                    // зависит только от сканирования — выполняется параллельно с другими анализами
+                    dependencies = scannerStepId?.let { setOf(it) } ?: emptySet(),
+                    estimatedDurationMs = 60_000L
+                )
+            )
+        }
+
         if (analysis.requiredTools.contains(AgentType.CODE_QUALITY)) {
             steps.add(
                 PlanStep(
@@ -584,8 +620,13 @@ class EnhancedAgentOrchestrator(
             } catch (_: Exception) { emptyList() }
         }
 
-        // Для BUG_DETECTION/CODE_QUALITY гарантируем непустой 'files'
-        if (step.agentType == AgentType.BUG_DETECTION || step.agentType == AgentType.CODE_QUALITY) {
+        // Для BUG_DETECTION/CODE_QUALITY/LLM_REVIEW/ARCHITECTURE_ANALYSIS гарантируем непустой 'files'
+        if (
+            step.agentType == AgentType.BUG_DETECTION ||
+            step.agentType == AgentType.CODE_QUALITY ||
+            step.agentType == AgentType.LLM_REVIEW ||
+            step.agentType == AgentType.ARCHITECTURE_ANALYSIS
+        ) {
             val filesFromInput = (enrichedInput["files"] as? List<*>)?.filterIsInstance<String>() ?: emptyList()
             if (filesFromInput.isEmpty()) {
                 val projectPath = step.input["projectPath"] as? String

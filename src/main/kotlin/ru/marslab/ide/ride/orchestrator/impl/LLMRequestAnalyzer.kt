@@ -280,11 +280,13 @@ class LLMRequestAnalyzer(
                 tools.add(AgentType.PROJECT_SCANNER)
                 tools.add(AgentType.BUG_DETECTION)
                 tools.add(AgentType.CODE_QUALITY)
+                tools.add(AgentType.LLM_REVIEW)
                 // CODE_FIXER не добавляем, т.к. агент отсутствует в реализации/регистрации
             }
             TaskType.CODE_ANALYSIS -> {
                 tools.add(AgentType.PROJECT_SCANNER)
                 tools.add(AgentType.CODE_QUALITY)
+                tools.add(AgentType.LLM_REVIEW)
             }
             TaskType.ARCHITECTURE_ANALYSIS -> {
                 tools.add(AgentType.PROJECT_SCANNER)

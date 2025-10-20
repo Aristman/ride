@@ -43,7 +43,9 @@ class CodeQualityToolAgent : BaseToolAgent(
         val checkComplexity = step.input.getBoolean("check_complexity") ?: true
         val maxComplexity = step.input.getInt("max_complexity") ?: 10
         
-        logger.info("Analyzing code quality for ${files.size} files")
+        // Входные логи
+        logger.info("CODE_QUALITY input: files=${files.size}, check_complexity=${checkComplexity}, max_complexity=${maxComplexity}")
+        files.take(10).forEach { logger.info("CODE_QUALITY file: $it") }
         
         val findings = mutableListOf<Finding>()
         val metrics = mutableMapOf<String, Any>()
@@ -58,16 +60,16 @@ class CodeQualityToolAgent : BaseToolAgent(
                 logger.warn("File does not exist: $filePath")
                 continue
             }
+            // Превью файла (усеченно)
+            runCatching {
+                val preview = file.readText().lineSequence().filter { it.isNotBlank() }.joinToString("\n").take(200)
+                logger.info("CODE_QUALITY preview($filePath): ${'$'}preview ...")
+            }
             
             val fileAnalysis = analyzeFile(file, checkComplexity, maxComplexity)
             findings.addAll(fileAnalysis.findings)
-            
-            totalLines += fileAnalysis.lines
-            totalMethods += fileAnalysis.methods
-            totalClasses += fileAnalysis.classes
+            logger.info("CODE_QUALITY end file: $filePath, findings=${fileAnalysis.findings.size}, lines=${fileAnalysis.lines}, methods=${fileAnalysis.methods}, classes=${fileAnalysis.classes}")
         }
-        
-        metrics["total_lines"] = totalLines
         metrics["total_methods"] = totalMethods
         metrics["total_classes"] = totalClasses
         metrics["avg_lines_per_method"] = if (totalMethods > 0) totalLines / totalMethods else 0

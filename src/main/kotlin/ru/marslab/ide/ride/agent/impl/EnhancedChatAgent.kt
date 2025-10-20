@@ -8,6 +8,8 @@ import ru.marslab.ide.ride.model.agent.AgentCapabilities
 import ru.marslab.ide.ride.model.agent.AgentRequest
 import ru.marslab.ide.ride.model.agent.AgentResponse
 import ru.marslab.ide.ride.model.agent.AgentSettings
+import ru.marslab.ide.ride.formatter.ChatOutputFormatter
+import ru.marslab.ide.ride.agent.tools.LLMCodeReviewToolAgent
 import ru.marslab.ide.ride.model.orchestrator.TaskType
 import ru.marslab.ide.ride.orchestrator.EnhancedAgentOrchestrator
 
@@ -251,6 +253,11 @@ class EnhancedChatAgent(
             )
             registry.register(
                 ru.marslab.ide.ride.agent.tools.ReportGeneratorToolAgent()
+            )
+
+            // LLM review agent (multi-language)
+            registry.register(
+                LLMCodeReviewToolAgent(llmProvider)
             )
         }
     }

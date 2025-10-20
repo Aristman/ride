@@ -42,8 +42,10 @@ class BugDetectionToolAgent : BaseToolAgent(
         val files = step.input.getList<String>("files") ?: emptyList()
         val severityThreshold = step.input.getString("severity_threshold")
             ?.let { Severity.valueOf(it) } ?: Severity.INFO
-        
-        logger.info("Analyzing ${files.size} files for bugs")
+
+        // Входные логи
+        logger.info("BUG_DETECTION input: files=${files.size}, severity_threshold=${severityThreshold}")
+        files.take(10).forEach { logger.info("BUG_DETECTION file: $it") }
         
         val findings = mutableListOf<Finding>()
         
@@ -53,10 +55,17 @@ class BugDetectionToolAgent : BaseToolAgent(
                 logger.warn("File does not exist or is not a file: $filePath")
                 continue
             }
-            
+            // Превью файла (усеченно)
+            runCatching {
+                val preview = file.readText().lineSequence().filter { it.isNotBlank() }.joinToString("\n").take(200)
+                logger.info("BUG_DETECTION preview($filePath): ${'$'}preview ...")
+            }
+
+            logger.info("BUG_DETECTION start file: $filePath")
             // Анализируем файл
             val fileFindings = analyzeFile(file, severityThreshold)
             findings.addAll(fileFindings)
+            logger.info("BUG_DETECTION end file: $filePath, findings=${fileFindings.size}")
         }
         
         // Группируем по severity

@@ -27,6 +27,45 @@ class ReportGeneratorToolAgent : BaseToolAgent(
     override fun getDescription(): String {
         return "Генерирует отчеты о результатах анализа в различных форматах"
     }
+
+    private fun splitObjects(raw: String): List<String> {
+        val parts = mutableListOf<String>()
+        var depth = 0
+        var start = 0
+        for ((i, ch) in raw.withIndex()) {
+            if (ch == '{') depth++
+            if (ch == '}') depth--
+            if (depth == 0 && i >= start) {
+                val seg = raw.substring(start, i + 1).trim()
+                if (seg.startsWith("{") && seg.endsWith("}")) parts.add(seg)
+                start = i + 1
+                while (start < raw.length && (raw[start] == ',' || raw[start].isWhitespace())) start++
+            }
+        }
+        return parts
+    }
+
+    private fun mapToFinding(obj: String): Finding? {
+        fun grp(rx: String) = Regex(rx, RegexOption.DOT_MATCHES_ALL).find(obj)?.groupValues?.getOrNull(1)
+        val file = grp(""""file"\s*:\s*"(.*?)"""")
+        val lineStr = grp(""""line"\s*:\s*(\d+)"""")
+        val severityStr = grp(""""severity"\s*:\s*"(.*?)"""")
+        val message = grp(""""message"\s*:\s*"(.*?)"""") ?: return null
+        val description = grp(""""description"\s*:\s*"(.*?)"""") ?: ""
+        val category = grp(""""category"\s*:\s*"(.*?)"""") ?: "general"
+        val suggestion = grp(""""suggestion"\s*:\s*"(.*?)"""")
+        val severity = try { Severity.valueOf((severityStr ?: "MEDIUM").uppercase()) } catch (_: Exception) { Severity.MEDIUM }
+        val line = lineStr?.toIntOrNull() ?: 0
+        return Finding(
+            file = file ?: "",
+            line = line,
+            severity = severity,
+            category = category,
+            message = message,
+            description = description,
+            suggestion = suggestion
+        )
+    }
     
     override fun validateInput(input: StepInput): ValidationResult {
         val format = input.getString("format")
@@ -45,8 +84,28 @@ class ReportGeneratorToolAgent : BaseToolAgent(
     override suspend fun doExecuteStep(step: ToolPlanStep, context: ExecutionContext): StepResult {
         val format = step.input.getString("format") ?: "markdown"
         val title = step.input.getString("title") ?: "Отчет анализа кода"
-        val findings = step.input.getList<Finding>("findings") ?: emptyList()
+        val explicitFindings = step.input.getList<Finding>("findings") ?: emptyList()
         val metrics = step.input.get<Map<String, Any>>("metrics") ?: emptyMap()
+
+        // Попробуем собрать находки из previousResults (если были зависимые шаги)
+        val aggregatedFromDeps = mutableListOf<Finding>()
+        val prev = step.input.get<Map<String, Any>>("previousResults")
+        if (prev != null) {
+            prev.values.forEach { v ->
+                // Ожидаем, что это строка с печатью карты: {findings=[{...}, ...], total=...}
+                val text = v.toString()
+                // Вытащим JSON-подобный блок массива находок внутри 'findings=[ ... ]'
+                val m = Regex("findings=\\[(.*?)]", RegexOption.DOT_MATCHES_ALL).find(text)
+                val arr = m?.groupValues?.getOrNull(1)
+                if (!arr.isNullOrBlank()) {
+                    // Разобьем на объекты приблизительно по границам '{...}'
+                    val objs = splitObjects(arr)
+                    objs.mapNotNull { obj -> mapToFinding(obj) } .forEach { aggregatedFromDeps.add(it) }
+                }
+            }
+        }
+
+        val findings = (explicitFindings + aggregatedFromDeps)
         
         logger.info("Generating report in $format format with ${findings.size} findings")
         
