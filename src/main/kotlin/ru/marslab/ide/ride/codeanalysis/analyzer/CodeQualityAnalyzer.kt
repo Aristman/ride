@@ -21,9 +21,14 @@ class CodeQualityAnalyzer(
      * @return Список найденных проблем качества
      */
     suspend fun analyze(code: String, filePath: String): List<Finding> {
+        println("          CodeQualityAnalyzer.analyze() called for: $filePath")
         val language = detectLanguage(filePath)
+        println("          Detected language: $language")
+        
         val prompt = buildCodeQualityPrompt(code, filePath, language)
+        println("          Prompt length: ${prompt.length} chars")
 
+        println("          Sending request to LLM...")
         val response = llmProvider.sendRequest(
             systemPrompt = CODE_QUALITY_SYSTEM_PROMPT,
             userMessage = prompt,
@@ -31,11 +36,18 @@ class CodeQualityAnalyzer(
             parameters = LLMParameters.BALANCED
         )
 
+        println("          LLM response received. Success: ${response.success}")
         if (!response.success) {
+            println("          LLM request failed: ${response.error}")
             return emptyList()
         }
 
-        return parseFindingsFromResponse(response.content, filePath)
+        println("          Response content length: ${response.content.length} chars")
+        println("          Parsing findings...")
+        val findings = parseFindingsFromResponse(response.content, filePath)
+        println("          Parsed ${findings.size} findings")
+        
+        return findings
     }
 
     /**

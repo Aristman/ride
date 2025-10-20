@@ -56,44 +56,76 @@ class CodeAnalysisAgentImpl(
     }
 
     override suspend fun analyzeProject(request: CodeAnalysisRequest): CodeAnalysisResult {
+        println("=== CodeAnalysisAgent: Starting project analysis ===")
+        println("Project path: ${request.projectPath}")
+        println("Analysis types: ${request.analysisTypes}")
+        println("File patterns: ${request.filePatterns}")
+        println("Exclude patterns: ${request.excludePatterns}")
+        
         // 1. Сканируем проект
+        println("\n[1/8] Scanning project files...")
         val files = projectScanner.scanProject(
             request.filePatterns,
             request.excludePatterns
         )
+        println("Found ${files.size} files to analyze")
+        
+        if (files.isEmpty()) {
+            println("WARNING: No files found! Check file patterns and project path.")
+        }
 
         // 2. Приоритизируем файлы
+        println("\n[2/8] Prioritizing files...")
         val prioritizedFiles = prioritizeFiles(files)
+        println("Files prioritized: ${prioritizedFiles.size}")
 
         // 3. Разбиваем на батчи
+        println("\n[3/8] Creating batches...")
         val batches = prioritizedFiles.chunked(request.maxFilesPerBatch)
+        println("Created ${batches.size} batches (max ${request.maxFilesPerBatch} files per batch)")
 
         val allFindings = mutableListOf<Finding>()
 
         // 4. Обрабатываем батчами
+        println("\n[4/8] Analyzing batches...")
         for ((index, batch) in batches.withIndex()) {
-            println("Processing batch ${index + 1}/${batches.size}")
+            println("  Processing batch ${index + 1}/${batches.size} (${batch.size} files)...")
 
             val batchFindings = analyzeBatch(batch, request.analysisTypes)
+            println("  Batch ${index + 1} completed: found ${batchFindings.size} issues")
             allFindings.addAll(batchFindings)
         }
+        println("Total findings from all batches: ${allFindings.size}")
 
         // 5. Строим структуру проекта если запрошено
+        println("\n[5/8] Building project structure...")
         val structure = if (AnalysisType.ARCHITECTURE in request.analysisTypes || 
                             AnalysisType.ALL in request.analysisTypes) {
-            architectureAnalyzer.analyze(files, request.projectPath)
-        } else null
+            println("  Architecture analysis requested")
+            val struct = architectureAnalyzer.analyze(files, request.projectPath)
+            println("  Found ${struct.modules.size} modules, ${struct.layers.size} layers")
+            struct
+        } else {
+            println("  Architecture analysis skipped")
+            null
+        }
 
         // 6. Вычисляем метрики
+        println("\n[6/8] Calculating metrics...")
         val metrics = calculateMetrics(files, allFindings)
+        println("  Metrics: ${metrics.totalFiles} files, ${metrics.totalLines} lines, ${metrics.totalClasses} classes")
 
         // 7. Генерируем summary
+        println("\n[7/8] Generating summary...")
         val summary = generateSummary(allFindings, metrics)
+        println("  Summary generated (${summary.length} chars)")
 
         // 8. Генерируем рекомендации
+        println("\n[8/8] Generating recommendations...")
         val recommendations = generateRecommendations(allFindings, structure)
+        println("  Generated ${recommendations.size} recommendations")
 
-        return CodeAnalysisResult(
+        val result = CodeAnalysisResult(
             projectName = File(request.projectPath).name,
             analysisDate = LocalDateTime.now(),
             findings = allFindings,
@@ -102,6 +134,12 @@ class CodeAnalysisAgentImpl(
             summary = summary,
             recommendations = recommendations
         )
+        
+        println("\n=== CodeAnalysisAgent: Analysis completed ===")
+        println("Total findings: ${result.findings.size}")
+        println("Project: ${result.projectName}")
+        
+        return result
     }
 
     override suspend fun analyzeFile(filePath: String, analysisTypes: Set<AnalysisType>): List<Finding> {
@@ -156,26 +194,39 @@ class CodeAnalysisAgentImpl(
      * Анализирует батч файлов
      */
     private suspend fun analyzeBatch(batch: List<VirtualFile>, analysisTypes: Set<AnalysisType>): List<Finding> {
+        println("    analyzeBatch: Starting analysis of ${batch.size} files")
+        println("    Analysis types: $analysisTypes")
         val findings = mutableListOf<Finding>()
 
-        for (file in batch) {
+        for ((index, file) in batch.withIndex()) {
             try {
+                println("      [${index + 1}/${batch.size}] Analyzing: ${file.name}")
                 val content = String(file.contentsToByteArray())
                 val filePath = file.path
+                println("        File size: ${content.length} chars")
 
                 if (AnalysisType.BUG_DETECTION in analysisTypes || AnalysisType.ALL in analysisTypes) {
-                    findings.addAll(bugDetectionAnalyzer.analyze(content, filePath))
+                    println("        Running BugDetectionAnalyzer...")
+                    val bugFindings = bugDetectionAnalyzer.analyze(content, filePath)
+                    println("        BugDetectionAnalyzer found ${bugFindings.size} issues")
+                    findings.addAll(bugFindings)
                 }
 
                 if (AnalysisType.CODE_QUALITY in analysisTypes || AnalysisType.ALL in analysisTypes) {
-                    findings.addAll(codeQualityAnalyzer.analyze(content, filePath))
+                    println("        Running CodeQualityAnalyzer...")
+                    val qualityFindings = codeQualityAnalyzer.analyze(content, filePath)
+                    println("        CodeQualityAnalyzer found ${qualityFindings.size} issues")
+                    findings.addAll(qualityFindings)
                 }
             } catch (e: Exception) {
+                println("        ERROR analyzing file ${file.name}: ${e.message}")
+                e.printStackTrace()
                 // Пропускаем файлы с ошибками
                 continue
             }
         }
 
+        println("    analyzeBatch: Completed with ${findings.size} total findings")
         return findings
     }
 

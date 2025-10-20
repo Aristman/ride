@@ -25,17 +25,31 @@ class ProjectScanner(
         filePatterns: List<String>,
         excludePatterns: List<String>
     ): List<VirtualFile> {
+        println("  ProjectScanner.scanProject() called")
+        println("    Include patterns: $filePatterns")
+        println("    Exclude patterns: $excludePatterns")
+        
         val files = mutableListOf<VirtualFile>()
         val includeMatchers = filePatterns.map { createGlobMatcher(it) }
         val excludeMatchers = excludePatterns.map { createGlobMatcher(it) }
+        
+        println("    Created ${includeMatchers.size} include matchers and ${excludeMatchers.size} exclude matchers")
 
+        var totalFiles = 0
+        var includedFiles = 0
         ProjectFileIndex.getInstance(project).iterateContent { file ->
+            totalFiles++
             if (!file.isDirectory && shouldIncludeFile(file, includeMatchers, excludeMatchers)) {
                 files.add(file)
+                includedFiles++
+                if (includedFiles <= 5) {
+                    println("      Included: ${file.path}")
+                }
             }
             true
         }
 
+        println("    Scanned $totalFiles files, included ${files.size} files")
         return files
     }
 

@@ -21,9 +21,14 @@ class BugDetectionAnalyzer(
      * @return Список найденных проблем
      */
     suspend fun analyze(code: String, filePath: String): List<Finding> {
+        println("          BugDetectionAnalyzer.analyze() called for: $filePath")
         val language = detectLanguage(filePath)
+        println("          Detected language: $language")
+        
         val prompt = buildBugDetectionPrompt(code, filePath, language)
+        println("          Prompt length: ${prompt.length} chars")
 
+        println("          Sending request to LLM...")
         val response = llmProvider.sendRequest(
             systemPrompt = BUG_DETECTION_SYSTEM_PROMPT,
             userMessage = prompt,
@@ -31,11 +36,18 @@ class BugDetectionAnalyzer(
             parameters = LLMParameters.PRECISE
         )
 
+        println("          LLM response received. Success: ${response.success}")
         if (!response.success) {
+            println("          LLM request failed: ${response.error}")
             return emptyList()
         }
 
-        return parseFindingsFromResponse(response.content, filePath, FindingType.BUG)
+        println("          Response content length: ${response.content.length} chars")
+        println("          Parsing findings...")
+        val findings = parseFindingsFromResponse(response.content, filePath, FindingType.BUG)
+        println("          Parsed ${findings.size} findings")
+        
+        return findings
     }
 
     /**
