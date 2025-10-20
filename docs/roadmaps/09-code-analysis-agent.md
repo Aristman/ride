@@ -13,20 +13,25 @@
 ## 🎯 Цели фичи
 
 ### Основная задача
-Создать специализированного агента для анализа кодовой базы проекта, способного:
+
+Создать **мультиязычного** специализированного агента для анализа кодовой базы проекта, способного:
+
 - Находить очевидные баги и потенциальные проблемы
 - Строить структуру проекта и визуализировать архитектуру
 - Анализировать качество кода и соответствие best practices
 - Предлагать рефакторинг и улучшения
 - Генерировать документацию на основе кода
+- **Поддерживать множество языков программирования** (Kotlin, Java, Python, JavaScript/TypeScript, Go, Rust, C/C++, и др.)
 
 ### Пользовательские проблемы
+
 - **Проблема 1**: Сложно найти баги в большой кодовой базе вручную
 - **Проблема 2**: Отсутствие автоматического анализа архитектуры проекта
 - **Проблема 3**: Нет инструмента для быстрого понимания структуры незнакомого проекта
 - **Проблема 4**: Трудоемкость code review и поиска code smells
 
 ### Бизнес-ценность
+
 - Ускорение разработки за счет раннего обнаружения проблем
 - Повышение качества кода
 - Снижение технического долга
@@ -37,6 +42,7 @@
 ## 📋 Задачи (Checklist)
 
 ### Phase 1: Архитектура и проектирование
+
 - [ ] Спроектировать интерфейс `CodeAnalysisAgent`
 - [ ] Определить модели данных для результатов анализа
 - [ ] Спроектировать систему сканирования файлов проекта
@@ -44,6 +50,7 @@
 - [ ] Определить форматы вывода результатов
 
 ### Phase 2: Базовая реализация
+
 - [ ] Реализовать `CodeAnalysisAgent` с базовым функционалом
 - [ ] Создать `ProjectScanner` для обхода файлов проекта
 - [ ] Реализовать `CodeChunker` для разбиения больших файлов
@@ -51,6 +58,7 @@
 - [ ] Интегрировать с существующей системой агентов
 
 ### Phase 3: Анализаторы
+
 - [ ] Реализовать `BugDetectionAnalyzer` - поиск очевидных багов
 - [ ] Реализовать `ArchitectureAnalyzer` - анализ структуры проекта
 - [ ] Реализовать `CodeQualityAnalyzer` - анализ качества кода
@@ -58,6 +66,7 @@
 - [ ] Реализовать `SecurityAnalyzer` - поиск уязвимостей
 
 ### Phase 4: UI и интеграция
+
 - [ ] Создать UI для запуска анализа
 - [ ] Добавить визуализацию результатов анализа
 - [ ] Реализовать экспорт результатов (JSON, Markdown, HTML)
@@ -65,6 +74,7 @@
 - [ ] Добавить прогресс-бар для длительных операций
 
 ### Phase 5: Оптимизация и тестирование
+
 - [ ] Оптимизировать использование токенов
 - [ ] Реализовать кэширование результатов
 - [ ] Написать unit-тесты для всех компонентов
@@ -72,6 +82,7 @@
 - [ ] Тестирование на реальных проектах
 
 ### Phase 6: Документация
+
 - [ ] Написать API документацию
 - [ ] Создать user guide
 - [ ] Добавить примеры использования
@@ -110,6 +121,31 @@
 └─────────────────────────────────────────────────────┘
 ```
 
+### Поддерживаемые языки программирования
+
+Агент поддерживает анализ кода на следующих языках:
+
+| Язык | Расширения | Специфичные проверки |
+|------|-----------|---------------------|
+| **Kotlin** | `.kt` | Null safety, coroutines, resource management |
+| **Java** | `.java` | NPE, resource leaks, concurrency |
+| **Python** | `.py` | Type hints, exception handling, indentation |
+| **JavaScript** | `.js`, `.jsx` | Async/await, promise handling, undefined |
+| **TypeScript** | `.ts`, `.tsx` | Type safety, any usage, strict mode |
+| **Go** | `.go` | Goroutine leaks, error handling, defer |
+| **Rust** | `.rs` | Ownership, borrowing, lifetime |
+| **C/C++** | `.c`, `.cpp`, `.cc`, `.cxx` | Memory leaks, buffer overflows, pointers |
+| **C#** | `.cs` | Null reference, dispose pattern, async |
+| **Ruby** | `.rb` | Method missing, blocks, exceptions |
+| **PHP** | `.php` | SQL injection, XSS, type juggling |
+| **Swift** | `.swift` | Optionals, ARC, memory management |
+| **Scala** | `.scala` | Pattern matching, implicits, futures |
+
+**Конфигурационные файлы:**
+- XML (`.xml`)
+- JSON (`.json`)
+- YAML (`.yaml`, `.yml`)
+
 ### Модели данных
 
 ```kotlin
@@ -117,8 +153,20 @@
 data class CodeAnalysisRequest(
     val projectPath: String,
     val analysisTypes: Set<AnalysisType>,
-    val filePatterns: List<String> = listOf("**/*.kt", "**/*.java"),
-    val excludePatterns: List<String> = listOf("**/build/**", "**/test/**"),
+    val filePatterns: List<String> = listOf(
+        "**/*.kt", "**/*.java",           // JVM
+        "**/*.py",                         // Python
+        "**/*.js", "**/*.jsx",            // JavaScript
+        "**/*.ts", "**/*.tsx",            // TypeScript
+        "**/*.go",                         // Go
+        "**/*.rs",                         // Rust
+        "**/*.c", "**/*.cpp", "**/*.h"    // C/C++
+    ),
+    val excludePatterns: List<String> = listOf(
+        "**/build/**", "**/dist/**", "**/target/**",
+        "**/node_modules/**", "**/.gradle/**",
+        "**/test/**", "**/tests/**"
+    ),
     val maxFilesPerBatch: Int = 10,
     val parameters: LLMParameters = LLMParameters.BALANCED
 )
@@ -159,7 +207,7 @@ data class Finding(
 )
 
 enum class FindingType {
-    BUG, CODE_SMELL, SECURITY_ISSUE, ARCHITECTURE_VIOLATION, 
+    BUG, CODE_SMELL, SECURITY_ISSUE, ARCHITECTURE_VIOLATION,
     PERFORMANCE_ISSUE, DOCUMENTATION_MISSING
 }
 
@@ -206,17 +254,17 @@ interface CodeAnalysisAgent : Agent {
      * Анализирует проект по указанному пути
      */
     suspend fun analyzeProject(request: CodeAnalysisRequest): CodeAnalysisResult
-    
+
     /**
      * Анализирует конкретный файл
      */
     suspend fun analyzeFile(filePath: String, analysisTypes: Set<AnalysisType>): List<Finding>
-    
+
     /**
      * Строит структуру проекта
      */
     suspend fun buildProjectStructure(projectPath: String): ProjectStructure
-    
+
     /**
      * Генерирует отчет в указанном формате
      */
@@ -245,25 +293,25 @@ class ProjectScanner(
         excludePatterns: List<String>
     ): List<VirtualFile> {
         val files = mutableListOf<VirtualFile>()
-        
+
         ProjectFileIndex.getInstance(project).iterateContent { file ->
             if (shouldIncludeFile(file, filePatterns, excludePatterns)) {
                 files.add(file)
             }
             true
         }
-        
+
         return files
     }
-    
+
     private fun shouldIncludeFile(
         file: VirtualFile,
         includes: List<String>,
         excludes: List<String>
     ): Boolean {
         // Проверка по glob паттернам
-        return matchesAnyPattern(file.path, includes) && 
-               !matchesAnyPattern(file.path, excludes)
+        return matchesAnyPattern(file.path, includes) &&
+                !matchesAnyPattern(file.path, excludes)
     }
 }
 ```
@@ -280,39 +328,43 @@ class CodeChunker(
     fun chunkFile(content: String): List<CodeChunk> {
         val chunks = mutableListOf<CodeChunk>()
         val lines = content.lines()
-        
+
         var currentChunk = StringBuilder()
         var currentTokens = 0
         var startLine = 1
-        
+
         for ((index, line) in lines.withIndex()) {
             val lineTokens = tokenCounter.countTokens(line)
-            
+
             if (currentTokens + lineTokens > maxTokensPerChunk && currentChunk.isNotEmpty()) {
-                chunks.add(CodeChunk(
-                    content = currentChunk.toString(),
-                    startLine = startLine,
-                    endLine = index,
-                    tokens = currentTokens
-                ))
+                chunks.add(
+                    CodeChunk(
+                        content = currentChunk.toString(),
+                        startLine = startLine,
+                        endLine = index,
+                        tokens = currentTokens
+                    )
+                )
                 currentChunk = StringBuilder()
                 currentTokens = 0
                 startLine = index + 1
             }
-            
+
             currentChunk.appendLine(line)
             currentTokens += lineTokens
         }
-        
+
         if (currentChunk.isNotEmpty()) {
-            chunks.add(CodeChunk(
-                content = currentChunk.toString(),
-                startLine = startLine,
-                endLine = lines.size,
-                tokens = currentTokens
-            ))
+            chunks.add(
+                CodeChunk(
+                    content = currentChunk.toString(),
+                    startLine = startLine,
+                    endLine = lines.size,
+                    tokens = currentTokens
+                )
+            )
         }
-        
+
         return chunks
     }
 }
@@ -335,34 +387,40 @@ class BugDetectionAnalyzer(
 ) {
     suspend fun analyze(code: String, filePath: String): List<Finding> {
         val prompt = buildBugDetectionPrompt(code, filePath)
-        
+
         val response = llmProvider.sendRequest(
             systemPrompt = BUG_DETECTION_SYSTEM_PROMPT,
             userMessage = prompt,
             conversationHistory = emptyList(),
             parameters = LLMParameters.PRECISE
         )
-        
+
         return parseFindingsFromResponse(response.content, FindingType.BUG)
     }
-    
+
     private fun buildBugDetectionPrompt(code: String, filePath: String): String {
+        // Определяем язык программирования по расширению файла
+        val language = detectLanguage(filePath)
+        
         return """
         Проанализируй следующий код на наличие очевидных багов и потенциальных проблем.
         
         Файл: $filePath
+        Язык: $language
         
-        ```kotlin
+        ```$language
         $code
         ```
         
-        Найди:
-        - Null pointer exceptions
-        - Resource leaks
+        Найди типичные проблемы для $language:
+        - Null pointer exceptions / null safety issues
+        - Resource leaks (незакрытые файлы, соединения, потоки)
         - Неправильная обработка ошибок
-        - Race conditions
+        - Race conditions и проблемы многопоточности
         - Логические ошибки
         - Неиспользуемый код
+        - Memory leaks
+        - Проблемы безопасности
         
         Для каждой проблемы укажи:
         - Строку кода
@@ -372,12 +430,44 @@ class BugDetectionAnalyzer(
         """.trimIndent()
     }
     
+    private fun detectLanguage(filePath: String): String {
+        return when (filePath.substringAfterLast('.', "")) {
+            "kt" -> "kotlin"
+            "java" -> "java"
+            "py" -> "python"
+            "js", "jsx" -> "javascript"
+            "ts", "tsx" -> "typescript"
+            "go" -> "go"
+            "rs" -> "rust"
+            "cpp", "cc", "cxx" -> "cpp"
+            "c" -> "c"
+            "cs" -> "csharp"
+            "rb" -> "ruby"
+            "php" -> "php"
+            "swift" -> "swift"
+            "scala" -> "scala"
+            "xml" -> "xml"
+            "json" -> "json"
+            "yaml", "yml" -> "yaml"
+            else -> "text"
+        }
+    }
+
     companion object {
         private val BUG_DETECTION_SYSTEM_PROMPT = """
-        Ты - эксперт по анализу кода и поиску багов.
+        Ты - эксперт по анализу кода и поиску багов во всех популярных языках программирования.
         Твоя задача - найти потенциальные проблемы в коде и предложить решения.
+        
+        Учитывай специфику каждого языка:
+        - Для Kotlin/Java: null safety, resource management, concurrency
+        - Для Python: type hints, exception handling, memory management
+        - Для JavaScript/TypeScript: async/await, promise handling, type safety
+        - Для C/C++: memory leaks, buffer overflows, pointer issues
+        - Для Go: goroutine leaks, error handling, race conditions
+        - Для Rust: ownership, borrowing, lifetime issues
+        
         Будь точным и конкретным. Указывай номера строк и фрагменты кода.
-        Оценивай серьезность проблем объективно.
+        Оценивай серьезность проблем объективно с учетом контекста языка.
         """.trimIndent()
     }
 }
@@ -394,18 +484,18 @@ class ArchitectureAnalyzer(
     suspend fun analyze(projectFiles: List<ProjectFile>): ProjectStructure {
         // Группируем файлы по пакетам
         val packageStructure = groupFilesByPackage(projectFiles)
-        
+
         // Анализируем зависимости
         val dependencies = analyzeDependencies(projectFiles)
-        
+
         // Определяем слои архитектуры
         val layers = identifyLayers(packageStructure, dependencies)
-        
+
         // Генерируем описание архитектуры через LLM
         val architectureDescription = generateArchitectureDescription(
             packageStructure, dependencies, layers
         )
-        
+
         return ProjectStructure(
             rootPackage = findRootPackage(packageStructure),
             modules = identifyModules(packageStructure),
@@ -413,7 +503,7 @@ class ArchitectureAnalyzer(
             dependencies = dependencies
         )
     }
-    
+
     private suspend fun generateArchitectureDescription(
         packages: Map<String, List<ProjectFile>>,
         dependencies: List<Dependency>,
@@ -433,17 +523,17 @@ class ArchitectureAnalyzer(
         - Проблемы в архитектуре
         - Рекомендации по улучшению
         """.trimIndent()
-        
+
         val response = llmProvider.sendRequest(
             systemPrompt = ARCHITECTURE_SYSTEM_PROMPT,
             userMessage = prompt,
             conversationHistory = emptyList(),
             parameters = LLMParameters.BALANCED
         )
-        
+
         return response.content
     }
-    
+
     companion object {
         private val ARCHITECTURE_SYSTEM_PROMPT = """
         Ты - архитектор программного обеспечения с глубоким пониманием паттернов проектирования.
@@ -464,49 +554,49 @@ class CodeAnalysisAgentImpl(
     private val projectScanner: ProjectScanner,
     private val codeChunker: CodeChunker
 ) : CodeAnalysisAgent {
-    
+
     override suspend fun analyzeProject(request: CodeAnalysisRequest): CodeAnalysisResult {
         // 1. Сканируем проект
         val files = projectScanner.scanProject(
             request.filePatterns,
             request.excludePatterns
         )
-        
+
         logger.info("Found ${files.size} files to analyze")
-        
+
         // 2. Приоритизируем файлы (сначала важные)
         val prioritizedFiles = prioritizeFiles(files)
-        
+
         // 3. Разбиваем на батчи
         val batches = prioritizedFiles.chunked(request.maxFilesPerBatch)
-        
+
         val allFindings = mutableListOf<Finding>()
         var processedFiles = 0
-        
+
         // 4. Обрабатываем батчами с прогрессом
         for ((index, batch) in batches.withIndex()) {
             logger.info("Processing batch ${index + 1}/${batches.size}")
-            
+
             val batchFindings = analyzeBatch(batch, request.analysisTypes)
             allFindings.addAll(batchFindings)
-            
+
             processedFiles += batch.size
-            
+
             // Уведомляем о прогрессе
             notifyProgress(processedFiles, files.size)
         }
-        
+
         // 5. Строим структуру проекта
         val structure = if (AnalysisType.ARCHITECTURE in request.analysisTypes) {
             buildProjectStructure(request.projectPath)
         } else null
-        
+
         // 6. Вычисляем метрики
         val metrics = calculateMetrics(files, allFindings)
-        
+
         // 7. Генерируем summary
         val summary = generateSummary(allFindings, metrics)
-        
+
         return CodeAnalysisResult(
             projectName = File(request.projectPath).name,
             analysisDate = LocalDateTime.now(),
@@ -517,7 +607,7 @@ class CodeAnalysisAgentImpl(
             recommendations = generateRecommendations(allFindings, structure)
         )
     }
-    
+
     private fun prioritizeFiles(files: List<VirtualFile>): List<VirtualFile> {
         // Приоритет: domain > service > ui > util > test
         return files.sortedBy { file ->
@@ -542,12 +632,12 @@ class CodeAnalysisAgentImpl(
 
 Для проекта среднего размера (100 файлов, ~10K строк кода):
 
-| Этап | Токены (примерно) | Описание |
-|------|-------------------|----------|
-| Сканирование структуры | 500 | Анализ структуры пакетов |
-| Анализ файлов (батч 10) | 4000 × 10 = 40K | По 4K токенов на файл |
-| Генерация summary | 2000 | Итоговый отчет |
-| **ИТОГО** | **~42.5K токенов** | На весь проект |
+| Этап                    | Токены (примерно)  | Описание                 |
+|-------------------------|--------------------|--------------------------|
+| Сканирование структуры  | 500                | Анализ структуры пакетов |
+| Анализ файлов (батч 10) | 4000 × 10 = 40K    | По 4K токенов на файл    |
+| Генерация summary       | 2000               | Итоговый отчет           |
+| **ИТОГО**               | **~42.5K токенов** | На весь проект           |
 
 ### Оптимизации
 
@@ -637,7 +727,7 @@ class CodeAnalysisAgentImpl(
 class CodeAnalysisAgentTest {
     private val mockLLMProvider = mockk<LLMProvider>()
     private val agent = CodeAnalysisAgentImpl(mockLLMProvider, ...)
-    
+
     @Test
     fun `should detect null pointer exception`() = runBlocking {
         val code = """
@@ -645,7 +735,7 @@ class CodeAnalysisAgentTest {
                 println(user.name) // NPE here
             }
         """.trimIndent()
-        
+
         coEvery { mockLLMProvider.sendRequest(...) } returns LLMResponse.success(
             """
             Найдена проблема:
@@ -654,9 +744,9 @@ class CodeAnalysisAgentTest {
             - user может быть null, но используется без проверки
             """.trimIndent()
         )
-        
+
         val findings = agent.analyzeFile(code, setOf(AnalysisType.BUG_DETECTION))
-        
+
         assertEquals(1, findings.size)
         assertEquals(FindingType.BUG, findings[0].type)
         assertEquals(Severity.CRITICAL, findings[0].severity)
