@@ -559,10 +559,14 @@ class ExecutionContext(
 
 ## 📚 Связанные документы
 
-- [Техническая спецификация](enhanced-orchestrator-technical.md)
-- [Краткое резюме](ORCHESTRATOR_SUMMARY.md)
-- [Интеграция анализа кода](code-analysis-chat-integration.md)
-- [Существующая архитектура оркестратора](orchestrator-architecture.md)
+- [Техническая спецификация](orchestrator-development/enhanced-orchestrator-technical.md)
+- [Краткое резюме](orchestrator-development/ORCHESTRATOR_SUMMARY.md)
+- [Детальный план разработки](orchestrator-development/enhanced-orchestrator-development.md)
+- [Интеграция анализа кода](orchestrator-development/code-analysis-chat-integration.md)
+- [Существующая архитектура оркестратора](orchestrator-development/orchestrator-architecture.md)
+- [Оригинальный план разработки оркестратора](orchestrator-development/orchestrator-agent-development.md)
+- [Резюме интеграции](orchestrator-development/INTEGRATION_SUMMARY.md)
+- [Обновление интеграции](orchestrator-development/INTEGRATION_UPDATE.md)
 - [Code Analysis Agent](09-code-analysis-agent.md)
 - [Agent Orchestrator Feature](../features/agent-orchestrator.md)
 

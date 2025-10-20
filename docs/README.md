@@ -57,9 +57,10 @@
 - [**Фаза 9: Агент анализа кода**](roadmaps/09-code-analysis-agent.md) ⭐ Новое
 - [**Фаза 10: Интеграция Koog**](roadmaps/10-koog-integration.md) ⭐ Новое
 - [**Фаза 11: Расширенный агент-оркестратор**](roadmaps/11-enhanced-orchestrator.md) ⭐ Новое
-  - [Детальный план разработки](roadmaps/enhanced-orchestrator-development.md)
-  - [Техническая спецификация](roadmaps/enhanced-orchestrator-technical.md)
-  - [Краткое резюме](roadmaps/ORCHESTRATOR_SUMMARY.md)
+  - [📁 Документация по разработке](roadmaps/orchestrator-development/)
+  - [Детальный план](roadmaps/orchestrator-development/enhanced-orchestrator-development.md)
+  - [Техническая спецификация](roadmaps/orchestrator-development/enhanced-orchestrator-technical.md)
+  - [Краткое резюме](roadmaps/orchestrator-development/ORCHESTRATOR_SUMMARY.md)
 
 ## 🎯 Быстрые ссылки
 
