@@ -76,7 +76,10 @@ data class PlanStep(
     var error: String? = null,
     val estimatedDurationMs: Long = 0L,
     val actualDurationMs: Long = 0L,
-    val createdAt: Instant = kotlinx.datetime.Clock.System.now()
+    val createdAt: Instant = kotlinx.datetime.Clock.System.now(),
+    val retryPolicy: RetryPolicy? = null,
+    val loopConfig: LoopConfig? = null,
+    var retryHistory: RetryHistory? = null
 )
 
 /**

@@ -34,7 +34,8 @@ class EnhancedAgentOrchestrator(
     private val requestAnalyzer: RequestAnalyzer = LLMRequestAnalyzer(llmProvider, uncertaintyAnalyzer),
     private val stateMachine: PlanStateMachine = PlanStateMachine(),
     private val progressTracker: ProgressTracker = ProgressTracker(),
-    private val toolAgentRegistry: ToolAgentRegistry = ToolAgentRegistry()
+    private val toolAgentRegistry: ToolAgentRegistry = ToolAgentRegistry(),
+    private val retryLoopExecutor: RetryLoopExecutor = RetryLoopExecutor()
 ) : StateChangeListener, ProgressListener {
 
     private val logger = Logger.getInstance(EnhancedAgentOrchestrator::class.java)
@@ -387,8 +388,13 @@ class EnhancedAgentOrchestrator(
 
                 // Проверяем зависимости
                 if (step.dependencies.all { it in completedSteps }) {
-                    // Передаём результаты предыдущих шагов
-                    val stepResult = executeStep(step, executingPlan.analysis.context, stepResults)
+                    // Выполняем шаг с учётом retry/loop
+                    val stepResult = if (step.retryPolicy != null || step.loopConfig != null) {
+                        executeStepWithRetryLoop(step, executingPlan.analysis.context, stepResults)
+                    } else {
+                        executeStep(step, executingPlan.analysis.context, stepResults)
+                    }
+                    
                     completedSteps.add(step.id)
                     stepResults[step.id] = stepResult // Сохраняем результат
 
@@ -480,6 +486,45 @@ class EnhancedAgentOrchestrator(
     private suspend fun continuePlanExecution(plan: ExecutionPlan) {
         // TODO: реализовать продолжение выполнения плана после паузы или ввода пользователя
         logger.info("Continuing plan execution: ${plan.id}")
+    }
+
+    /**
+     * Выполняет шаг с учётом retry и loop политик
+     */
+    private suspend fun executeStepWithRetryLoop(
+        step: PlanStep,
+        executionContext: ExecutionContext,
+        previousResults: Map<String, Any>
+    ): String {
+        return when {
+            step.loopConfig != null -> {
+                // Выполнение в цикле
+                val loopResult = retryLoopExecutor.executeWithLoop(step, executionContext) { s, ctx ->
+                    executeStepCore(s, ctx, previousResults)
+                }
+                "Loop completed: ${loopResult.iterations} iterations, ${loopResult.terminationReason}"
+            }
+            step.retryPolicy != null -> {
+                // Выполнение с retry
+                retryLoopExecutor.executeWithRetry(step) { s ->
+                    executeStepCore(s, executionContext, previousResults)
+                }
+            }
+            else -> {
+                executeStepCore(step, executionContext, previousResults)
+            }
+        }
+    }
+
+    /**
+     * Базовое выполнение шага (без retry/loop)
+     */
+    private suspend fun executeStepCore(
+        step: PlanStep,
+        executionContext: ExecutionContext,
+        previousResults: Map<String, Any>
+    ): String {
+        return executeStep(step, executionContext, previousResults)
     }
 
     /**
