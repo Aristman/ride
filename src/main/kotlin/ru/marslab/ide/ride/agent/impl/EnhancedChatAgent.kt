@@ -3,6 +3,10 @@ package ru.marslab.ide.ride.agent.impl
 import com.intellij.openapi.diagnostic.Logger
 import ru.marslab.ide.ride.agent.Agent
 import ru.marslab.ide.ride.agent.UncertaintyAnalyzer
+import ru.marslab.ide.ride.agent.tools.ArchitectureToolAgent
+import ru.marslab.ide.ride.agent.tools.BugDetectionToolAgent
+import ru.marslab.ide.ride.agent.tools.CodeChunkerToolAgent
+import ru.marslab.ide.ride.agent.tools.CodeQualityToolAgent
 import ru.marslab.ide.ride.integration.llm.LLMProvider
 import ru.marslab.ide.ride.model.agent.AgentCapabilities
 import ru.marslab.ide.ride.model.agent.AgentRequest
@@ -10,6 +14,8 @@ import ru.marslab.ide.ride.model.agent.AgentResponse
 import ru.marslab.ide.ride.model.agent.AgentSettings
 import ru.marslab.ide.ride.formatter.ChatOutputFormatter
 import ru.marslab.ide.ride.agent.tools.LLMCodeReviewToolAgent
+import ru.marslab.ide.ride.agent.tools.ProjectScannerToolAgent
+import ru.marslab.ide.ride.agent.tools.ReportGeneratorToolAgent
 import ru.marslab.ide.ride.model.orchestrator.TaskType
 import ru.marslab.ide.ride.orchestrator.EnhancedAgentOrchestrator
 
@@ -237,22 +243,22 @@ class EnhancedChatAgent(
             
             // Регистрируем все Tool Agents из Phase 2
             registry.register(
-                ru.marslab.ide.ride.agent.tools.ProjectScannerToolAgent()
+                ProjectScannerToolAgent()
             )
             registry.register(
-                ru.marslab.ide.ride.agent.tools.CodeChunkerToolAgent()
+                CodeChunkerToolAgent()
             )
             registry.register(
-                ru.marslab.ide.ride.agent.tools.BugDetectionToolAgent()
+                BugDetectionToolAgent(llmProvider)
             )
             registry.register(
-                ru.marslab.ide.ride.agent.tools.CodeQualityToolAgent()
+                CodeQualityToolAgent()
             )
             registry.register(
-                ru.marslab.ide.ride.agent.tools.ArchitectureToolAgent(llmProvider)
+                ArchitectureToolAgent(llmProvider)
             )
             registry.register(
-                ru.marslab.ide.ride.agent.tools.ReportGeneratorToolAgent()
+                ReportGeneratorToolAgent()
             )
 
             // LLM review agent (multi-language)
