@@ -471,6 +471,48 @@ p {
     border: none;
 }
 
+/* Стили для findings */
+.findings-content {
+    padding: 12px 16px;
+    color: var(--textPrimary);
+}
+
+.findings-content h3 {
+    color: var(--textPrimary);
+    font-size: 14px;
+    font-weight: 600;
+    margin: 12px 0 8px 0;
+}
+
+.findings-content h3:first-child {
+    margin-top: 0;
+}
+
+.findings-content p {
+    margin: 4px 0;
+    line-height: 1.5;
+}
+
+.findings-content strong {
+    color: var(--textPrimary);
+    font-weight: 600;
+}
+
+.findings-content code {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: var(--monospace-font);
+    font-size: 11px;
+    color: var(--codeText);
+}
+
+.findings-content hr {
+    border: none;
+    border-top: 1px solid var(--border-color);
+    margin: 12px 0;
+}
+
 .tool-agent-output.collapsed .output-content {
     display: none;
 }
@@ -530,6 +572,27 @@ p {
 [data-theme="light"] .output-content pre {
     color: #1f2937;
     background: #f3f4f6;
+}
+
+[data-theme="light"] .findings-content {
+    color: #1f2937;
+}
+
+[data-theme="light"] .findings-content h3 {
+    color: #111827;
+}
+
+[data-theme="light"] .findings-content strong {
+    color: #111827;
+}
+
+[data-theme="light"] .findings-content code {
+    background: rgba(0, 0, 0, 0.05);
+    color: #1f2937;
+}
+
+[data-theme="light"] .findings-content hr {
+    border-top-color: #e5e7eb;
 }
 
 [data-theme="light"] .error-message {

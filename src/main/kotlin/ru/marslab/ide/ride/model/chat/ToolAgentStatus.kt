@@ -71,16 +71,17 @@ data class ToolAgentStatusMessage(
         }
 
         val outputHtml = if (result.hasOutput && result.isCompleted) {
-            val outputJson = formatOutputForDisplay(result.output ?: emptyMap())
+            val markdownContent = formatOutputForDisplay(result.output ?: emptyMap())
+            val htmlContent = convertMarkdownToHtml(markdownContent)
             """
             <div class="tool-agent-output ${if (isExpanded) "expanded" else "collapsed"}" id="output-${id}">
                 <div class="output-header" data-output-id="output-${id}">
                     <span class="toggle-icon">${if (isExpanded) "▼" else "▶"}</span>
                     <span class="output-title">Результат выполнения (клик для разворачивания)</span>
-                    <span class="output-size">${outputJson.length} символов</span>
+                    <span class="output-size">${markdownContent.length} символов</span>
                 </div>
                 <div class="output-content" style="${if (isExpanded) "display:block" else "display:none"}">
-                    <pre><code>${outputJson}</code></pre>
+                    <div class="findings-content">$htmlContent</div>
                 </div>
             </div>
             """.trimIndent()
@@ -101,20 +102,112 @@ data class ToolAgentStatusMessage(
         """.trimIndent()
     }
 
+    private fun convertMarkdownToHtml(markdown: String): String {
+        return markdown
+            // Заголовки
+            .replace(Regex("^### (.+)$", RegexOption.MULTILINE)) { "<h3>${it.groupValues[1]}</h3>" }
+            .replace(Regex("^## (.+)$", RegexOption.MULTILINE)) { "<h2>${it.groupValues[1]}</h2>" }
+            .replace(Regex("^# (.+)$", RegexOption.MULTILINE)) { "<h1>${it.groupValues[1]}</h1>" }
+            // Жирный текст
+            .replace(Regex("\\*\\*(.+?)\\*\\*")) { "<strong>${it.groupValues[1]}</strong>" }
+            // Курсив
+            .replace(Regex("\\*(.+?)\\*")) { "<em>${it.groupValues[1]}</em>" }
+            // Инлайн код
+            .replace(Regex("`(.+?)`")) { "<code>${it.groupValues[1]}</code>" }
+            // Горизонтальная линия
+            .replace(Regex("^---$", RegexOption.MULTILINE), "<hr>")
+            // Переносы строк
+            .replace("\n\n", "</p><p>")
+            .let { "<p>$it</p>" }
+            // Убираем пустые параграфы
+            .replace("<p></p>", "")
+            .replace("<p><h", "<h")
+            .replace("</h3></p>", "</h3>")
+            .replace("</h2></p>", "</h2>")
+            .replace("</h1></p>", "</h1>")
+            .replace("<p><hr></p>", "<hr>")
+    }
+    
     private fun formatOutputForDisplay(output: Map<String, Any>): String {
-        return output.entries.joinToString("\n") { (key, value) ->
-            val formattedValue = when (value) {
-                is List<*> -> "$key: [${value.joinToString(", ")}]"
-                is Map<*, *> -> {
-                    val nestedMap = value.entries.joinToString(", ") {
-                        "${it.key}=${it.value}"
-                    }
-                    "$key: {$nestedMap}"
-                }
-                else -> "$key: $value"
-            }
-            formattedValue
+        // Извлекаем findings из output
+        val findings = output["findings"] as? List<*> ?: return "Нет результатов"
+        
+        if (findings.isEmpty()) {
+            return "Проблем не обнаружено"
         }
+        
+        // Форматируем findings как markdown
+        return buildString {
+            findings.forEachIndexed { index, finding ->
+                when (finding) {
+                    is Map<*, *> -> {
+                        val findingMap = finding as Map<String, Any>
+                        
+                        // Заголовок с номером
+                        appendLine("### ${index + 1}. ${findingMap["message"] ?: findingMap["description"] ?: "Проблема"}")
+                        appendLine()
+                        
+                        // Severity
+                        findingMap["severity"]?.let { severity ->
+                            val severityEmoji = when (severity.toString().uppercase()) {
+                                "CRITICAL" -> "🔴"
+                                "HIGH" -> "🟠"
+                                "MEDIUM" -> "🟡"
+                                "LOW" -> "🟢"
+                                else -> "⚪"
+                            }
+                            appendLine("**Уровень:** $severityEmoji $severity")
+                        }
+                        
+                        // File and line
+                        findingMap["file"]?.let { file ->
+                            val line = findingMap["line"]
+                            if (line != null && line != "null") {
+                                appendLine("**Файл:** `$file:$line`")
+                            } else {
+                                appendLine("**Файл:** `$file`")
+                            }
+                        }
+                        
+                        // Rule/Type
+                        findingMap["rule"]?.let { rule ->
+                            appendLine("**Правило:** `$rule`")
+                        }
+                        findingMap["type"]?.let { type ->
+                            appendLine("**Тип:** `$type`")
+                        }
+                        
+                        // Suggestion
+                        findingMap["suggestion"]?.let { suggestion ->
+                            appendLine()
+                            appendLine("**Рекомендация:** $suggestion")
+                        }
+                        
+                        // Description (для архитектурных проблем)
+                        findingMap["description"]?.let { description ->
+                            if (findingMap["message"] == null) {
+                                appendLine()
+                                appendLine("$description")
+                            }
+                        }
+                        
+                        // Modules (для циклических зависимостей)
+                        findingMap["modules"]?.let { modules ->
+                            appendLine()
+                            appendLine("**Модули:** ${modules}")
+                        }
+                        
+                        appendLine()
+                        appendLine("---")
+                        appendLine()
+                    }
+                    else -> {
+                        appendLine("- $finding")
+                        appendLine()
+                    }
+                }
+            }
+        }.trim()
     }
 }
 
