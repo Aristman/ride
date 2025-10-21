@@ -718,6 +718,25 @@ class EnhancedAgentOrchestrator(
     private fun enrichStepInput(step: PlanStep, previousResults: Map<String, Any>): Map<String, Any> {
         val enrichedInput = step.input.toMutableMap()
 
+        // Ищем результаты PROJECT_SCANNER в зависимостях
+        fun getFilesFromScanner(): List<String>? {
+            for (depId in step.dependencies) {
+                val depResult = previousResults[depId]
+                if (depResult is Map<*, *>) {
+                    val output = depResult["output"] as? Map<*, *>
+                    val files = output?.get("files") as? List<*>
+                    if (files != null) {
+                        val filesList = files.filterIsInstance<String>()
+                        if (filesList.isNotEmpty()) {
+                            logger.info("enrichStepInput: found ${filesList.size} files from PROJECT_SCANNER (step $depId)")
+                            return filesList
+                        }
+                    }
+                }
+            }
+            return null
+        }
+
         fun collectProjectFiles(projectPath: String?, maxCount: Int = 50): List<String> {
             if (projectPath.isNullOrBlank()) return emptyList()
             return try {
@@ -748,11 +767,19 @@ class EnhancedAgentOrchestrator(
         ) {
             val filesFromInput = (enrichedInput["files"] as? List<*>)?.filterIsInstance<String>() ?: emptyList()
             if (filesFromInput.isEmpty()) {
-                val projectPath = step.input["projectPath"] as? String
-                val resolved = collectProjectFiles(projectPath)
-                if (resolved.isNotEmpty()) {
-                    enrichedInput["files"] = resolved
-                    logger.info("enrichStepInput: provided ${resolved.size} files for ${step.agentType}")
+                // Сначала пытаемся получить файлы из PROJECT_SCANNER
+                val filesFromScanner = getFilesFromScanner()
+                if (filesFromScanner != null && filesFromScanner.isNotEmpty()) {
+                    enrichedInput["files"] = filesFromScanner
+                    logger.info("enrichStepInput: provided ${filesFromScanner.size} files from scanner for ${step.agentType}")
+                } else {
+                    // Fallback: сканируем файлы вручную
+                    val projectPath = step.input["projectPath"] as? String
+                    val resolved = collectProjectFiles(projectPath)
+                    if (resolved.isNotEmpty()) {
+                        enrichedInput["files"] = resolved
+                        logger.info("enrichStepInput: provided ${resolved.size} files (fallback scan) for ${step.agentType}")
+                    }
                 }
             }
         }

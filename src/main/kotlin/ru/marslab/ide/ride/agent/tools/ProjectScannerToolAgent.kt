@@ -83,7 +83,7 @@ class ProjectScannerToolAgent : BaseToolAgent(
         val forceRescan = step.input.getBoolean("force_rescan") ?: false
         
         val patterns = step.input.getList<String>("patterns") ?: listOf("**/*.kt", "**/*.java", "**/*.py", "**/*.js", "**/*.ts")
-        val excludePatterns = step.input.getList<String>("exclude_patterns") ?: DEFAULT_EXCLUDE_PATTERNS
+        val excludePatterns = step.input.getList<String>("excludePatterns") ?: step.input.getList<String>("exclude_patterns") ?: DEFAULT_EXCLUDE_PATTERNS
         val maxDepth = step.input.getInt("max_depth") ?: Int.MAX_VALUE
         
         logger.info("Scanning project at $projectPath (force_rescan=$forceRescan)")
