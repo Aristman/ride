@@ -3,25 +3,18 @@ package ru.marslab.ide.ride.agent.impl
 import com.intellij.openapi.diagnostic.Logger
 import ru.marslab.ide.ride.agent.Agent
 import ru.marslab.ide.ride.agent.UncertaintyAnalyzer
-import ru.marslab.ide.ride.agent.tools.ArchitectureToolAgent
-import ru.marslab.ide.ride.agent.tools.BugDetectionToolAgent
-import ru.marslab.ide.ride.agent.tools.CodeChunkerToolAgent
-import ru.marslab.ide.ride.agent.tools.CodeQualityToolAgent
+import ru.marslab.ide.ride.agent.tools.*
 import ru.marslab.ide.ride.integration.llm.LLMProvider
 import ru.marslab.ide.ride.model.agent.AgentCapabilities
 import ru.marslab.ide.ride.model.agent.AgentRequest
 import ru.marslab.ide.ride.model.agent.AgentResponse
 import ru.marslab.ide.ride.model.agent.AgentSettings
-import ru.marslab.ide.ride.formatter.ChatOutputFormatter
-import ru.marslab.ide.ride.agent.tools.LLMCodeReviewToolAgent
-import ru.marslab.ide.ride.agent.tools.ProjectScannerToolAgent
-import ru.marslab.ide.ride.agent.tools.ReportGeneratorToolAgent
 import ru.marslab.ide.ride.model.orchestrator.TaskType
 import ru.marslab.ide.ride.orchestrator.EnhancedAgentOrchestrator
 
 /**
  * Расширенный ChatAgent с поддержкой интерактивных планов
- * 
+ *
  * Определяет, когда использовать простой ChatAgent, а когда - EnhancedAgentOrchestrator:
  * - Простые вопросы → ChatAgent
  * - Сложные задачи → EnhancedAgentOrchestrator
@@ -66,6 +59,7 @@ class EnhancedChatAgent(
                 logger.info("Complex task detected, using orchestrator")
                 useOrchestrator(request)
             }
+
             else -> {
                 logger.info("Simple task, using base ChatAgent")
                 baseChatAgent.ask(request)
@@ -99,9 +93,9 @@ class EnhancedChatAgent(
         val hasComplexKeywords = complexKeywords.any { requestLower.contains(it) }
 
         // Проверяем упоминание файлов или проекта
-        val mentionsFiles = requestLower.contains("файл") || 
-                           requestLower.contains("проект") ||
-                           requestLower.contains("код")
+        val mentionsFiles = requestLower.contains("файл") ||
+                requestLower.contains("проект") ||
+                requestLower.contains("код")
 
         // Длинный запрос обычно означает сложную задачу
         val isLongRequest = request.length > 100
@@ -129,17 +123,20 @@ class EnhancedChatAgent(
      */
     private suspend fun useOrchestrator(request: AgentRequest): AgentResponse {
         val steps = mutableListOf<String>()
-        
+
         val result = orchestrator.processEnhanced(request) { step ->
             // Собираем информацию о шагах
             val stepInfo = when (step) {
-                is ru.marslab.ide.ride.agent.OrchestratorStep.PlanningComplete -> 
+                is ru.marslab.ide.ride.agent.OrchestratorStep.PlanningComplete ->
                     "📋 Планирование: ${step.content}"
-                is ru.marslab.ide.ride.agent.OrchestratorStep.TaskComplete -> 
+
+                is ru.marslab.ide.ride.agent.OrchestratorStep.TaskComplete ->
                     "🔍 Задача ${step.taskId}: ${step.taskTitle}"
-                is ru.marslab.ide.ride.agent.OrchestratorStep.AllComplete -> 
+
+                is ru.marslab.ide.ride.agent.OrchestratorStep.AllComplete ->
                     "✅ Все задачи выполнены: ${step.content}"
-                is ru.marslab.ide.ride.agent.OrchestratorStep.Error -> 
+
+                is ru.marslab.ide.ride.agent.OrchestratorStep.Error ->
                     "❌ Ошибка: ${step.error}"
             }
             steps.add(stepInfo)
@@ -169,17 +166,20 @@ class EnhancedChatAgent(
         logger.info("Resuming plan $planId with user input")
 
         val steps = mutableListOf<String>()
-        
+
         // Используем новый метод с callback
         val result = orchestrator.resumePlanWithCallback(planId, userInput) { step ->
             val stepInfo = when (step) {
-                is ru.marslab.ide.ride.agent.OrchestratorStep.PlanningComplete -> 
+                is ru.marslab.ide.ride.agent.OrchestratorStep.PlanningComplete ->
                     "📋 Планирование: ${step.content}"
-                is ru.marslab.ide.ride.agent.OrchestratorStep.TaskComplete -> 
+
+                is ru.marslab.ide.ride.agent.OrchestratorStep.TaskComplete ->
                     "🔍 Задача ${step.taskId}: ${step.taskTitle}"
-                is ru.marslab.ide.ride.agent.OrchestratorStep.AllComplete -> 
+
+                is ru.marslab.ide.ride.agent.OrchestratorStep.AllComplete ->
                     "✅ Все задачи выполнены: ${step.content}"
-                is ru.marslab.ide.ride.agent.OrchestratorStep.Error -> 
+
+                is ru.marslab.ide.ride.agent.OrchestratorStep.Error ->
                     "❌ Ошибка: ${step.error}"
             }
             steps.add(stepInfo)
@@ -225,13 +225,13 @@ class EnhancedChatAgent(
         fun create(llmProvider: LLMProvider): EnhancedChatAgent {
             val baseChatAgent = ChatAgent(llmProvider)
             val orchestrator = EnhancedAgentOrchestrator(llmProvider)
-            
+
             // Регистрируем все доступные ToolAgents
             registerToolAgents(orchestrator, llmProvider)
-            
+
             return EnhancedChatAgent(baseChatAgent, orchestrator)
         }
-        
+
         /**
          * Регистрирует все ToolAgents в оркестраторе
          */
@@ -240,7 +240,7 @@ class EnhancedChatAgent(
             llmProvider: LLMProvider
         ) {
             val registry = orchestrator.getToolAgentRegistry()
-            
+
             // Регистрируем все Tool Agents из Phase 2
             registry.register(
                 ProjectScannerToolAgent()

@@ -77,14 +77,14 @@ class BugDetectionToolAgent(
                 val findings = analyzer.analyze(code, filePath)
                 
                 // Конвертируем в Map для вывода
-                val findingMaps = findings.map { finding ->
-                    mapOf(
+                val findingMaps: List<Map<String, Any>> = findings.map { finding ->
+                    mapOf<String, Any>(
                         "file" to finding.file,
-                        "line" to finding.line,
+                        "line" to (finding.line ?: 0),
                         "severity" to finding.severity.name,
                         "message" to finding.title,
                         "description" to finding.description,
-                        "suggestion" to finding.suggestion,
+                        "suggestion" to (finding.suggestion ?: ""),
                         "type" to finding.type.name
                     )
                 }
