@@ -467,7 +467,7 @@ p {
     color: var(--codeText);
     white-space: pre-wrap;
     word-wrap: break-word;
-    background: transparent;
+    background: var(--terminal-bg);
     border: none;
 }
 
@@ -529,6 +529,7 @@ p {
 
 [data-theme="light"] .output-content pre {
     color: #1f2937;
+    background: #f3f4f6;
 }
 
 [data-theme="light"] .error-message {
