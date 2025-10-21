@@ -392,7 +392,7 @@ p {
 
 .tool-agent-status.completed {
     border-left: 4px solid #10b981;
-    background: rgba(16, 185, 129, 0.1);
+    background: #2d2d2d;
 }
 
 .tool-agent-status.failed {
@@ -505,6 +505,10 @@ p {
 [data-theme="light"] .tool-agent-status {
     background: #ffffff;
     border-color: #e5e7eb;
+}
+
+[data-theme="light"] .tool-agent-status.completed {
+    background: #f3f4f6;
 }
 
 [data-theme="light"] .status-text {
