@@ -871,6 +871,18 @@ class ChatService {
      * Для HuggingFace возвращает имя модели, для Yandex - "Yandex GPT (имя модели)"
      */
     fun getCurrentProviderName(): String {
+        // Проверяем EnhancedChatAgent
+        val enhancedAgent = agent as? EnhancedChatAgent
+        if (enhancedAgent != null) {
+            val provider = enhancedAgent.getProvider()
+            return when (provider) {
+                is HuggingFaceProvider -> provider.getModelDisplayName()
+                is YandexGPTProvider -> "${provider.getProviderName()} (${provider.getModelDisplayName()})"
+                else -> provider.getProviderName()
+            }
+        }
+        
+        // Проверяем обычный ChatAgent
         val chatAgent = agent as? ChatAgent
         if (chatAgent != null) {
             val provider = chatAgent.getProvider()

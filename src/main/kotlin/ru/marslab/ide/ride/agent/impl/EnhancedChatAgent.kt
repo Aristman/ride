@@ -74,6 +74,13 @@ class EnhancedChatAgent(
     override fun dispose() {
         baseChatAgent.dispose()
     }
+    
+    /**
+     * Возвращает текущий LLM провайдер (для отображения в UI)
+     */
+    fun getProvider(): LLMProvider {
+        return baseChatAgent.getProvider()
+    }
 
     /**
      * Анализирует сложность задачи
