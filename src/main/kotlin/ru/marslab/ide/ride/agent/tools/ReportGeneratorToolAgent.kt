@@ -3,6 +3,7 @@ package ru.marslab.ide.ride.agent.tools
 import kotlinx.datetime.Clock
 import ru.marslab.ide.ride.agent.BaseToolAgent
 import ru.marslab.ide.ride.agent.ValidationResult
+import ru.marslab.ide.ride.integration.llm.LLMProvider
 import ru.marslab.ide.ride.model.orchestrator.AgentType
 import ru.marslab.ide.ride.model.orchestrator.ExecutionContext
 import ru.marslab.ide.ride.model.tool.*
@@ -10,17 +11,23 @@ import ru.marslab.ide.ride.model.tool.*
 /**
  * Агент для генерации отчетов в различных форматах
  * 
+ * Использует LLM для создания структурированных отчетов на основе результатов анализа.
+ * 
  * Capabilities:
  * - markdown_generation - генерация Markdown
  * - html_generation - генерация HTML
  * - json_export - экспорт в JSON
+ * - llm_report - генерация отчета через LLM
  */
-class ReportGeneratorToolAgent : BaseToolAgent(
+class ReportGeneratorToolAgent(
+    private val llmProvider: LLMProvider
+) : BaseToolAgent(
     agentType = AgentType.REPORT_GENERATOR,
     toolCapabilities = setOf(
         "markdown_generation",
         "html_generation",
-        "json_export"
+        "json_export",
+        "llm_report"
     )
 ) {
     
@@ -83,37 +90,42 @@ class ReportGeneratorToolAgent : BaseToolAgent(
     
     override suspend fun doExecuteStep(step: ToolPlanStep, context: ExecutionContext): StepResult {
         val format = step.input.getString("format") ?: "markdown"
+        val useLLM = step.input.getBoolean("use_llm") ?: true
         val title = step.input.getString("title") ?: "Отчет анализа кода"
         val explicitFindings = step.input.getList<Finding>("findings") ?: emptyList()
         val metrics = step.input.get<Map<String, Any>>("metrics") ?: emptyMap()
 
-        // Попробуем собрать находки из previousResults (если были зависимые шаги)
-        val aggregatedFromDeps = mutableListOf<Finding>()
-        val prev = step.input.get<Map<String, Any>>("previousResults")
-        if (prev != null) {
-            prev.values.forEach { v ->
-                // Ожидаем, что это строка с печатью карты: {findings=[{...}, ...], total=...}
-                val text = v.toString()
-                // Вытащим JSON-подобный блок массива находок внутри 'findings=[ ... ]'
-                val m = Regex("findings=\\[(.*?)]", RegexOption.DOT_MATCHES_ALL).find(text)
-                val arr = m?.groupValues?.getOrNull(1)
-                if (!arr.isNullOrBlank()) {
-                    // Разобьем на объекты приблизительно по границам '{...}'
-                    val objs = splitObjects(arr)
-                    objs.mapNotNull { obj -> mapToFinding(obj) } .forEach { aggregatedFromDeps.add(it) }
+        // Собираем результаты из previousResults
+        val previousResults = step.input.get<Map<String, Any>>("previousResults") ?: emptyMap()
+        
+        logger.info("Generating report in $format format (use_llm=$useLLM, previous_results=${previousResults.size})")
+        
+        val report = if (useLLM && format.lowercase() == "markdown" && previousResults.isNotEmpty()) {
+            // Генерируем отчет через LLM на основе результатов всех шагов
+            generateLLMReport(previousResults)
+        } else {
+            // Используем старую логику для обратной совместимости
+            val aggregatedFromDeps = mutableListOf<Finding>()
+            if (previousResults.isNotEmpty()) {
+                previousResults.values.forEach { v ->
+                    val text = v.toString()
+                    val m = Regex("findings=\\[(.*?)]", RegexOption.DOT_MATCHES_ALL).find(text)
+                    val arr = m?.groupValues?.getOrNull(1)
+                    if (!arr.isNullOrBlank()) {
+                        val objs = splitObjects(arr)
+                        objs.mapNotNull { obj -> mapToFinding(obj) }.forEach { aggregatedFromDeps.add(it) }
+                    }
                 }
             }
-        }
 
-        val findings = (explicitFindings + aggregatedFromDeps)
-        
-        logger.info("Generating report in $format format with ${findings.size} findings")
-        
-        val report = when (format.lowercase()) {
-            "markdown" -> generateMarkdownReport(title, findings, metrics)
-            "html" -> generateHtmlReport(title, findings, metrics)
-            "json" -> generateJsonReport(title, findings, metrics)
-            else -> return StepResult.error("Unsupported format: $format")
+            val findings = (explicitFindings + aggregatedFromDeps)
+            
+            when (format.lowercase()) {
+                "markdown" -> generateMarkdownReport(title, findings, metrics)
+                "html" -> generateHtmlReport(title, findings, metrics)
+                "json" -> generateJsonReport(title, findings, metrics)
+                else -> return StepResult.error("Unsupported format: $format")
+            }
         }
         
         logger.info("Report generated successfully (${report.length} characters)")
@@ -125,8 +137,8 @@ class ReportGeneratorToolAgent : BaseToolAgent(
                 "size" to report.length
             ),
             metadata = mapOf(
-                "findings_count" to findings.size,
-                "generated_at" to Clock.System.now().toString()
+                "generated_at" to Clock.System.now().toString(),
+                "used_llm" to useLLM
             )
         )
     }
@@ -291,5 +303,222 @@ class ReportGeneratorToolAgent : BaseToolAgent(
     
     private fun formatKey(key: String): String {
         return key.split("_").joinToString(" ") { it.capitalize() }
+    }
+    
+    /**
+     * Генерирует отчет через LLM на основе результатов всех шагов
+     */
+    private suspend fun generateLLMReport(previousResults: Map<String, Any>): String {
+        logger.info("Generating LLM report from ${previousResults.size} step results")
+        
+        val reportPrompt = buildLLMReportPrompt(previousResults)
+        
+        return try {
+            val llmResponse = llmProvider.sendRequest(
+                systemPrompt = LLM_REPORT_SYSTEM_PROMPT,
+                userMessage = reportPrompt,
+                conversationHistory = emptyList(),
+                parameters = ru.marslab.ide.ride.model.llm.LLMParameters.BALANCED
+            )
+            
+            if (llmResponse.success) {
+                llmResponse.content
+            } else {
+                logger.error("Failed to generate LLM report: ${llmResponse.error}")
+                buildFallbackReport(previousResults)
+            }
+        } catch (e: Exception) {
+            logger.error("Error generating LLM report", e)
+            buildFallbackReport(previousResults)
+        }
+    }
+    
+    /**
+     * Строит промпт для LLM на основе результатов шагов
+     */
+    private fun buildLLMReportPrompt(previousResults: Map<String, Any>): String {
+        return buildString {
+            appendLine("# Результаты анализа кода")
+            appendLine()
+            
+            previousResults.forEach { (stepId, result) ->
+                appendLine("## Шаг: $stepId")
+                appendLine()
+                
+                when (result) {
+                    is Map<*, *> -> {
+                        val output = result["output"] as? Map<*, *>
+                        if (output != null) {
+                            // Findings
+                            val findings = output["findings"] as? List<*>
+                            if (findings != null && findings.isNotEmpty()) {
+                                appendLine("**Найдено проблем:** ${findings.size}")
+                                
+                                val criticalCount = output["critical_count"] as? Int ?: 0
+                                val highCount = output["high_count"] as? Int ?: 0
+                                val mediumCount = output["medium_count"] as? Int ?: 0
+                                val lowCount = output["low_count"] as? Int ?: 0
+                                
+                                if (criticalCount + highCount + mediumCount + lowCount > 0) {
+                                    appendLine("- Критичных: $criticalCount")
+                                    appendLine("- Высокий приоритет: $highCount")
+                                    appendLine("- Средний приоритет: $mediumCount")
+                                    appendLine("- Низкий приоритет: $lowCount")
+                                }
+                                appendLine()
+                                
+                                appendLine("**Детали:**")
+                                findings.take(10).forEach { finding ->
+                                    if (finding is Map<*, *>) {
+                                        val message = finding["message"] ?: finding["description"]
+                                        val severity = finding["severity"]
+                                        val file = finding["file"]
+                                        val line = finding["line"]
+                                        val suggestion = finding["suggestion"]
+                                        
+                                        appendLine("- **$message** (Уровень: $severity)")
+                                        if (file != null) {
+                                            appendLine("  - Файл: `$file${if (line != null) ":$line" else ""}`")
+                                        }
+                                        if (suggestion != null && suggestion != "") {
+                                            appendLine("  - Рекомендация: $suggestion")
+                                        }
+                                    }
+                                }
+                                if (findings.size > 10) {
+                                    appendLine("- ... и еще ${findings.size - 10} проблем(ы)")
+                                }
+                            }
+                            
+                            // Files
+                            val totalFiles = output["total_files"] as? Int
+                            val totalDirs = output["total_directories"] as? Int
+                            if (totalFiles != null) {
+                                appendLine("**Проанализировано файлов:** $totalFiles")
+                                if (totalDirs != null) {
+                                    appendLine("**Директорий:** $totalDirs")
+                                }
+                            }
+                            
+                            // Architecture
+                            val modules = output["modules"] as? List<*>
+                            if (modules != null) {
+                                appendLine("**Обнаружено модулей:** ${modules.size}")
+                            }
+                            
+                            val layers = output["layers"] as? List<*>
+                            if (layers != null) {
+                                appendLine("**Обнаружено слоев:** ${layers.size}")
+                            }
+                        }
+                    }
+                    is String -> {
+                        appendLine(result)
+                    }
+                }
+                
+                appendLine()
+            }
+            
+            appendLine()
+            appendLine("# Инструкция")
+            appendLine("Создай подробный, структурированный отчет на русском языке в формате Markdown.")
+            appendLine()
+            appendLine("Структура отчета:")
+            appendLine("1. **Заголовок** - Отчет о выполнении задачи")
+            appendLine("2. **Краткое резюме** - 2-3 предложения о выполненной работе")
+            appendLine("3. **Детальные результаты** - для каждого этапа анализа")
+            appendLine("4. **Ключевые находки** - самые важные проблемы")
+            appendLine("5. **Рекомендации** - конкретные шаги по улучшению")
+            appendLine("6. **Заключение** - итоговая оценка")
+            appendLine()
+            appendLine("Требования:")
+            appendLine("- Используй заголовки (##, ###)")
+            appendLine("- Используй списки и **жирный** текст")
+            appendLine("- Используй `код` для файлов")
+            appendLine("- Добавляй пустые строки для читаемости")
+            appendLine("- НЕ включай информацию о планировании")
+        }
+    }
+    
+    /**
+     * Создает упрощенный отчет при ошибке LLM
+     */
+    private fun buildFallbackReport(previousResults: Map<String, Any>): String {
+        return buildString {
+            appendLine("# Отчет о выполнении задачи")
+            appendLine()
+            appendLine("**Дата генерации:** ${Clock.System.now()}")
+            appendLine()
+            
+            appendLine("## Краткое резюме")
+            appendLine()
+            appendLine("Выполнен анализ кода. Завершено ${previousResults.size} этапов.")
+            appendLine()
+            
+            appendLine("## Детальные результаты")
+            appendLine()
+            
+            previousResults.forEach { (stepId, result) ->
+                appendLine("### $stepId")
+                appendLine()
+                
+                when (result) {
+                    is Map<*, *> -> {
+                        val output = result["output"] as? Map<*, *>
+                        if (output != null) {
+                            val findings = output["findings"] as? List<*>
+                            if (findings != null && findings.isNotEmpty()) {
+                                appendLine("**Найдено проблем:** ${findings.size}")
+                                appendLine()
+                                
+                                findings.take(5).forEach { finding ->
+                                    if (finding is Map<*, *>) {
+                                        val message = finding["message"] ?: finding["description"]
+                                        val severity = finding["severity"]
+                                        appendLine("- **$message** (Уровень: $severity)")
+                                    }
+                                }
+                                if (findings.size > 5) {
+                                    appendLine("- ... и еще ${findings.size - 5} проблем(ы)")
+                                }
+                            } else {
+                                appendLine("Проблем не обнаружено.")
+                            }
+                        }
+                    }
+                    is String -> {
+                        appendLine(result)
+                    }
+                }
+                
+                appendLine()
+            }
+            
+            appendLine("## Заключение")
+            appendLine()
+            appendLine("Анализ кода завершен. Детальные результаты представлены выше.")
+        }
+    }
+    
+    companion object {
+        private const val LLM_REPORT_SYSTEM_PROMPT = """
+Ты - эксперт по анализу кода и генерации технических отчетов.
+Твоя задача - создавать подробные, структурированные отчеты на основе результатов работы различных агентов анализа кода.
+
+Требования к отчету:
+- Используй профессиональный технический язык
+- Структурируй информацию логично и последовательно
+- Выделяй ключевые находки и проблемы
+- Предоставляй конкретные рекомендации
+- Используй markdown для форматирования
+- Пиши на русском языке
+
+Стиль:
+- Четкий и лаконичный
+- Фокус на важной информации
+- Избегай избыточных деталей
+- Используй списки и таблицы для структурирования данных
+"""
     }
 }

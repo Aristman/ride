@@ -265,7 +265,7 @@ class EnhancedChatAgent(
                 ArchitectureToolAgent(llmProvider)
             )
             registry.register(
-                ReportGeneratorToolAgent()
+                ReportGeneratorToolAgent(llmProvider)
             )
 
             // LLM review agent (multi-language)

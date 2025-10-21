@@ -115,17 +115,7 @@ class EnhancedAgentOrchestrator(
             val updatedPlan = stateMachine.transition(plan, PlanEvent.Start(adjustedAnalysis))
             activePlans[plan.id] = updatedPlan
 
-            // 6. Отправляем уведомление о начале анализа
-            onStepComplete(
-                OrchestratorStep.PlanningComplete(
-                    agentName = "EnhancedAgentOrchestrator",
-                    content = buildAnalysisNotification(analysis),
-                    success = true,
-                    error = null
-                )
-            )
-
-            // 7. Выполняем план
+            // 6. Выполняем план (уведомление о планировании не отправляем)
             val result = executePlan(updatedPlan, onStepComplete)
 
             // 8. Завершаем отслеживание
@@ -468,7 +458,6 @@ class EnhancedAgentOrchestrator(
             // Последовательно выполняем шаги (для Phase 1)
             val completedSteps = mutableListOf<String>()
             val stepResults = mutableMapOf<String, Any>() // Результаты шагов для передачи
-            val finalResults = mutableListOf<StepExecutionResult>() // Накопление финальных результатов
 
             for (step in executingPlan.steps) {
                 if (step.status != StepStatus.PENDING) continue
@@ -484,25 +473,6 @@ class EnhancedAgentOrchestrator(
                     
                     completedSteps.add(step.id)
                     stepResults[step.id] = stepResult // Сохраняем результат
-                    
-                    // Определяем, является ли шаг финальным (не используется другими шагами)
-                    val isFinalStep = executingPlan.steps.none { otherStep -> 
-                        step.id in otherStep.dependencies 
-                    }
-                    
-                    // Накапливаем результаты финальных шагов
-                    if (isFinalStep) {
-                        finalResults.add(
-                            StepExecutionResult(
-                                stepId = step.id,
-                                stepTitle = step.title,
-                                stepDescription = step.description,
-                                agentType = step.agentType,
-                                result = stepResult
-                            )
-                        )
-                        logger.info("Step ${step.id} marked as final, result accumulated")
-                    }
 
                     // Обновляем план
                     val updatedPlan = executingPlan.updateStepStatus(step.id, StepStatus.COMPLETED, stepResult)
@@ -518,19 +488,52 @@ class EnhancedAgentOrchestrator(
             activePlans[plan.id] = finalPlan
             planStorage.update(finalPlan)
             
-            // Генерируем финальный отчет через LLM
-            val finalReport = if (finalResults.isNotEmpty()) {
-                generateFinalReport(executingPlan.analysis, finalResults)
+            // Извлекаем отчет из результата REPORT_GENERATOR
+            val reportGeneratorStep = executingPlan.steps.find { it.agentType == AgentType.REPORT_GENERATOR }
+            val finalContent = if (reportGeneratorStep != null) {
+                val reportResult = stepResults[reportGeneratorStep.id]
+                logger.info("Report result type: ${reportResult?.javaClass?.name}")
+                logger.info("Report result: $reportResult")
+                
+                when (reportResult) {
+                    is Map<*, *> -> {
+                        // Результат может быть вложенным: {output={report=..., format=..., size=...}}
+                        val output = reportResult["output"]
+                        logger.info("Output type: ${output?.javaClass?.name}")
+                        
+                        when (output) {
+                            is Map<*, *> -> {
+                                val report = output["report"] as? String
+                                logger.info("Extracted report length: ${report?.length}")
+                                report ?: "План успешно выполнен. Завершено ${completedSteps.size} шагов."
+                            }
+                            is String -> output
+                            else -> {
+                                logger.warn("Unexpected output type: ${output?.javaClass?.name}")
+                                "План успешно выполнен. Завершено ${completedSteps.size} шагов."
+                            }
+                        }
+                    }
+                    is String -> {
+                        // Если результат уже строка, пытаемся извлечь report из нее
+                        val reportMatch = Regex("report=(.+?), format=").find(reportResult)
+                        reportMatch?.groupValues?.getOrNull(1) ?: reportResult
+                    }
+                    else -> {
+                        logger.warn("Unexpected report result type: ${reportResult?.javaClass?.name}")
+                        "План успешно выполнен. Завершено ${completedSteps.size} шагов."
+                    }
+                }
             } else {
+                logger.warn("REPORT_GENERATOR step not found")
                 "План успешно выполнен. Завершено ${completedSteps.size} шагов."
             }
 
             AgentResponse.success(
-                content = finalReport,
+                content = finalContent,
                 metadata = mapOf(
                     "plan_id" to plan.id,
-                    "completed_steps" to completedSteps.size,
-                    "final_results_count" to finalResults.size
+                    "completed_steps" to completedSteps.size
                 )
             )
 
@@ -894,147 +897,6 @@ class EnhancedAgentOrchestrator(
         }
     }
 
-    /**
-     * Генерирует финальный отчет на основе результатов выполнения шагов
-     */
-    private suspend fun generateFinalReport(
-        analysis: RequestAnalysis,
-        results: List<StepExecutionResult>
-    ): String {
-        logger.info("Generating final report from ${results.size} step results")
-        
-        val reportPrompt = buildReportPrompt(analysis, results)
-        
-        return try {
-            val llmResponse = llmProvider.sendRequest(
-                systemPrompt = REPORT_GENERATION_SYSTEM_PROMPT,
-                userMessage = reportPrompt,
-                conversationHistory = emptyList(),
-                parameters = ru.marslab.ide.ride.model.llm.LLMParameters.BALANCED
-            )
-            
-            if (llmResponse.success) {
-                llmResponse.content
-            } else {
-                logger.error("Failed to generate report via LLM: ${llmResponse.error}")
-                buildFallbackReport(analysis, results)
-            }
-        } catch (e: Exception) {
-            logger.error("Error generating report", e)
-            buildFallbackReport(analysis, results)
-        }
-    }
-    
-    /**
-     * Строит промпт для генерации отчета
-     */
-    private fun buildReportPrompt(analysis: RequestAnalysis, results: List<StepExecutionResult>): String {
-        return buildString {
-            appendLine("# Задача пользователя")
-            appendLine("Тип задачи: ${analysis.taskType}")
-            appendLine("Сложность: ${analysis.estimatedComplexity}")
-            appendLine()
-            
-            appendLine("# Результаты выполнения")
-            appendLine()
-            
-            results.forEachIndexed { index, result ->
-                appendLine("## ${index + 1}. ${result.stepTitle}")
-                appendLine("**Агент:** ${getAgentDisplayName(result.agentType)}")
-                appendLine("**Описание:** ${result.stepDescription}")
-                appendLine()
-                
-                // Извлекаем данные из результата
-                when (val stepResult = result.result) {
-                    is Map<*, *> -> {
-                        val output = stepResult["output"] as? Map<*, *>
-                        if (output != null) {
-                            appendLine("**Результаты:**")
-                            
-                            // Findings (для BUG_DETECTION, CODE_QUALITY, LLM_REVIEW)
-                            val findings = output["findings"] as? List<*>
-                            if (findings != null) {
-                                appendLine("- Найдено проблем: ${findings.size}")
-                                val criticalCount = output["critical_count"] as? Int ?: 0
-                                val highCount = output["high_count"] as? Int ?: 0
-                                val mediumCount = output["medium_count"] as? Int ?: 0
-                                val lowCount = output["low_count"] as? Int ?: 0
-                                appendLine("  - Критичных: $criticalCount")
-                                appendLine("  - Высокий приоритет: $highCount")
-                                appendLine("  - Средний приоритет: $mediumCount")
-                                appendLine("  - Низкий приоритет: $lowCount")
-                            }
-                            
-                            // Files (для PROJECT_SCANNER)
-                            val totalFiles = output["total_files"] as? Int
-                            val totalDirs = output["total_directories"] as? Int
-                            if (totalFiles != null) {
-                                appendLine("- Проанализировано файлов: $totalFiles")
-                                if (totalDirs != null) {
-                                    appendLine("- Директорий: $totalDirs")
-                                }
-                            }
-                            
-                            // Architecture analysis
-                            val modules = output["modules"] as? List<*>
-                            if (modules != null) {
-                                appendLine("- Обнаружено модулей: ${modules.size}")
-                            }
-                            
-                            val layers = output["layers"] as? List<*>
-                            if (layers != null) {
-                                appendLine("- Обнаружено слоев: ${layers.size}")
-                            }
-                        }
-                    }
-                    is String -> {
-                        appendLine("**Результат:** $stepResult")
-                    }
-                }
-                
-                appendLine()
-            }
-            
-            appendLine()
-            appendLine("# Инструкция")
-            appendLine("На основе этих данных создай подробный, структурированный отчет на русском языке.")
-            appendLine("Отчет должен содержать:")
-            appendLine("1. Краткое резюме выполненной работы")
-            appendLine("2. Детальные результаты каждого этапа анализа")
-            appendLine("3. Ключевые находки и проблемы (если есть)")
-            appendLine("4. Рекомендации по улучшению (если применимо)")
-            appendLine("5. Заключение")
-            appendLine()
-            appendLine("Используй markdown форматирование для структурирования отчета.")
-        }
-    }
-    
-    /**
-     * Создает упрощенный отчет в случае ошибки LLM
-     */
-    private fun buildFallbackReport(analysis: RequestAnalysis, results: List<StepExecutionResult>): String {
-        return buildString {
-            appendLine("# Отчет о выполнении задачи")
-            appendLine()
-            appendLine("**Тип задачи:** ${analysis.taskType}")
-            appendLine("**Сложность:** ${analysis.estimatedComplexity}")
-            appendLine("**Завершено этапов:** ${results.size}")
-            appendLine()
-            
-            appendLine("## Выполненные этапы")
-            appendLine()
-            
-            results.forEachIndexed { index, result ->
-                appendLine("### ${index + 1}. ${result.stepTitle}")
-                appendLine("- **Агент:** ${getAgentDisplayName(result.agentType)}")
-                appendLine("- **Статус:** Завершено успешно")
-                appendLine()
-            }
-            
-            appendLine("## Заключение")
-            appendLine("Все этапы выполнены успешно. Детальные результаты доступны в выводе каждого агента.")
-        }
-    }
 
     /**
      * Создает план на основе пользовательского запроса
@@ -1091,36 +953,4 @@ class EnhancedAgentOrchestrator(
             )
         )
     }
-    
-    companion object {
-        private const val REPORT_GENERATION_SYSTEM_PROMPT = """
-Ты - эксперт по анализу кода и генерации технических отчетов.
-Твоя задача - создавать подробные, структурированные отчеты на основе результатов работы различных агентов анализа кода.
-
-Требования к отчету:
-- Используй профессиональный технический язык
-- Структурируй информацию логично и последовательно
-- Выделяй ключевые находки и проблемы
-- Предоставляй конкретные рекомендации
-- Используй markdown для форматирования
-- Пиши на русском языке
-
-Стиль:
-- Четкий и лаконичный
-- Фокус на важной информации
-- Избегай избыточных деталей
-- Используй списки и таблицы для структурирования данных
-"""
-    }
 }
-
-/**
- * Результат выполнения шага для накопления
- */
-private data class StepExecutionResult(
-    val stepId: String,
-    val stepTitle: String,
-    val stepDescription: String,
-    val agentType: AgentType,
-    val result: Any
-)
