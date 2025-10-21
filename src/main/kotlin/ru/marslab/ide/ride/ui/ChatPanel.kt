@@ -84,6 +84,11 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         messageDisplayManager = MessageDisplayManager(htmlDocumentManager, contentRenderer, agentOutputRenderer)
         uiBuilder = ChatUiBuilder(chatService, htmlDocumentManager) { this }
 
+        // Настраиваем ChatService для отображения progress tool agents
+        jcefView?.let { view ->
+            chatService.setChatView(view)
+        }
+
         // Инициализация HTML/темы
         htmlDocumentManager.initialize()
         subscribeToAppearanceChanges()

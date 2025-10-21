@@ -26,42 +26,23 @@ object AgentFactory {
      * @return Настроенный агент
      */
     fun createChatAgent(): Agent {
-        val settings = service<PluginSettings>()
-        val llmProvider: LLMProvider = when (settings.selectedProvider) {
-            PluginSettings.PROVIDER_YANDEX -> {
-                val apiKey = settings.getApiKey()
-                val folderId = settings.folderId
-                val modelId = settings.yandexModelId
-                createYandexGPTProvider(apiKey, folderId, modelId)
-            }
-            PluginSettings.PROVIDER_HUGGINGFACE -> {
-                val hfToken = settings.getHuggingFaceToken()
-                val modelId = settings.huggingFaceModelId
-                createHuggingFaceProvider(hfToken, modelId)
-            }
-            else -> {
-                // По умолчанию Yandex
-                val apiKey = settings.getApiKey()
-                val folderId = settings.folderId
-                val modelId = settings.yandexModelId
-                createYandexGPTProvider(apiKey, folderId, modelId)
-            }
-        }
+        val llmProvider = createLLMProvider()
 
         // Создаем агента с провайдером
         val agent = ChatAgent(
             initialProvider = llmProvider,
 //            systemPrompt = settings.systemPrompt
         )
-        
+
         // Применяем настройки
+        val settings = service<PluginSettings>()
         val agentSettings = AgentSettings(
             llmProvider = llmProvider.getProviderName(),
             defaultResponseFormat = ResponseFormat.XML,
             mcpEnabled = false
         )
         agent.updateSettings(agentSettings)
-        
+
         return agent
     }
 
@@ -75,38 +56,20 @@ object AgentFactory {
      * @return Настроенный EnhancedChatAgent
      */
     fun createEnhancedChatAgent(): Agent {
-        val settings = service<PluginSettings>()
-        val llmProvider: LLMProvider = when (settings.selectedProvider) {
-            PluginSettings.PROVIDER_YANDEX -> {
-                val apiKey = settings.getApiKey()
-                val folderId = settings.folderId
-                val modelId = settings.yandexModelId
-                createYandexGPTProvider(apiKey, folderId, modelId)
-            }
-            PluginSettings.PROVIDER_HUGGINGFACE -> {
-                val hfToken = settings.getHuggingFaceToken()
-                val modelId = settings.huggingFaceModelId
-                createHuggingFaceProvider(hfToken, modelId)
-            }
-            else -> {
-                val apiKey = settings.getApiKey()
-                val folderId = settings.folderId
-                val modelId = settings.yandexModelId
-                createYandexGPTProvider(apiKey, folderId, modelId)
-            }
-        }
+        val llmProvider = createLLMProvider()
 
         // Создаем EnhancedChatAgent через фабричный метод
         val agent = EnhancedChatAgent.create(llmProvider)
-        
+
         // Применяем настройки
+        val settings = service<PluginSettings>()
         val agentSettings = AgentSettings(
             llmProvider = llmProvider.getProviderName(),
             defaultResponseFormat = ResponseFormat.XML,
             mcpEnabled = false
         )
         agent.updateSettings(agentSettings)
-        
+
         return agent
     }
     
@@ -163,12 +126,7 @@ object AgentFactory {
      * Создает провайдер Yandex GPT с указанными настройками
      */
     private fun createYandexGPTProvider(apiKey: String, folderId: String, modelId: String): LLMProvider {
-        val config = YandexGPTConfig(
-            apiKey = apiKey,
-            folderId = folderId,
-            modelId = modelId
-        )
-        return YandexGPTProvider(config)
+        return LLMProviderFactory.createYandexGPTProvider(apiKey, folderId, modelId)
     }
 
     /**
@@ -181,11 +139,7 @@ object AgentFactory {
         apiKey: String,
         modelId: String = HuggingFaceModel.DEEPSEEK_R1.modelId
     ): LLMProvider {
-        val config = HuggingFaceConfig(
-            apiKey = apiKey,
-            model = modelId
-        )
-        return HuggingFaceProvider(config)
+        return LLMProviderFactory.createHuggingFaceProvider(apiKey, modelId)
     }
 
     /**
@@ -198,7 +152,7 @@ object AgentFactory {
         apiKey: String,
         model: HuggingFaceModel
     ): LLMProvider {
-        return createHuggingFaceProvider(apiKey, model.modelId)
+        return LLMProviderFactory.createHuggingFaceProvider(apiKey, model)
     }
 
     /**
@@ -209,37 +163,26 @@ object AgentFactory {
         val settings = service<PluginSettings>()
         val hfToken = settings.getHuggingFaceToken()
         val modelId = settings.huggingFaceModelId
-        val provider = createHuggingFaceProvider(hfToken, modelId)
+        val provider = LLMProviderFactory.createHuggingFaceProvider(hfToken, modelId)
         return ChatAgent(initialProvider = provider)
     }
 
     /**
+     * Создает LLM Provider на основе настроек плагина
+     *
+     * @return Настроенный LLM Provider
+     */
+    fun createLLMProvider(): LLMProvider {
+        return LLMProviderFactory.createLLMProvider()
+    }
+
+    /**
      * Создает AgentOrchestrator с настроенным LLM провайдером из настроек плагина
-     * 
+     *
      * @return Настроенный оркестратор
      */
     fun createAgentOrchestrator(): AgentOrchestrator {
-        val settings = service<PluginSettings>()
-        val llmProvider: LLMProvider = when (settings.selectedProvider) {
-            PluginSettings.PROVIDER_YANDEX -> {
-                val apiKey = settings.getApiKey()
-                val folderId = settings.folderId
-                val modelId = settings.yandexModelId
-                createYandexGPTProvider(apiKey, folderId, modelId)
-            }
-            PluginSettings.PROVIDER_HUGGINGFACE -> {
-                val hfToken = settings.getHuggingFaceToken()
-                val modelId = settings.huggingFaceModelId
-                createHuggingFaceProvider(hfToken, modelId)
-            }
-            else -> {
-                val apiKey = settings.getApiKey()
-                val folderId = settings.folderId
-                val modelId = settings.yandexModelId
-                createYandexGPTProvider(apiKey, folderId, modelId)
-            }
-        }
-        
+        val llmProvider = createLLMProvider()
         return AgentOrchestrator(llmProvider, llmProvider)
     }
 
@@ -259,27 +202,7 @@ object AgentFactory {
      * @return CodeAnalysisAgent готовый к использованию
      */
     fun createCodeAnalysisAgent(project: com.intellij.openapi.project.Project): ru.marslab.ide.ride.codeanalysis.CodeAnalysisAgent {
-        val settings = service<PluginSettings>()
-        val llmProvider: LLMProvider = when (settings.selectedProvider) {
-            PluginSettings.PROVIDER_YANDEX -> {
-                val apiKey = settings.getApiKey()
-                val folderId = settings.folderId
-                val modelId = settings.yandexModelId
-                createYandexGPTProvider(apiKey, folderId, modelId)
-            }
-            PluginSettings.PROVIDER_HUGGINGFACE -> {
-                val hfToken = settings.getHuggingFaceToken()
-                val modelId = settings.huggingFaceModelId
-                createHuggingFaceProvider(hfToken, modelId)
-            }
-            else -> {
-                val apiKey = settings.getApiKey()
-                val folderId = settings.folderId
-                val modelId = settings.yandexModelId
-                createYandexGPTProvider(apiKey, folderId, modelId)
-            }
-        }
-        
+        val llmProvider = createLLMProvider()
         return ru.marslab.ide.ride.codeanalysis.impl.CodeAnalysisAgentImpl(project, llmProvider)
     }
 }

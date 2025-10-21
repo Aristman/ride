@@ -14,13 +14,20 @@ import ru.marslab.ide.ride.integration.llm.impl.YandexGPTProvider
 import ru.marslab.ide.ride.agent.impl.ChatAgent
 import ru.marslab.ide.ride.agent.impl.MCPFileSystemAgent
 import ru.marslab.ide.ride.integration.llm.impl.YandexGPTConfig
+import ru.marslab.ide.ride.agent.LLMProviderFactory
 import ru.marslab.ide.ride.mcp.MCPServerManager
 import ru.marslab.ide.ride.model.agent.*
 import ru.marslab.ide.ride.model.chat.*
 import ru.marslab.ide.ride.model.llm.*
 import ru.marslab.ide.ride.model.schema.*
 import ru.marslab.ide.ride.model.chat.ChatSession
+import ru.marslab.ide.ride.model.chat.ToolAgentStatusMessage
+import ru.marslab.ide.ride.model.chat.ToolAgentExecutionStatus
+import ru.marslab.ide.ride.orchestrator.EnhancedAgentOrchestrator
+import ru.marslab.ide.ride.orchestrator.ToolAgentProgressListener
+import ru.marslab.ide.ride.agent.impl.EnhancedChatAgent
 import ru.marslab.ide.ride.settings.PluginSettings
+import ru.marslab.ide.ride.ui.chat.JcefChatView
 import ru.marslab.ide.ride.util.TokenEstimator
 import java.time.Instant
 
@@ -51,6 +58,170 @@ class ChatService {
     // - Сложные задачи → EnhancedAgentOrchestrator (многошаговое выполнение)
     private var agent: Agent = AgentFactory.createEnhancedChatAgent()
 
+    // Chat view для отображения прогресса tool agents
+    private var chatView: JcefChatView? = null
+
+    // Callback для отправки сообщений в UI (устанавливается при отправке сообщения)
+    private var currentResponseCallback: ((Message) -> Unit)? = null
+
+    // Progress listener для tool agents
+    private val toolAgentProgressListener = object : ToolAgentProgressListener {
+        override fun onToolAgentStarted(message: ToolAgentStatusMessage) {
+            displayToolAgentStatus(message)
+        }
+
+        override fun onToolAgentStatusUpdated(message: ToolAgentStatusMessage) {
+            displayToolAgentStatus(message)
+        }
+
+        override fun onToolAgentCompleted(message: ToolAgentStatusMessage) {
+            displayToolAgentStatus(message)
+        }
+
+        override fun onToolAgentFailed(message: ToolAgentStatusMessage, error: String) {
+            displayToolAgentStatus(message)
+        }
+    }
+
+    // Список активных progress сообщений для обновления
+    private val activeProgressMessages = mutableMapOf<String, Message>()
+
+    /**
+     * Устанавливает chat view для отображения progress сообщений
+     */
+    fun setChatView(view: JcefChatView) {
+        this.chatView = view
+        // Добавляем listener к orchestrator если он есть
+        setupProgressListener()
+    }
+
+    /**
+     * Настраивает listener для tool agent progress
+     */
+    private fun setupProgressListener() {
+        // Ищем EnhancedAgentOrchestrator в агенте
+        val orchestrator = findEnhancedAgentOrchestrator()
+        if (orchestrator != null) {
+            orchestrator.addProgressListener(toolAgentProgressListener)
+        }
+    }
+
+    /**
+     * Ищет EnhancedAgentOrchestrator в текущем агенте
+     */
+    private fun findEnhancedAgentOrchestrator(): EnhancedAgentOrchestrator? {
+        val currentAgent = agent
+        try {
+            when (currentAgent) {
+//                is EnhancedAgentOrchestrator -> return currentAgent
+                is EnhancedChatAgent -> {
+                    // Пытаемся получить orchestrator из EnhancedChatAgent
+                    val field = currentAgent::class.java.getDeclaredField("orchestrator")
+                    field.isAccessible = true
+                    val orchestrator = field.get(currentAgent)
+                    if (orchestrator != null && orchestrator::class.java.simpleName == "EnhancedAgentOrchestrator") {
+                        @Suppress("UNCHECKED_CAST")
+                        return orchestrator as? EnhancedAgentOrchestrator
+                    }
+                }
+                else -> {
+                    // Другие типы агентов не поддерживают progress tracking
+                }
+            }
+        } catch (e: Exception) {
+            logger.warn("Could not access orchestrator from agent", e)
+        }
+        return null
+    }
+
+    /**
+     * Отображает статус tool agent в чате
+     */
+    private fun displayToolAgentStatus(message: ToolAgentStatusMessage) {
+        chatView?.let { view ->
+            try {
+                // Выполняем в UI потоке
+                com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater {
+                    view.addOrUpdateToolAgentStatus(message.toHtml(), message.id)
+                }
+            } catch (e: Exception) {
+                logger.error("Error displaying tool agent status", e)
+            }
+        }
+
+        // Создаем сообщение в истории для всех обновлений статусов
+        createProgressMessage(message)
+    }
+
+    /**
+     * Отправляет сообщение напрямую в UI и историю
+     */
+    private fun sendProgressMessageToUI(message: Message) {
+        try {
+            // Добавляем в историю
+            getCurrentHistory().addMessage(message)
+
+            // Отправляем в UI если есть callback
+            currentResponseCallback?.invoke(message)
+
+            logger.info("Progress message sent to UI: ${message.content.take(50)}...")
+        } catch (e: Exception) {
+            logger.error("Error sending progress message to UI", e)
+        }
+    }
+
+    /**
+     * Создает сообщение о прогрессе в истории чата
+     */
+    private fun createProgressMessage(message: ToolAgentStatusMessage): Message {
+        return try {
+            val content = when (message.result.status) {
+                ToolAgentExecutionStatus.RUNNING -> {
+                    message.toHtml() // Используем HTML для progress сообщений
+                }
+                ToolAgentExecutionStatus.COMPLETED -> {
+                    message.toHtml() // Используем HTML для завершенных сообщений с результатами
+                }
+                ToolAgentExecutionStatus.FAILED -> {
+                    message.toHtml() // Используем HTML для сообщений об ошибках
+                }
+                ToolAgentExecutionStatus.CANCELLED -> {
+                    "**${message.result.agentName} отменен**"
+                }
+                else -> {
+                    "**${message.displayMessage}**"
+                }
+            }
+
+            val progressMessage = Message(
+                content = content,
+                role = MessageRole.ASSISTANT, // Используем ASSISTANT для отображения в чате
+                metadata = mapOf(
+                    "type" to "tool_agent_progress",
+                    "agentType" to message.result.agentType,
+                    "agentName" to message.result.agentName,
+                    "stepId" to message.result.stepId,
+                    "executionTime" to (message.result.executionTimeMs ?: 0),
+                    "status" to message.result.status.name,
+                    "isProgress" to true,
+                    "messageId" to message.id
+                )
+            )
+
+            // Сохраняем сообщение для возможности обновления
+            activeProgressMessages[message.result.stepId] = progressMessage
+
+            logger.info("Tool agent ${message.result.status.name}: ${message.result.agentName}")
+            progressMessage
+        } catch (e: Exception) {
+            logger.error("Error creating progress message", e)
+            Message(
+                content = "Ошибка отображения прогресса: ${e.message}",
+                role = MessageRole.SYSTEM
+            )
+        }
+    }
+
     /**
      * Отправляет сообщение пользователя и получает ответ от агента
      *
@@ -71,6 +242,9 @@ class ChatService {
         }
 
         logger.info("Sending user message, length: ${userMessage.length}")
+
+        // Сохраняем callback для progress сообщений
+        currentResponseCallback = onResponse
 
         // Создаем и сохраняем сообщение пользователя
         val userMsg = Message(
@@ -183,6 +357,9 @@ class ChatService {
 
             } catch (e: Exception) {
                 logger.error("Error processing message", e)
+            } finally {
+                // Очищаем callback после завершения
+                currentResponseCallback = null
             }
         }
     }
@@ -225,6 +402,9 @@ class ChatService {
                 return
             }
         }
+
+        // Сохраняем callback для progress сообщений
+        currentResponseCallback = onResponse
 
         // Создаем сообщение пользователя
         val userMsg = Message(
@@ -353,16 +533,19 @@ class ChatService {
                 withContext(Dispatchers.EDT) {
                     onError("Ошибка: ${e.message}")
                 }
+            } finally {
+                // Очищаем callback после завершения
+                currentResponseCallback = null
             }
         }
     }
 
     /**
-     * Отправляет сообщение через систему двух агентов (PlannerAgent + ExecutorAgent)
-     * 
-     * @param userMessage Текст сообщения пользователя
+     * Отправляет сообщение через EnhancedAgentOrchestrator с поддержкой progress отображения
+     *
+     * @param userMessage Сообщение пользователя
      * @param project Текущий проект
-     * @param onStepComplete Callback для каждого шага выполнения
+     * @param onStepComplete Callback для завершения каждого шага
      * @param onError Callback для обработки ошибок
      */
     fun sendMessageWithOrchestrator(
@@ -376,7 +559,7 @@ class ChatService {
             return
         }
 
-        logger.info("Sending user message to orchestrator, length: ${userMessage.length}")
+        logger.info("Sending user message to enhanced orchestrator, length: ${userMessage.length}")
 
         // Создаем и сохраняем сообщение пользователя
         val userMsg = Message(
@@ -391,11 +574,15 @@ class ChatService {
             updateSessionTitle(currentSessionId, title)
         }
 
+        // Устанавливаем callback для progress сообщений
+        currentResponseCallback = onStepComplete
+
         // Обрабатываем запрос асинхронно
         scope.launch {
             try {
-                // Создаем оркестратор
-                val orchestrator = AgentFactory.createAgentOrchestrator()
+                // Создаем улучшенный оркестратор
+                val llmProvider = LLMProviderFactory.createLLMProvider()
+                val enhancedOrchestrator = EnhancedAgentOrchestrator(llmProvider)
 
                 // Формируем контекст
                 val context = ChatContext(
@@ -417,89 +604,62 @@ class ChatService {
                     parameters = llmParameters
                 )
 
-                // Запускаем оркестратор с callback для каждого шага
-                orchestrator.process(agentRequest) { step ->
-                    withContext(Dispatchers.EDT) {
-                        when (step) {
-                            is OrchestratorStep.PlanningComplete -> {
-                                if (step.success) {
-                                    val message = Message(
-                                        content = step.content,
-                                        role = MessageRole.ASSISTANT,
-                                        metadata = mapOf(
-                                            "agentName" to step.agentName,
-                                            "responseTimeMs" to step.responseTimeMs,
-                                            "tokenUsage" to step.tokenUsage,
-                                            "tokensUsed" to step.tokenUsage.totalTokens,
-                                            "isFinal" to true,
-                                            "uncertainty" to 0.0
-                                        )
-                                    )
-                                    getCurrentHistory().addMessage(message)
-                                    onStepComplete(message)
-                                } else {
-                                    onError(step.error ?: "Ошибка планирования")
-                                }
-                            }
-                            is OrchestratorStep.TaskComplete -> {
-                                val content = buildString {
-                                    if (step.success) {
-                                        appendLine("✅ **Задача ${step.taskId}: ${step.taskTitle}**")
-                                        appendLine()
-                                        appendLine(step.content)
-                                    } else {
-                                        appendLine("❌ **Задача ${step.taskId}: ${step.taskTitle}**")
-                                        appendLine()
-                                        appendLine("**Ошибка:** ${step.error}")
-                                    }
-                                }
-                                val message = Message(
-                                    content = content,
-                                    role = MessageRole.ASSISTANT,
-                                    metadata = mapOf(
-                                        "agentName" to step.agentName,
-                                        "taskId" to step.taskId,
-                                        "taskTitle" to step.taskTitle,
-                                        "success" to step.success,
-                                        "responseTimeMs" to step.responseTimeMs,
-                                        "tokenUsage" to step.tokenUsage,
-                                        "tokensUsed" to step.tokenUsage.totalTokens,
-                                        "isFinal" to true,
-                                        "uncertainty" to 0.0
-                                    )
-                                )
-                                getCurrentHistory().addMessage(message)
-                                onStepComplete(message)
-                            }
-                            is OrchestratorStep.AllComplete -> {
-                                val message = Message(
-                                    content = step.content,
-                                    role = MessageRole.ASSISTANT,
-                                    metadata = mapOf(
-                                        "totalTasks" to step.totalTasks,
-                                        "successfulTasks" to step.successfulTasks,
-                                        "responseTimeMs" to step.totalTimeMs,
-                                        "tokenUsage" to step.totalTokenUsage,
-                                        "tokensUsed" to step.totalTokenUsage.totalTokens,
-                                        "isFinal" to true,
-                                        "uncertainty" to 0.0
-                                    )
-                                )
-                                getCurrentHistory().addMessage(message)
-                                onStepComplete(message)
-                            }
-                            is OrchestratorStep.Error -> {
-                                onError(step.error)
-                            }
-                        }
+                // Добавляем progress listener для отображения статуса в реальном времени
+                val progressListener = object : ToolAgentProgressListener {
+                    override fun onToolAgentStarted(message: ToolAgentStatusMessage) {
+                        logger.info("Tool agent started: ${message.result.agentName}")
+                        val progressMessage = createProgressMessage(message)
+                        sendProgressMessageToUI(progressMessage)
+                    }
+
+                    override fun onToolAgentStatusUpdated(message: ToolAgentStatusMessage) {
+                        logger.info("Tool agent status updated: ${message.result.agentName} -> ${message.result.status}")
+                        val progressMessage = createProgressMessage(message)
+                        sendProgressMessageToUI(progressMessage)
+                    }
+
+                    override fun onToolAgentCompleted(message: ToolAgentStatusMessage) {
+                        logger.info("Tool agent completed: ${message.result.agentName}")
+                        val progressMessage = createProgressMessage(message)
+                        sendProgressMessageToUI(progressMessage)
+                    }
+
+                    override fun onToolAgentFailed(message: ToolAgentStatusMessage, error: String) {
+                        logger.error("Tool agent failed: ${message.result.agentName} - $error")
+                        val errorMessage = createProgressMessage(message)
+                        sendProgressMessageToUI(errorMessage)
                     }
                 }
 
-                // Освобождаем ресурсы оркестратора
-                orchestrator.dispose()
+                enhancedOrchestrator.addProgressListener(progressListener)
+
+                // Запускаем оркестратор
+                val result = enhancedOrchestrator.executePlan(agentRequest)
+
+                withContext(Dispatchers.EDT) {
+                    if (result.success) {
+                        val finalMessage = Message(
+                            content = result.content,
+                            role = MessageRole.ASSISTANT,
+                            metadata = result.metadata + mapOf(
+                                "isFinal" to result.isFinal,
+                                "uncertainty" to (result.uncertainty ?: 0.0)
+                            )
+                        )
+                        getCurrentHistory().addMessage(finalMessage)
+                        onStepComplete(finalMessage)
+                    } else {
+                        onError(result.error ?: "Ошибка выполнения плана")
+                    }
+                }
+
+                // Удаляем listener и очищаем callback
+                enhancedOrchestrator.removeProgressListener(progressListener)
+                currentResponseCallback = null
 
             } catch (e: Exception) {
-                logger.error("Error processing message with orchestrator", e)
+                logger.error("Error processing message with enhanced orchestrator", e)
+                currentResponseCallback = null
                 withContext(Dispatchers.EDT) {
                     onError(e.message ?: "Неизвестная ошибка")
                 }
@@ -620,6 +780,10 @@ class ChatService {
         val previousFormat = currentFormat
         val previousSchema = currentSchema
         agent = AgentFactory.createEnhancedChatAgent()
+
+        // Заново настраиваем progress listener
+        setupProgressListener()
+
         // Восстановим формат ответа через настройки, если был задан
         if (previousFormat != null) {
             val agentSettings = AgentSettings(

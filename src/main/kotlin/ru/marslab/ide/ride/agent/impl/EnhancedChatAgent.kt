@@ -249,7 +249,7 @@ class EnhancedChatAgent(
                 ru.marslab.ide.ride.agent.tools.CodeQualityToolAgent()
             )
             registry.register(
-                ru.marslab.ide.ride.agent.tools.ArchitectureToolAgent()
+                ru.marslab.ide.ride.agent.tools.ArchitectureToolAgent(llmProvider)
             )
             registry.register(
                 ru.marslab.ide.ride.agent.tools.ReportGeneratorToolAgent()

@@ -341,3 +341,194 @@ li {
 p {
     margin: 4px 0;
 }
+
+/* === Tool Agent Status стили === */
+.tool-agent-status {
+    margin: 8px 0;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background: var(--tool-bg);
+    overflow: hidden;
+    transition: all 0.2s ease;
+}
+
+.status-header {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    gap: 8px;
+    cursor: default;
+}
+
+.status-icon {
+    font-size: 14px;
+    animation: none;
+}
+
+.tool-agent-status.running .status-icon {
+    animation: spin 1s linear infinite;
+}
+
+.status-text {
+    flex: 1;
+    font-size: 14px;
+    color: var(--textPrimary);
+}
+
+.status-details {
+    font-size: 12px;
+    color: var(--textSecondary);
+}
+
+/* Статус-специфичные стили */
+.tool-agent-status.pending {
+    border-left: 4px solid #fbbf24;
+}
+
+.tool-agent-status.running {
+    border-left: 4px solid #3b82f6;
+    background: var(--tool-bg);
+}
+
+.tool-agent-status.completed {
+    border-left: 4px solid #10b981;
+    background: rgba(16, 185, 129, 0.1);
+}
+
+.tool-agent-status.failed {
+    border-left: 4px solid #ef4444;
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.tool-agent-status.cancelled {
+    border-left: 4px solid #6b7280;
+    background: rgba(107, 114, 128, 0.1);
+}
+
+/* Стилизация вывода */
+.tool-agent-output {
+    border-top: 1px solid var(--border-color);
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.output-header {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--terminal-header-bg);
+    cursor: pointer;
+    gap: 8px;
+    transition: all 0.2s ease;
+    border-bottom: 1px solid transparent;
+    user-select: none;
+}
+
+.output-header:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-bottom-color: var(--border-color);
+}
+
+.output-header:active {
+    background: rgba(255, 255, 255, 0.12);
+    transform: translateY(1px);
+}
+
+.toggle-icon {
+    font-size: 12px;
+    color: var(--textSecondary);
+    transition: transform 0.2s ease;
+}
+
+.output-title {
+    flex: 1;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--textPrimary);
+}
+
+.output-size {
+    font-size: 11px;
+    color: var(--textSecondary);
+}
+
+.output-content {
+    background: var(--terminal-bg);
+    border-top: 1px solid var(--border-color);
+    max-height: 300px;
+    overflow: auto;
+}
+
+.output-content pre {
+    margin: 0;
+    padding: 12px;
+    font-family: var(--monospace-font);
+    font-size: 12px;
+    color: var(--codeText);
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    background: transparent;
+    border: none;
+}
+
+.tool-agent-output.collapsed .output-content {
+    display: none;
+}
+
+/* Сообщения об ошибках */
+.error-message {
+    margin: 8px 12px;
+    padding: 8px 12px;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 4px;
+    color: #fca5a5;
+    font-size: 13px;
+}
+
+/* Анимации */
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.tool-agent-status {
+    animation: fadeIn 0.3s ease;
+}
+
+/* Адаптивность для тем */
+[data-theme="light"] .tool-agent-status {
+    background: #ffffff;
+    border-color: #e5e7eb;
+}
+
+[data-theme="light"] .status-text {
+    color: #1f2937;
+}
+
+[data-theme="light"] .status-details {
+    color: #6b7280;
+}
+
+[data-theme="light"] .output-header {
+    background: #f9fafb;
+}
+
+[data-theme="light"] .output-content {
+    background: #f3f4f6;
+}
+
+[data-theme="light"] .output-content pre {
+    color: #1f2937;
+}
+
+[data-theme="light"] .error-message {
+    background: rgba(239, 68, 68, 0.05);
+    border-color: rgba(239, 68, 68, 0.2);
+    color: #dc2626;
+}
