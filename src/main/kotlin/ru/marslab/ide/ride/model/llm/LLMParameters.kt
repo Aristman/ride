@@ -39,5 +39,10 @@ data class LLMParameters(
          * Параметры для более точной и предсказуемой генерации
          */
         val PRECISE = LLMParameters(temperature = 0.3, maxTokens = 2000)
+        
+        /**
+         * Сбалансированные параметры для анализа
+         */
+        val BALANCED = LLMParameters(temperature = 0.5, maxTokens = 2000)
     }
 }

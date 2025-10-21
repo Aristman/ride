@@ -46,7 +46,10 @@ class ChatService {
     private var currentSchema: ResponseSchema? = null
 
     // Агент создаётся и может быть пересоздан при смене настроек
-    private var agent: Agent = AgentFactory.createChatAgent()
+    // EnhancedChatAgent автоматически определяет сложность задачи:
+    // - Простые вопросы → ChatAgent (быстро)
+    // - Сложные задачи → EnhancedAgentOrchestrator (многошаговое выполнение)
+    private var agent: Agent = AgentFactory.createEnhancedChatAgent()
 
     /**
      * Отправляет сообщение пользователя и получает ответ от агента
@@ -616,7 +619,7 @@ class ChatService {
         logger.info("Recreating agent with new settings")
         val previousFormat = currentFormat
         val previousSchema = currentSchema
-        agent = AgentFactory.createChatAgent()
+        agent = AgentFactory.createEnhancedChatAgent()
         // Восстановим формат ответа через настройки, если был задан
         if (previousFormat != null) {
             val agentSettings = AgentSettings(
