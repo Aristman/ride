@@ -6,6 +6,7 @@ import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import kotlinx.coroutines.*
+import ru.marslab.ide.ride.service.storage.ChatStorageService
 import ru.marslab.ide.ride.agent.Agent
 import ru.marslab.ide.ride.agent.AgentFactory
 import ru.marslab.ide.ride.agent.OrchestratorStep
@@ -45,7 +46,7 @@ class ChatService {
     // Несколько сессий и история сообщений по каждой
     private val sessionHistories = mutableMapOf<String, MessageHistory>()
     private val sessions = mutableListOf<ChatSession>()
-    private var currentSessionId: String = createNewSessionInternal().id
+    private var currentSessionId: String = ""
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     // Текущие настройки формата ответа (для UI)
@@ -85,6 +86,40 @@ class ChatService {
 
     // Список активных progress сообщений для обновления
     private val activeProgressMessages = mutableMapOf<String, Message>()
+
+    init {
+        // Асинхронно загружаем сессии из персистентного хранилища
+        scope.launch {
+            try {
+                val storage = service<ChatStorageService>()
+                val (loadedSessions, histories) = storage.loadAllSessions()
+
+                // Инициализируем состояния
+                sessions.clear()
+                if (loadedSessions.isNotEmpty()) {
+                    sessions.addAll(loadedSessions)
+                    // Восстанавливаем истории
+                    histories.forEach { (sid, msgs) ->
+                        val mh = MessageHistory()
+                        msgs.forEach { mh.addMessage(it) }
+                        sessionHistories[sid] = mh
+                    }
+                    currentSessionId = loadedSessions.first().id
+                } else {
+                    // Нет сохранённых сессий — создаём новую
+                    currentSessionId = createNewSessionInternal().id
+                    // Сохраняем пустую сессию для попадания в индекс
+                    saveCurrentSession()
+                }
+                logger.info("ChatService: sessions loaded: ${sessions.size}")
+            } catch (e: Exception) {
+                logger.warn("ChatService: failed to load sessions, fallback to in-memory", e)
+                if (currentSessionId.isBlank()) {
+                    currentSessionId = createNewSessionInternal().id
+                }
+            }
+        }
+    }
 
     /**
      * Устанавливает chat view для отображения progress сообщений
@@ -254,6 +289,8 @@ class ChatService {
         val history = getCurrentHistory()
         val wasEmpty = history.getMessageCount() == 0
         history.addMessage(userMsg)
+        // Автосохранение после пользовательского сообщения
+        scope.launch { saveCurrentSession() }
         if (wasEmpty) {
             // Авто-именование сессии по первым словам
             val title = deriveTitleFrom(userMessage)
@@ -349,6 +386,8 @@ class ChatService {
                         )
                         getCurrentHistory().addMessage(assistantMsg)
                         onResponse(assistantMsg)
+                        // Автосохранение сессии
+                        scope.launch { saveCurrentSession() }
                     } else {
                         logger.warn("Agent returned error: ${agentResponse.error}")
                         onError(agentResponse.error ?: "Неизвестная ошибка")
@@ -730,6 +769,8 @@ class ChatService {
                     
                     getCurrentHistory().addMessage(message)
                     onResponse(message)
+                    // Автосохранение сессии
+                    scope.launch { saveCurrentSession() }
                     
                     // Логируем ошибку, но не прерываем показ результата
                     if (!response.success) {
@@ -762,6 +803,8 @@ class ChatService {
     fun clearHistory() {
         logger.info("Clearing chat history for session $currentSessionId")
         getCurrentHistory().clear()
+        // Автосохранение пустой истории
+        scope.launch { saveCurrentSession() }
     }
 
     /**
@@ -899,6 +942,8 @@ class ChatService {
     fun createNewSession(title: String = "Session"): ChatSession {
         val s = createNewSessionInternal(title)
         currentSessionId = s.id
+        // Сохраняем новую сессию в индекс
+        scope.launch { saveCurrentSession() }
         return s
     }
 
@@ -925,7 +970,35 @@ class ChatService {
         val idx = sessions.indexOfFirst { it.id == sessionId }
         if (idx >= 0) {
             sessions[idx] = sessions[idx].copy(title = title.take(50), updatedAt = Instant.now())
+            // Сохранить переименованную сессию
+            if (sessionId == currentSessionId) {
+                scope.launch { saveCurrentSession() }
+            }
         }
+    }
+
+    /**
+     * Удаляет или скрывает сессию из UI
+     * @param deleteFromStorage true — полностью удалить и из диска; false — только убрать из UI (оставить файлы)
+     */
+    fun removeSession(sessionId: String, deleteFromStorage: Boolean) {
+        val idx = sessions.indexOfFirst { it.id == sessionId }
+        if (idx < 0) return
+        sessions.removeAt(idx)
+        sessionHistories.remove(sessionId)
+
+        scope.launch {
+            try {
+                if (deleteFromStorage) {
+                    service<ru.marslab.ide.ride.service.storage.ChatStorageService>().deleteSession(sessionId, withBackup = true)
+                }
+            } catch (e: Exception) {
+                logger.warn("Failed to ${if (deleteFromStorage) "delete" else "hide"} session $sessionId", e)
+            }
+        }
+
+        // Переключаемся на первую доступную или создаем новую
+        currentSessionId = sessions.firstOrNull()?.id ?: createNewSessionInternal().id
     }
 
     private fun deriveTitleFrom(text: String): String {
@@ -938,6 +1011,20 @@ class ChatService {
 
     private fun getCurrentHistory(): MessageHistory =
         sessionHistories.getOrPut(currentSessionId) { MessageHistory() }
+
+    /**
+     * Сохраняет текущую сессию и её сообщения в персистентное хранилище
+     */
+    private suspend fun saveCurrentSession() {
+        try {
+            if (currentSessionId.isBlank()) return
+            val session = sessions.firstOrNull { it.id == currentSessionId } ?: return
+            val messages = getCurrentHistory().getMessages()
+            service<ChatStorageService>().saveSession(session, messages)
+        } catch (e: Exception) {
+            logger.warn("Failed to save current session", e)
+        }
+    }
     
     /**
      * Возвращает TokenCounter для подсчёта токенов
