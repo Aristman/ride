@@ -79,6 +79,10 @@ tasks {
                 "-Didea.plugins.disabled.plugins=com.intellij.gradle",
                 "-Dgradle-jvm-compatibility.disabled=true",
                 "-Dcom.intellij.gradle.jvm.support.skip=true",
+                // Включаем JCEF без sandbox (Linux): устраняет Embedded Browser is suspended
+                "-Dide.browser.jcef.sandbox.enable=false",
+                // Необязательный флаг: отключить GPU для стабильности (иногда помогает на Linux)
+                "-Dide.browser.jcef.gpu.disable=true",
                 "-Dfile.encoding=UTF-8",
                 "-Dconsole.encoding=UTF-8")
 
