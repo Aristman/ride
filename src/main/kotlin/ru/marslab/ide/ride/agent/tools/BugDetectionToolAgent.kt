@@ -2,6 +2,8 @@ package ru.marslab.ide.ride.agent.tools
 
 import ru.marslab.ide.ride.agent.BaseToolAgent
 import ru.marslab.ide.ride.agent.ValidationResult
+import ru.marslab.ide.ride.codeanalysis.analyzer.BugDetectionAnalyzer
+import ru.marslab.ide.ride.integration.llm.LLMProvider
 import ru.marslab.ide.ride.model.orchestrator.AgentType
 import ru.marslab.ide.ride.model.orchestrator.ExecutionContext
 import ru.marslab.ide.ride.model.tool.*
@@ -10,12 +12,16 @@ import java.io.File
 /**
  * Агент для поиска багов и потенциальных проблем в коде
  * 
+ * Использует LLM для глубокого анализа кода на различных языках программирования.
+ * 
  * Capabilities:
  * - bug_detection - поиск багов
  * - null_pointer_analysis - анализ NPE
  * - resource_leak_detection - поиск утечек ресурсов
  */
-class BugDetectionToolAgent : BaseToolAgent(
+class BugDetectionToolAgent(
+    private val llmProvider: LLMProvider
+) : BaseToolAgent(
     agentType = AgentType.BUG_DETECTION,
     toolCapabilities = setOf(
         "bug_detection",
@@ -23,6 +29,8 @@ class BugDetectionToolAgent : BaseToolAgent(
         "resource_leak_detection"
     )
 ) {
+    
+    private val analyzer by lazy { BugDetectionAnalyzer(llmProvider) }
     
     override fun getDescription(): String {
         return "Анализирует код на наличие багов и потенциальных проблем"
@@ -40,136 +48,76 @@ class BugDetectionToolAgent : BaseToolAgent(
     
     override suspend fun doExecuteStep(step: ToolPlanStep, context: ExecutionContext): StepResult {
         val files = step.input.getList<String>("files") ?: emptyList()
-        val severityThreshold = step.input.getString("severity_threshold")
-            ?.let { Severity.valueOf(it) } ?: Severity.INFO
+        val maxFilesToAnalyze = step.input.getInt("max_files") ?: 20
 
-        // Входные логи
-        logger.info("BUG_DETECTION input: files=${files.size}, severity_threshold=${severityThreshold}")
+        logger.info("BUG_DETECTION input: files=${files.size}, max_files=$maxFilesToAnalyze")
         files.take(10).forEach { logger.info("BUG_DETECTION file: $it") }
         
-        val findings = mutableListOf<Finding>()
+        val allFindings = mutableListOf<Map<String, Any>>()
+        val filesToAnalyze = files.take(maxFilesToAnalyze)
         
-        for (filePath in files) {
+        for (filePath in filesToAnalyze) {
             val file = File(filePath)
             if (!file.exists() || !file.isFile) {
                 logger.warn("File does not exist or is not a file: $filePath")
                 continue
             }
-            // Превью файла (усеченно)
-            runCatching {
-                val preview = file.readText().lineSequence().filter { it.isNotBlank() }.joinToString("\n").take(200)
-                logger.info("BUG_DETECTION preview($filePath): ${'$'}preview ...")
+            
+            // Проверяем размер файла (не анализируем слишком большие файлы)
+            if (file.length() > 100_000) {
+                logger.warn("File too large, skipping: $filePath (${file.length()} bytes)")
+                continue
             }
-
-            logger.info("BUG_DETECTION start file: $filePath")
-            // Анализируем файл
-            val fileFindings = analyzeFile(file, severityThreshold)
-            findings.addAll(fileFindings)
-            logger.info("BUG_DETECTION end file: $filePath, findings=${fileFindings.size}")
+            
+            try {
+                logger.info("BUG_DETECTION analyzing file: $filePath")
+                val code = file.readText()
+                
+                // Используем LLM-анализатор
+                val findings = analyzer.analyze(code, filePath)
+                
+                // Конвертируем в Map для вывода
+                val findingMaps: List<Map<String, Any>> = findings.map { finding ->
+                    mapOf<String, Any>(
+                        "file" to finding.file,
+                        "line" to (finding.line ?: 0),
+                        "severity" to finding.severity.name,
+                        "message" to finding.title,
+                        "description" to finding.description,
+                        "suggestion" to (finding.suggestion ?: ""),
+                        "type" to finding.type.name
+                    )
+                }
+                
+                allFindings.addAll(findingMaps)
+                logger.info("BUG_DETECTION found ${findings.size} issues in $filePath")
+            } catch (e: Exception) {
+                logger.error("Error analyzing file $filePath", e)
+            }
         }
         
         // Группируем по severity
-        val criticalCount = findings.count { it.severity == Severity.CRITICAL }
-        val highCount = findings.count { it.severity == Severity.HIGH }
-        val mediumCount = findings.count { it.severity == Severity.MEDIUM }
-        val lowCount = findings.count { it.severity == Severity.LOW }
+        val criticalCount = allFindings.count { it["severity"] == "CRITICAL" }
+        val highCount = allFindings.count { it["severity"] == "HIGH" }
+        val mediumCount = allFindings.count { it["severity"] == "MEDIUM" }
+        val lowCount = allFindings.count { it["severity"] == "LOW" }
         
-        logger.info("Bug detection completed: found ${findings.size} issues " +
+        logger.info("Bug detection completed: found ${allFindings.size} issues " +
                 "(critical: $criticalCount, high: $highCount, medium: $mediumCount, low: $lowCount)")
         
         return StepResult.success(
             output = StepOutput.of(
-                "findings" to findings,
-                "total_count" to findings.size,
+                "findings" to allFindings,
+                "total_count" to allFindings.size,
                 "critical_count" to criticalCount,
                 "high_count" to highCount,
                 "medium_count" to mediumCount,
                 "low_count" to lowCount
             ),
             metadata = mapOf(
-                "files_analyzed" to files.size,
-                "severity_threshold" to severityThreshold.name
+                "files_analyzed" to filesToAnalyze.size,
+                "files_skipped" to (files.size - filesToAnalyze.size)
             )
         )
-    }
-    
-    private fun analyzeFile(file: File, severityThreshold: Severity): List<Finding> {
-        val findings = mutableListOf<Finding>()
-        
-        try {
-            val lines = file.readLines()
-            
-            lines.forEachIndexed { index, line ->
-                val lineNumber = index + 1
-                
-                // Простые эвристики для поиска проблем
-                
-                // Null pointer risks
-                if (line.contains("!!") && !line.trim().startsWith("//")) {
-                    findings.add(
-                        Finding(
-                            file = file.absolutePath,
-                            line = lineNumber,
-                            severity = Severity.HIGH,
-                            category = "null_pointer_risk",
-                            message = "Использование !! оператора может привести к NPE",
-                            description = "Оператор !! принудительно разыменовывает nullable значение",
-                            suggestion = "Используйте безопасный вызов ?. или elvis оператор ?:"
-                        )
-                    )
-                }
-                
-                // Resource leaks
-                if ((line.contains("FileInputStream") || line.contains("FileOutputStream")) 
-                    && !line.contains("use")) {
-                    findings.add(
-                        Finding(
-                            file = file.absolutePath,
-                            line = lineNumber,
-                            severity = Severity.MEDIUM,
-                            category = "resource_leak",
-                            message = "Потенциальная утечка ресурса",
-                            description = "Файловый поток может не быть закрыт",
-                            suggestion = "Используйте .use { } для автоматического закрытия ресурса"
-                        )
-                    )
-                }
-                
-                // Empty catch blocks
-                if (line.trim() == "catch" && lines.getOrNull(index + 1)?.trim() == "{}") {
-                    findings.add(
-                        Finding(
-                            file = file.absolutePath,
-                            line = lineNumber,
-                            severity = Severity.MEDIUM,
-                            category = "empty_catch",
-                            message = "Пустой catch блок",
-                            description = "Исключения игнорируются без логирования",
-                            suggestion = "Добавьте логирование или обработку ошибки"
-                        )
-                    )
-                }
-                
-                // TODO/FIXME comments
-                if (line.contains("TODO", ignoreCase = true) || line.contains("FIXME", ignoreCase = true)) {
-                    findings.add(
-                        Finding(
-                            file = file.absolutePath,
-                            line = lineNumber,
-                            severity = Severity.LOW,
-                            category = "todo_comment",
-                            message = "Незавершенный код",
-                            description = "Найден TODO/FIXME комментарий"
-                        )
-                    )
-                }
-            }
-            
-        } catch (e: Exception) {
-            logger.error("Error analyzing file ${file.absolutePath}", e)
-        }
-        
-        // Фильтруем по severity threshold
-        return findings.filter { it.severity.ordinal <= severityThreshold.ordinal }
     }
 }

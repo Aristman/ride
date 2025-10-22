@@ -9,6 +9,8 @@ import ru.marslab.ide.ride.integration.llm.LLMProvider
 import ru.marslab.ide.ride.model.agent.AgentRequest
 import ru.marslab.ide.ride.model.agent.AgentResponse
 import ru.marslab.ide.ride.model.chat.ChatContext
+import ru.marslab.ide.ride.model.chat.ToolAgentExecutionStatus
+import ru.marslab.ide.ride.model.chat.ToolAgentStatusManager
 import ru.marslab.ide.ride.model.llm.LLMParameters
 import ru.marslab.ide.ride.model.orchestrator.*
 import ru.marslab.ide.ride.model.tool.StepInput
@@ -16,6 +18,7 @@ import ru.marslab.ide.ride.model.tool.ToolPlanStep
 import ru.marslab.ide.ride.orchestrator.impl.InMemoryPlanStorage
 import ru.marslab.ide.ride.orchestrator.impl.LLMRequestAnalyzer
 import java.util.*
+import kotlin.random.Random
 
 /**
  * Расширенный оркестратор с поддержкой интерактивности и персистентности
@@ -41,6 +44,8 @@ class EnhancedAgentOrchestrator(
     private val logger = Logger.getInstance(EnhancedAgentOrchestrator::class.java)
     private val activePlans = mutableMapOf<String, ExecutionPlan>()
     private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val progressListeners = mutableListOf<ToolAgentProgressListener>()
+    private val statusManager = ToolAgentStatusManager()
 
     init {
         // Добавляем слушателей
@@ -48,6 +53,21 @@ class EnhancedAgentOrchestrator(
         progressTracker.addListener(this)
     }
 
+    /**
+     * Добавляет слушателя прогресса tool agents
+     */
+    fun addProgressListener(listener: ToolAgentProgressListener) {
+        progressListeners.add(listener)
+    }
+
+    /**
+     * Удаляет слушателя прогресса tool agents
+     */
+    fun removeProgressListener(listener: ToolAgentProgressListener) {
+        progressListeners.remove(listener)
+    }
+
+    
     /**
      * Обрабатывает запрос пользователя с использованием расширенного оркестратора
      */
@@ -95,17 +115,7 @@ class EnhancedAgentOrchestrator(
             val updatedPlan = stateMachine.transition(plan, PlanEvent.Start(adjustedAnalysis))
             activePlans[plan.id] = updatedPlan
 
-            // 6. Отправляем уведомление о начале анализа
-            onStepComplete(
-                OrchestratorStep.PlanningComplete(
-                    agentName = "EnhancedAgentOrchestrator",
-                    content = buildAnalysisNotification(analysis),
-                    success = true,
-                    error = null
-                )
-            )
-
-            // 7. Выполняем план
+            // 6. Выполняем план (уведомление о планировании не отправляем)
             val result = executePlan(updatedPlan, onStepComplete)
 
             // 8. Завершаем отслеживание
@@ -477,9 +487,50 @@ class EnhancedAgentOrchestrator(
             val finalPlan = stateMachine.transition(executingPlan, PlanEvent.Complete)
             activePlans[plan.id] = finalPlan
             planStorage.update(finalPlan)
+            
+            // Извлекаем отчет из результата REPORT_GENERATOR
+            val reportGeneratorStep = executingPlan.steps.find { it.agentType == AgentType.REPORT_GENERATOR }
+            val finalContent = if (reportGeneratorStep != null) {
+                val reportResult = stepResults[reportGeneratorStep.id]
+                logger.info("Report result type: ${reportResult?.javaClass?.name}")
+                logger.info("Report result: $reportResult")
+                
+                when (reportResult) {
+                    is Map<*, *> -> {
+                        // Результат может быть вложенным: {output={report=..., format=..., size=...}}
+                        val output = reportResult["output"]
+                        logger.info("Output type: ${output?.javaClass?.name}")
+                        
+                        when (output) {
+                            is Map<*, *> -> {
+                                val report = output["report"] as? String
+                                logger.info("Extracted report length: ${report?.length}")
+                                report ?: "План успешно выполнен. Завершено ${completedSteps.size} шагов."
+                            }
+                            is String -> output
+                            else -> {
+                                logger.warn("Unexpected output type: ${output?.javaClass?.name}")
+                                "План успешно выполнен. Завершено ${completedSteps.size} шагов."
+                            }
+                        }
+                    }
+                    is String -> {
+                        // Если результат уже строка, пытаемся извлечь report из нее
+                        val reportMatch = Regex("report=(.+?), format=").find(reportResult)
+                        reportMatch?.groupValues?.getOrNull(1) ?: reportResult
+                    }
+                    else -> {
+                        logger.warn("Unexpected report result type: ${reportResult?.javaClass?.name}")
+                        "План успешно выполнен. Завершено ${completedSteps.size} шагов."
+                    }
+                }
+            } else {
+                logger.warn("REPORT_GENERATOR step not found")
+                "План успешно выполнен. Завершено ${completedSteps.size} шагов."
+            }
 
             AgentResponse.success(
-                content = "План успешно выполнен. Завершено ${completedSteps.size} шагов.",
+                content = finalContent,
                 metadata = mapOf(
                     "plan_id" to plan.id,
                     "completed_steps" to completedSteps.size
@@ -501,51 +552,150 @@ class EnhancedAgentOrchestrator(
     }
 
     private suspend fun executeStep(
-        step: PlanStep, 
+        step: PlanStep,
         executionContext: ExecutionContext,
         previousResults: Map<String, Any> = emptyMap()
     ): String {
         logger.info("Executing step: ${step.title}")
-        
+
         val agent = toolAgentRegistry.get(step.agentType)
-        
+        val agentName = getAgentDisplayName(step.agentType)
+
+        // Создаем сообщение о начале выполнения
+        val statusMessage = statusManager.createStatusMessage(
+            stepId = step.id,
+            agentType = step.agentType.name,
+            agentName = agentName,
+            displayMessage = "$agentName выполняется: ${step.title}",
+            status = ToolAgentExecutionStatus.RUNNING
+        )
+
+        // Уведомляем слушателей о начале
+        progressListeners.forEach { it.onToolAgentStarted(statusMessage) }
+
         if (agent != null) {
             logger.info("Executing step ${step.id} with ToolAgent ${step.agentType}")
-            
-            // Обогащаем input данными из предыдущих шагов
-            val enrichedInput = enrichStepInput(step, previousResults)
-            
-            // Конвертируем PlanStep в ToolPlanStep
-            val toolStep = ToolPlanStep(
-                id = step.id,
-                description = step.description,
-                agentType = step.agentType,
-                input = StepInput(enrichedInput),
-                dependencies = step.dependencies
-            )
-            
-            // Используем контекст из плана
-            val context = executionContext
-            
-            val result = agent.executeStep(toolStep, context)
-            
-            return if (result.success) {
-                result.output.data.toString()
-            } else {
-                throw Exception(result.error ?: "Step execution failed")
+
+            try {
+                // Обогащаем input данными из предыдущих шагов
+                val enrichedInput = enrichStepInput(step, previousResults)
+
+                // Конвертируем PlanStep в ToolPlanStep
+                val toolStep = ToolPlanStep(
+                    id = step.id,
+                    description = step.description,
+                    agentType = step.agentType,
+                    input = StepInput(enrichedInput),
+                    dependencies = step.dependencies
+                )
+
+                // Используем контекст из плана
+                val context = executionContext
+
+                val result = agent.executeStep(toolStep, context)
+
+                if (result.success) {
+                    // Обновляем статус на завершенный
+                    val completedMessage = statusManager.updateStatus(
+                        stepId = step.id,
+                        status = ToolAgentExecutionStatus.COMPLETED,
+                        output = result.output.data,
+                        metadata = result.metadata
+                    )
+
+                    completedMessage?.let {
+                        progressListeners.forEach { listener ->
+                            listener.onToolAgentStatusUpdated(it)
+                            listener.onToolAgentCompleted(it)
+                        }
+                    }
+
+                    return result.output.data.toString()
+                } else {
+                    // Обновляем статус на ошибку
+                    val errorMessage = statusManager.updateStatus(
+                        stepId = step.id,
+                        status = ToolAgentExecutionStatus.FAILED,
+                        error = result.error ?: "Step execution failed"
+                    )
+
+                    errorMessage?.let { message ->
+                        progressListeners.forEach { listener ->
+                            listener.onToolAgentStatusUpdated(message)
+                            listener.onToolAgentFailed(message, result.error ?: "Unknown error")
+                        }
+                    }
+
+                    throw Exception(result.error ?: "Step execution failed")
+                }
+            } catch (e: Exception) {
+                // Обновляем статус на ошибку
+                val errorMessage = statusManager.updateStatus(
+                    stepId = step.id,
+                    status = ToolAgentExecutionStatus.FAILED,
+                    error = e.message ?: "Step execution failed"
+                )
+
+                errorMessage?.let { message ->
+                    progressListeners.forEach { listener ->
+                        listener.onToolAgentStatusUpdated(message)
+                        listener.onToolAgentFailed(message, e.message ?: "Unknown error")
+                    }
+                }
+
+                throw e
             }
         } else {
             // Fallback: имитируем выполнение шага (для агентов, которые еще не зарегистрированы)
             logger.warn("No ToolAgent found for ${step.agentType}, using fallback")
             delay(step.estimatedDurationMs)
 
-            return when (step.agentType) {
-                AgentType.PROJECT_SCANNER -> "Проанализировано ${Random().nextInt(100, 500)} файлов"
-                AgentType.BUG_DETECTION -> "Найдено ${Random().nextInt(0, 10)} потенциальных проблем"
-                AgentType.CODE_FIXER -> "Исправлено ${Random().nextInt(0, 5)} проблем"
+            val fallbackResult = when (step.agentType) {
+                AgentType.PROJECT_SCANNER -> "Проанализировано ${Random.nextInt(100, 500)} файлов"
+                AgentType.BUG_DETECTION -> "Найдено ${Random.nextInt(0, 10)} потенциальных проблем"
+                AgentType.CODE_FIXER -> "Исправлено ${Random.nextInt(0, 5)} проблем"
                 AgentType.REPORT_GENERATOR -> "Отчет сгенерирован успешно"
                 else -> "Шаг ${step.title} выполнен"
             }
+
+            // Обновляем статус на завершенный
+            val completedMessage = statusManager.updateStatus(
+                stepId = step.id,
+                status = ToolAgentExecutionStatus.COMPLETED,
+                output = mapOf("result" to fallbackResult)
+            )
+
+            completedMessage?.let {
+                progressListeners.forEach { listener ->
+                    listener.onToolAgentStatusUpdated(it)
+                    listener.onToolAgentCompleted(it)
+                }
+            }
+
+            return fallbackResult
+        }
+    }
+
+    /**
+     * Получает отображаемое имя агента
+     */
+    private fun getAgentDisplayName(agentType: AgentType): String {
+        return when (agentType) {
+            AgentType.PROJECT_SCANNER -> "Анализатор проекта"
+            AgentType.CODE_CHUNKER -> "Разбивщик кода"
+            AgentType.BUG_DETECTION -> "Детектор багов"
+            AgentType.CODE_QUALITY -> "Анализатор качества"
+            AgentType.ARCHITECTURE_ANALYSIS -> "Анализатор архитектуры"
+            AgentType.CODE_FIXER -> "Исправитель кода"
+            AgentType.LLM_REVIEW -> "LLM ревьюер"
+            AgentType.USER_INTERACTION -> "Интерактивный агент"
+            AgentType.REPORT_GENERATOR -> "Генератор отчетов"
+            AgentType.FILE_OPERATIONS -> "Операции с файлами"
+            AgentType.GIT_OPERATIONS -> "Git операции"
+            AgentType.TEST_GENERATOR -> "Генератор тестов"
+            AgentType.DOCUMENTATION_GENERATOR -> "Генератор документации"
+            AgentType.PERFORMANCE_ANALYZER -> "Анализатор производительности"
+            else -> agentType.name
         }
     }
 
@@ -599,6 +749,25 @@ class EnhancedAgentOrchestrator(
     private fun enrichStepInput(step: PlanStep, previousResults: Map<String, Any>): Map<String, Any> {
         val enrichedInput = step.input.toMutableMap()
 
+        // Ищем результаты PROJECT_SCANNER в зависимостях
+        fun getFilesFromScanner(): List<String>? {
+            for (depId in step.dependencies) {
+                val depResult = previousResults[depId]
+                if (depResult is Map<*, *>) {
+                    val output = depResult["output"] as? Map<*, *>
+                    val files = output?.get("files") as? List<*>
+                    if (files != null) {
+                        val filesList = files.filterIsInstance<String>()
+                        if (filesList.isNotEmpty()) {
+                            logger.info("enrichStepInput: found ${filesList.size} files from PROJECT_SCANNER (step $depId)")
+                            return filesList
+                        }
+                    }
+                }
+            }
+            return null
+        }
+
         fun collectProjectFiles(projectPath: String?, maxCount: Int = 50): List<String> {
             if (projectPath.isNullOrBlank()) return emptyList()
             return try {
@@ -629,11 +798,19 @@ class EnhancedAgentOrchestrator(
         ) {
             val filesFromInput = (enrichedInput["files"] as? List<*>)?.filterIsInstance<String>() ?: emptyList()
             if (filesFromInput.isEmpty()) {
-                val projectPath = step.input["projectPath"] as? String
-                val resolved = collectProjectFiles(projectPath)
-                if (resolved.isNotEmpty()) {
-                    enrichedInput["files"] = resolved
-                    logger.info("enrichStepInput: provided ${resolved.size} files for ${step.agentType}")
+                // Сначала пытаемся получить файлы из PROJECT_SCANNER
+                val filesFromScanner = getFilesFromScanner()
+                if (filesFromScanner != null && filesFromScanner.isNotEmpty()) {
+                    enrichedInput["files"] = filesFromScanner
+                    logger.info("enrichStepInput: provided ${filesFromScanner.size} files from scanner for ${step.agentType}")
+                } else {
+                    // Fallback: сканируем файлы вручную
+                    val projectPath = step.input["projectPath"] as? String
+                    val resolved = collectProjectFiles(projectPath)
+                    if (resolved.isNotEmpty()) {
+                        enrichedInput["files"] = resolved
+                        logger.info("enrichStepInput: provided ${resolved.size} files (fallback scan) for ${step.agentType}")
+                    }
                 }
             }
         }
@@ -697,5 +874,83 @@ class EnhancedAgentOrchestrator(
 
     override fun onProgressFinished(planId: String, progress: PlanProgress) {
         logger.info("Progress finished for plan $planId. Success: ${progress.success}")
+    }
+
+    /**
+     * Публичный метод выполнения плана для использования в ChatService
+     */
+    suspend fun executePlan(request: AgentRequest): AgentResponse {
+        return try {
+            // Создаем план на основе запроса
+            val plan = createPlanFromRequest(request)
+
+            // Выполняем план с шагами
+            executePlan(plan) { step ->
+                // Обрабатываем шаги, если нужно
+            }
+        } catch (e: Exception) {
+            logger.error("Error executing plan", e)
+            AgentResponse.error(
+                error = e.message ?: "Неизвестная ошибка",
+                content = "Ошибка выполнения плана: ${e.message}"
+            )
+        }
+    }
+
+
+    /**
+     * Создает план на основе пользовательского запроса
+     */
+    private suspend fun createPlanFromRequest(request: AgentRequest): ExecutionPlan {
+        // Создаем простой план с одним шагом для анализа архитектуры
+        val planId = UUID.randomUUID().toString()
+        val timestamp = kotlinx.datetime.Clock.System.now()
+
+        val step = PlanStep(
+            id = "step-1",
+            title = "Анализ запроса",
+            description = request.request,
+            agentType = AgentType.ARCHITECTURE_ANALYSIS,
+            input = mapOf(
+                "analysis_type" to "architecture_analysis",
+                "user_query" to request.request,
+                "project_context" to request.context.toString()
+            ),
+            dependencies = emptySet(),
+            status = StepStatus.PENDING
+        )
+
+        return ExecutionPlan(
+            id = planId,
+            userRequestId = request.context.project.name ?: "unknown",
+            originalRequest = request.request,
+            analysis = RequestAnalysis(
+                taskType = TaskType.ARCHITECTURE_ANALYSIS,
+                requiredTools = setOf(AgentType.ARCHITECTURE_ANALYSIS),
+                context = ExecutionContext(
+                    projectPath = request.context.project.basePath,
+                    additionalContext = mapOf(
+                        "user_query" to request.request,
+                        "project_context" to request.context.toString()
+                    )
+                ),
+                parameters = mapOf(
+                    "analysis_type" to "architecture_analysis",
+                    "user_query" to request.request
+                ),
+                requiresUserInput = false,
+                estimatedComplexity = ComplexityLevel.LOW,
+                estimatedSteps = 1,
+                confidence = 0.8,
+                reasoning = "Запрос требует архитектурного анализа"
+            ),
+            steps = listOf(step),
+            currentState = PlanState.CREATED,
+            createdAt = timestamp,
+            metadata = mapOf(
+                "created_at" to timestamp.toString(),
+                "user_request" to request.request
+            )
+        )
     }
 }

@@ -110,3 +110,76 @@ window.__ride_appendHtml = function(htmlContent) {
         }
     }
 };
+
+// Функция для переключения отображения результатов tool agent
+window.toggleOutput = function(outputId) {
+    console.log('🔗 Toggle output clicked:', outputId);
+
+    try {
+        const element = document.getElementById(outputId);
+        if (!element) {
+            console.error('❌ Element not found:', outputId);
+            return;
+        }
+
+        const icon = element.querySelector('.toggle-icon');
+        const content = element.querySelector('.output-content');
+
+        if (!icon) {
+            console.error('❌ Toggle icon element not found');
+            return;
+        }
+
+        if (!content) {
+            console.error('❌ Output content element not found');
+            return;
+        }
+
+        const isExpanded = element.classList.contains('expanded');
+        console.log('Current state - Expanded:', isExpanded);
+
+        if (isExpanded) {
+            // Сворачиваем
+            element.classList.remove('expanded');
+            element.classList.add('collapsed');
+            icon.textContent = '▶';
+            content.style.display = 'none';
+            console.log('📁 Collapsed output container');
+        } else {
+            // Разворачиваем
+            element.classList.remove('collapsed');
+            element.classList.add('expanded');
+            icon.textContent = '▼';
+            content.style.display = 'block';
+            console.log('📂 Expanded output container');
+        }
+    } catch (error) {
+        console.error('❌ Error toggling output:', error);
+    }
+};
+
+// Глобальный обработчик кликов для разворачивания результатов tool agents
+document.addEventListener('click', function(event) {
+    console.log('🖱️ Click detected on element:', event.target.className, event.target.tagName);
+
+    // Проверяем клик по заголовку результата
+    const outputHeader = event.target.closest('.output-header');
+    if (outputHeader) {
+        console.log('✅ Output header found:', outputHeader);
+        const outputId = outputHeader.getAttribute('data-output-id');
+        console.log('📋 Output ID extracted:', outputId);
+
+        if (outputId && outputId.startsWith('output-')) {
+            console.log('🎯 Valid output ID, calling toggleOutput:', outputId);
+            event.preventDefault();
+            event.stopPropagation();
+            if (window.toggleOutput) {
+                window.toggleOutput(outputId);
+            } else {
+                console.error('❌ toggleOutput function not found!');
+            }
+        } else {
+            console.warn('⚠️ Invalid output ID:', outputId);
+        }
+    }
+});

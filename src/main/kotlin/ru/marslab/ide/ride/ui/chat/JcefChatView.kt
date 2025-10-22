@@ -50,6 +50,42 @@ class JcefChatView : JPanel(BorderLayout()) {
     }
 
     /**
+     * Добавляет или обновляет сообщение о статусе tool agent
+     */
+    fun addOrUpdateToolAgentStatus(html: String, statusId: String) {
+        exec("""
+            if (document.getElementById('status-${statusId}')) {
+                // Обновляем существующий статус
+                const existingElement = document.getElementById('status-${statusId}');
+                existingElement.outerHTML = ${html.toJSString()};
+            } else {
+                // Добавляем новый статус
+                window.__ride_appendHtml && window.__ride_appendHtml(${html.toJSString()});
+            }
+        """.trimIndent())
+    }
+
+    /**
+     * Удаляет сообщение о статусе tool agent
+     */
+    fun removeToolAgentStatus(statusId: String) {
+        exec("""
+            const element = document.getElementById('status-${statusId}');
+            if (element) {
+                element.classList.add('fade-out');
+                setTimeout(() => element.remove(), 300);
+            }
+        """.trimIndent())
+    }
+
+    /**
+     * Переключает состояние развернутости результата
+     */
+    fun toggleOutput(statusId: String) {
+        exec("window.toggleOutput && window.toggleOutput('output-${statusId}');")
+    }
+
+    /**
      * Удаляет только системные сообщения с маркером загрузки
      * Постоянные системные сообщения (о сжатии истории и т.д.) остаются
      */
