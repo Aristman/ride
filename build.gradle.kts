@@ -81,6 +81,18 @@ tasks {
                 "-Dcom.intellij.gradle.jvm.support.skip=true",
                 "-Dfile.encoding=UTF-8",
                 "-Dconsole.encoding=UTF-8")
+
+        // Гарантированно отключаем bundled Gradle plugin через sandbox-конфиг
+        doFirst {
+            val optionsDir = file("${'$'}buildDir/idea-sandbox/config/options")
+            optionsDir.mkdirs()
+            val disabled = file(optionsDir, "disabled_plugins.txt")
+            // Перечень плагинов для отключения, по одному в строке
+            val entries = listOf(
+                "com.intellij.gradle"
+            )
+            disabled.writeText(entries.joinToString("\n"))
+        }
     }
 }
 
