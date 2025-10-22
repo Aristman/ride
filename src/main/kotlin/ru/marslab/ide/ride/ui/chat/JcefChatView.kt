@@ -3,7 +3,6 @@ package ru.marslab.ide.ride.ui.chat
 import com.intellij.ui.jcef.JBCefBrowser
 import org.cef.handler.CefLoadHandlerAdapter
 import org.cef.browser.CefBrowser
-import org.cef.callback.CefLoadHandlerErrorCode
 import java.awt.BorderLayout
 import javax.swing.JComponent
 import javax.swing.JPanel
@@ -41,17 +40,6 @@ class JcefChatView : JPanel(BorderLayout()) {
                 }
             }
 
-            override fun onLoadError(
-                browser: CefBrowser?,
-                frameIdentifer: Long,
-                errorCode: CefLoadHandlerErrorCode?,
-                errorText: String?,
-                failedUrl: String?
-            ) {
-                // В случае ошибки загрузки тоже отмечаем готовность, чтобы не зависать
-                isReady = true
-                flushPending()
-            }
         }, browser.cefBrowser)
     }
 
