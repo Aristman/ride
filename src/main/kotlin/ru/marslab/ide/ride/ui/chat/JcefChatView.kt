@@ -1,6 +1,9 @@
 package ru.marslab.ide.ride.ui.chat
 
 import com.intellij.ui.jcef.JBCefBrowser
+import org.cef.handler.CefLoadHandlerAdapter
+import org.cef.browser.CefBrowser
+import org.cef.callback.CefLoadHandlerErrorCode
 import java.awt.BorderLayout
 import javax.swing.JComponent
 import javax.swing.JPanel
@@ -12,6 +15,9 @@ import javax.swing.JPanel
  */
 class JcefChatView : JPanel(BorderLayout()) {
     private val browser = JBCefBrowser()
+    // Флаг готовности страницы и очередь скриптов для выполнения после загрузки
+    private var isReady: Boolean = false
+    private val pendingScripts = mutableListOf<String>()
 
     init {
         add(browser.component, BorderLayout.CENTER)
@@ -19,6 +25,34 @@ class JcefChatView : JPanel(BorderLayout()) {
         // поэтому используем inline-версию HTML
         val html = ChatHtmlResources.createInlineHtml()
         browser.loadHTML(html)
+
+        // Отслеживаем загрузку страницы, чтобы выполнить отложенные скрипты
+        browser.jbCefClient.addLoadHandler(object : CefLoadHandlerAdapter() {
+            override fun onLoadingStateChange(
+                browser: CefBrowser?,
+                isLoading: Boolean,
+                canGoBack: Boolean,
+                canGoForward: Boolean
+            ) {
+                if (!isLoading) {
+                    // Страница загружена — отмечаем готовность и выполняем очередь
+                    isReady = true
+                    flushPending()
+                }
+            }
+
+            override fun onLoadError(
+                browser: CefBrowser?,
+                frameIdentifer: Long,
+                errorCode: CefLoadHandlerErrorCode?,
+                errorText: String?,
+                failedUrl: String?
+            ) {
+                // В случае ошибки загрузки тоже отмечаем готовность, чтобы не зависать
+                isReady = true
+                flushPending()
+            }
+        }, browser.cefBrowser)
     }
 
     fun getComponent(): JComponent = this
@@ -105,7 +139,20 @@ class JcefChatView : JPanel(BorderLayout()) {
     }
 
     private fun exec(script: String) {
+        if (!isReady) {
+            pendingScripts += script
+            return
+        }
         browser.cefBrowser.executeJavaScript(script, browser.cefBrowser.url, 0)
+    }
+
+    private fun flushPending() {
+        if (pendingScripts.isEmpty()) return
+        // Выполняем скрипты в порядке добавления
+        pendingScripts.forEach { s ->
+            browser.cefBrowser.executeJavaScript(s, browser.cefBrowser.url, 0)
+        }
+        pendingScripts.clear()
     }
 }
 

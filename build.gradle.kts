@@ -61,7 +61,6 @@ intellijPlatform {
 
         changeNotes = """
             Initial version
-            - Поддержка IntelliJ IDEA 2024.3+
             - Поддержка Android Studio 2024.3+
         """.trimIndent()
     }
@@ -77,6 +76,7 @@ tasks {
     // Add system properties to workaround Gradle JVM compatibility issue
     runIde {
         jvmArgs("-Didea.ignore.disabled.plugins=true",
+                "-Didea.plugins.disabled.plugins=com.intellij.gradle",
                 "-Dgradle-jvm-compatibility.disabled=true",
                 "-Dcom.intellij.gradle.jvm.support.skip=true",
                 "-Dfile.encoding=UTF-8",

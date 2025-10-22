@@ -47,8 +47,6 @@
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-compatibility.html -->
     <depends>com.intellij.modules.platform</depends>
 
-    <!-- Exclude problematic plugins that cause startup issues -->
-    <depends optional="true" config-file="gradle-exclude.xml">com.intellij.gradle</depends>
 
     <!-- Extension points defined by the plugin.
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-extension-points.html -->
