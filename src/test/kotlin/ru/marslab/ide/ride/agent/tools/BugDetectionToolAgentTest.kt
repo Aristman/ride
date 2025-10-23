@@ -6,13 +6,16 @@ import kotlin.io.path.createTempDirectory
 import ru.marslab.ide.ride.model.orchestrator.AgentType
 import ru.marslab.ide.ride.model.orchestrator.ExecutionContext
 import ru.marslab.ide.ride.model.tool.*
+import ru.marslab.ide.ride.integration.llm.LLMProvider
+import io.mockk.mockk
 import java.io.File
 import java.nio.file.Path
 
 class BugDetectionToolAgentTest {
-    
+
     private lateinit var tempDir: Path
-    private val agent = BugDetectionToolAgent()
+    private val mockLlmProvider = mockk<LLMProvider>(relaxed = true)
+    private val agent = BugDetectionToolAgent(mockLlmProvider)
     
     @BeforeTest
     fun setup() {

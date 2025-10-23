@@ -19,7 +19,6 @@ import ru.marslab.ide.ride.ui.config.ChatPanelConfig
 import ru.marslab.ide.ride.ui.manager.HtmlDocumentManager
 import ru.marslab.ide.ride.ui.manager.MessageDisplayManager
 import ru.marslab.ide.ride.ui.renderer.ChatContentRenderer
-import ru.marslab.ide.ride.ui.renderer.AgentOutputRenderer
 import java.awt.BorderLayout
 import javax.swing.*
 
@@ -80,8 +79,7 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         // Инициализируем менеджеры и рендереры
         htmlDocumentManager = HtmlDocumentManager(settings, jcefView)
         contentRenderer = ChatContentRenderer()
-        val agentOutputRenderer = AgentOutputRenderer()
-        messageDisplayManager = MessageDisplayManager(htmlDocumentManager, contentRenderer, agentOutputRenderer)
+        messageDisplayManager = MessageDisplayManager(htmlDocumentManager, contentRenderer)
         uiBuilder = ChatUiBuilder(chatService, htmlDocumentManager) { this }
 
         // Настраиваем ChatService для отображения progress tool agents

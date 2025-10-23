@@ -1,59 +1,204 @@
 ﻿package ru.marslab.ide.ride.ui.renderer
 
 import ru.marslab.ide.ride.model.llm.TokenUsage
+import ru.marslab.ide.ride.model.agent.AgentOutputType
+import ru.marslab.ide.ride.model.agent.FormattedOutput
+import ru.marslab.ide.ride.model.agent.FormattedOutputBlock
 import ru.marslab.ide.ride.ui.config.ChatPanelConfig
-import ru.marslab.ide.ride.ui.processor.CodeBlockProcessor
 import ru.marslab.ide.ride.ui.processor.MarkdownProcessor
+import ru.marslab.ide.ride.ui.templates.*
 
 /**
- * Основной рендерер контента чата, объединяющий обработку кодовых блоков и markdown
+ * Единый рендерер контента чата, объединяющий обработку markdown и форматированного вывода агентов
  */
 class ChatContentRenderer {
 
-    private val codeBlockProcessor = CodeBlockProcessor()
     private val markdownProcessor = MarkdownProcessor()
+
+    // HTML шаблоны для разных типов блоков
+    private val terminalTemplate = TerminalBlockTemplate()
+    private val codeBlockTemplate = CodeBlockTemplate()
+    private val toolResultTemplate = ToolResultTemplate()
+    private val structuredBlockTemplate = StructuredBlockTemplate()
+    private val interactionScriptsTemplate = InteractionScriptsTemplate()
 
     /**
      * Рендерит контент сообщения в HTML
      */
     fun renderContentToHtml(text: String, isJcefMode: Boolean): String {
-        println("DEBUG: renderContentToHtml called with text length: ${text.length}")
-        println("DEBUG: Input text preview: ${text.take(200)}...")
-        println("DEBUG: JCEF mode: $isJcefMode")
-
         var result = text
 
         // Если контент уже представляет собой HTML - вставляем как есть
         if (markdownProcessor.looksLikeHtml(result)) {
-            println("DEBUG: Detected preformatted HTML content, bypassing markdown/escape pipeline")
             return result
         }
 
-        // 1. Обрабатываем тройные обратные кавычки (```code```) - единственный способ создать блок кода
-        val tripleBacktickResult = codeBlockProcessor.processTripleBackticks(result, isJcefMode)
-        result = tripleBacktickResult.processedText
-
-        if (tripleBacktickResult.codeBlocksFound.isNotEmpty()) {
-            println(
-                "DEBUG: Found ${tripleBacktickResult.codeBlocksFound.size} triple backtick code blocks: ${
-                    tripleBacktickResult.codeBlocksFound.joinToString(
-                        ", "
-                    )
-                }"
-            )
-        }
-
-        // 2. Экранируем HTML только для не-JCEF режима (до обработки markdown)
+        // Экранируем HTML только для не-JCEF режима (до обработки markdown)
         if (!isJcefMode) {
             result = escapeHtml(result)
         }
 
-        // 3. Обрабатываем markdown-элементы (включая инлайн-код `text`)
+        // Обрабатываем markdown-элементы
         result = markdownProcessor.processMarkdown(result, isJcefMode)
 
-        println("DEBUG: Final rendered HTML preview: ${result.take(300)}...")
-
         return result
+    }
+
+    /**
+     * Рендерит форматированный вывод агентов в HTML
+     */
+    fun renderFormattedOutput(formattedOutput: FormattedOutput): String {
+        return try {
+            val sortedBlocks = formattedOutput.blocks.sortedBy { it.order }
+            val htmlParts = mutableListOf<String>()
+
+            htmlParts.add("<div class=\"agent-output-container\">")
+
+            sortedBlocks.forEach { block ->
+                val blockHtml = when (block.type) {
+                    AgentOutputType.TERMINAL -> renderTerminalBlock(block)
+                    AgentOutputType.CODE_BLOCKS -> renderCodeBlock(block)
+                    AgentOutputType.TOOL_RESULT -> renderToolResultBlock(block)
+                    AgentOutputType.MARKDOWN -> renderMarkdownBlock(block)
+                    AgentOutputType.STRUCTURED -> renderStructuredBlock(block)
+                    AgentOutputType.HTML -> renderHtmlBlock(block)
+                }
+                htmlParts.add(blockHtml)
+            }
+
+            htmlParts.add("</div>")
+            htmlParts.joinToString("\n")
+
+        } catch (e: Exception) {
+            // Fallback на сырой контент в случае ошибки
+            formattedOutput.rawContent ?: "<div class=\"error\">Error rendering formatted output</div>"
+        }
+    }
+
+    /**
+     * Рендерит терминальный блок
+     */
+    private fun renderTerminalBlock(block: FormattedOutputBlock): String {
+        val metadata = block.metadata
+        val command = metadata["command"] as? String ?: ""
+        val exitCode = metadata["exitCode"] as? Int ?: 0
+        val executionTime = metadata["executionTime"] as? Long ?: 0L
+        val success = metadata["success"] as? Boolean ?: true
+
+        return terminalTemplate.render(
+            command = command,
+            exitCode = exitCode,
+            executionTime = executionTime,
+            success = success,
+            content = block.content
+        )
+    }
+
+    /**
+     * Рендерит блок кода
+     */
+    private fun renderCodeBlock(block: FormattedOutputBlock): String {
+        val language = block.metadata["language"] as? String ?: ""
+        val fileName = block.metadata["fileName"] as? String
+
+        return codeBlockTemplate.render(
+            content = block.content,
+            language = language,
+            fileName = fileName
+        )
+    }
+
+    /**
+     * Рендерит блок результата инструмента
+     */
+    private fun renderToolResultBlock(block: FormattedOutputBlock): String {
+        val toolName = block.metadata["toolName"] as? String ?: "Unknown Tool"
+        val operationType = block.metadata["operationType"] as? String ?: ""
+        val success = block.metadata["success"] as? Boolean ?: true
+
+        return toolResultTemplate.render(
+            content = block.content,
+            toolName = toolName,
+            operationType = operationType,
+            success = success
+        )
+    }
+
+    /**
+     * Рендерит markdown блок
+     */
+    private fun renderMarkdownBlock(block: FormattedOutputBlock): String {
+        return try {
+            renderContentToHtml(block.content, true)
+        } catch (e: Exception) {
+            // Fallback если рендерер недоступен
+            "<div class=\"markdown-block\"><div class=\"markdown-content\">${terminalTemplate.escapeHtml(block.content)}</div></div>"
+        }
+    }
+
+    /**
+     * Рендерит структурированный блок
+     */
+    private fun renderStructuredBlock(block: FormattedOutputBlock): String {
+        val format = block.metadata["format"] as? String ?: "json"
+
+        return structuredBlockTemplate.render(
+            content = block.content,
+            format = format
+        )
+    }
+
+    /**
+     * Рендерит HTML блок (без дополнительной обработки)
+     */
+    private fun renderHtmlBlock(block: FormattedOutputBlock): String {
+        val cssClasses = block.cssClasses.joinToString(" ")
+        return if (cssClasses.isNotEmpty()) {
+            "<div class=\"$cssClasses\">${block.content}</div>"
+        } else {
+            block.content
+        }
+    }
+
+    /**
+     * Рендерит несколько блоков с разделителями
+     */
+    fun renderMultipleBlocks(blocks: List<FormattedOutputBlock>): String {
+        if (blocks.isEmpty()) return ""
+
+        return buildString {
+            appendLine("<div class=\"multi-block-container\">")
+
+            blocks.sortedBy { it.order }.forEachIndexed { index, block ->
+                appendLine("  <div class=\"block-item\" data-block-type=\"${block.type}\" data-order=\"${block.order}\">")
+
+                val blockHtml = when (block.type) {
+                    AgentOutputType.TERMINAL -> renderTerminalBlock(block)
+                    AgentOutputType.CODE_BLOCKS -> renderCodeBlock(block)
+                    AgentOutputType.TOOL_RESULT -> renderToolResultBlock(block)
+                    AgentOutputType.MARKDOWN -> renderMarkdownBlock(block)
+                    AgentOutputType.STRUCTURED -> renderStructuredBlock(block)
+                    AgentOutputType.HTML -> renderHtmlBlock(block)
+                }
+                appendLine(blockHtml)
+
+                appendLine("  </div>")
+
+                // Добавляем разделитель между блоками (кроме последнего)
+                if (index < blocks.size - 1) {
+                    appendLine("  <div class=\"block-separator\"></div>")
+                }
+            }
+
+            appendLine("</div>")
+        }
+    }
+
+    /**
+     * Создает JavaScript код для интерактивности элементов
+     */
+    fun createInteractionScripts(): String {
+        return interactionScriptsTemplate.createScripts()
     }
 
     /**

@@ -5,10 +5,13 @@ import kotlin.test.*
 import ru.marslab.ide.ride.model.orchestrator.AgentType
 import ru.marslab.ide.ride.model.orchestrator.ExecutionContext
 import ru.marslab.ide.ride.model.tool.*
+import ru.marslab.ide.ride.integration.llm.LLMProvider
+import io.mockk.mockk
 
 class ReportGeneratorToolAgentTest {
-    
-    private val agent = ReportGeneratorToolAgent()
+
+    private val mockLlmProvider = mockk<LLMProvider>(relaxed = true)
+    private val agent = ReportGeneratorToolAgent(mockLlmProvider)
     
     @Test
     fun `should have correct agent type and capabilities`() {
