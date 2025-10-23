@@ -1,12 +1,12 @@
 ﻿package ru.marslab.ide.ride.integration.llm
 
+import ru.marslab.ide.ride.model.chat.ConversationMessage
 import ru.marslab.ide.ride.model.llm.LLMParameters
 import ru.marslab.ide.ride.model.llm.LLMResponse
-import ru.marslab.ide.ride.model.chat.ConversationMessage
 
 /**
  * Интерфейс для работы с LLM провайдерами
- * 
+ *
  * Абстракция позволяет легко добавлять поддержку различных LLM
  * (Yandex GPT, OpenAI, Claude и т.д.) без изменения кода агентов
  */
@@ -26,17 +26,17 @@ interface LLMProvider {
         conversationHistory: List<ConversationMessage>,
         parameters: LLMParameters
     ): LLMResponse
-    
+
     /**
      * Проверяет доступность провайдера
-     * 
+     *
      * @return true если провайдер настроен и доступен
      */
     fun isAvailable(): Boolean
-    
+
     /**
      * Возвращает имя провайдера
-     * 
+     *
      * @return Имя провайдера (например, "Yandex GPT", "OpenAI")
      */
     fun getProviderName(): String

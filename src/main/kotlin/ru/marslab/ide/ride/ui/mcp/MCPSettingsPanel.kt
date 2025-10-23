@@ -3,22 +3,21 @@ package ru.marslab.ide.ride.ui.mcp
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
-import com.intellij.ui.AnActionButton
-import com.intellij.ui.ToolbarDecorator
 import com.intellij.util.ui.JBUI
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
 import ru.marslab.ide.ride.model.mcp.MCPServerConfig
 import ru.marslab.ide.ride.model.mcp.MCPSettings
 import ru.marslab.ide.ride.service.mcp.MCPConfigService
 import ru.marslab.ide.ride.service.mcp.MCPConnectionManager
 import java.awt.BorderLayout
 import java.awt.Dimension
-import javax.swing.*
+import javax.swing.Box
+import javax.swing.BoxLayout
+import javax.swing.JButton
+import javax.swing.JPanel
 
 /**
  * Панель настроек MCP серверов
@@ -43,11 +42,11 @@ class MCPSettingsPanel(private val project: Project) : JPanel(BorderLayout()) {
         // Создаем главную панель с вертикальным layout
         val mainPanel = JPanel()
         mainPanel.layout = BoxLayout(mainPanel, BoxLayout.Y_AXIS)
-        
+
         // Добавляем панель статуса MCP Server Rust
         mainPanel.add(createMCPServerStatusPanel())
         mainPanel.add(Box.createVerticalStrut(10))
-        
+
         // Инициализируем панель списка серверов до добавления в layout
         if (!::serverListPanel.isInitialized) {
             serverListPanel = MCPServerListPanel(
@@ -67,7 +66,7 @@ class MCPSettingsPanel(private val project: Project) : JPanel(BorderLayout()) {
                 }
             )
         }
-        
+
         // Создаем панель с кнопками
         val buttonPanel = JPanel()
         buttonPanel.border = JBUI.Borders.empty(5)
@@ -97,17 +96,17 @@ class MCPSettingsPanel(private val project: Project) : JPanel(BorderLayout()) {
 
         add(mainPanel, BorderLayout.CENTER)
     }
-    
+
     private fun createMCPServerStatusPanel(): JPanel {
         val panel = JPanel(BorderLayout())
         panel.border = JBUI.Borders.empty(10)
-        
+
         val statusPanel = MCPServerStatusPanel()
         panel.add(statusPanel, BorderLayout.CENTER)
-        
+
         return panel
     }
-    
+
     private fun loadSettings() {
         originalSettings = configService.loadConfig()
         currentSettings = originalSettings
@@ -194,7 +193,7 @@ class MCPSettingsPanel(private val project: Project) : JPanel(BorderLayout()) {
             }
         }
     }
-    
+
     private fun editServer(server: MCPServerConfig) {
         val dialog = MCPServerDialog(project, server)
         if (dialog.showAndGet()) {
@@ -244,7 +243,7 @@ class MCPSettingsPanel(private val project: Project) : JPanel(BorderLayout()) {
             }
         }
     }
-    
+
     fun isModified(): Boolean {
         return currentSettings != originalSettings
     }
@@ -265,7 +264,7 @@ class MCPSettingsPanel(private val project: Project) : JPanel(BorderLayout()) {
         // Сохранение
         if (configService.saveConfig(currentSettings)) {
             originalSettings = currentSettings
-            
+
             // Переинициализируем подключения без всплывающих окон
             connectionManager.initializeConnections()
             updateServerList()

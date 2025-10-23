@@ -1,14 +1,13 @@
 package ru.marslab.ide.ride.agent.validation
 
 import kotlinx.serialization.json.Json
+import ru.marslab.ide.ride.model.schema.JsonResponseSchema
+import ru.marslab.ide.ride.model.schema.ParsedResponse
+import ru.marslab.ide.ride.model.schema.XmlResponseSchema
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
-import ru.marslab.ide.ride.model.schema.JsonResponseSchema
-import ru.marslab.ide.ride.model.schema.ParsedResponse
-import ru.marslab.ide.ride.model.schema.ResponseFormat
-import ru.marslab.ide.ride.model.schema.XmlResponseSchema
 
 class JsonResponseValidatorTest {
 
@@ -17,12 +16,14 @@ class JsonResponseValidatorTest {
 
     @Test
     fun `validates ok when matches example schema`() {
-        val schema = JsonResponseSchema.create("""
+        val schema = JsonResponseSchema.create(
+            """
             {
               "answer": "string",
               "confidence": 0.0
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         val parsed = ParsedResponse.JsonResponse(
             rawContent = "",
             jsonElement = json.parseToJsonElement("""{"answer":"ok","confidence":0.95}""")
@@ -92,14 +93,16 @@ class JsonResponseValidatorTest {
 
     @Test
     fun `validates nested objects correctly`() {
-        val schema = JsonResponseSchema.create("""
+        val schema = JsonResponseSchema.create(
+            """
             {
                 "user": {
                     "name": "string",
                     "age": 0
                 }
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         val parsed = ParsedResponse.JsonResponse(
             rawContent = "",
             jsonElement = json.parseToJsonElement("""{"user":{"name":"John","age":25}}""")
@@ -110,14 +113,16 @@ class JsonResponseValidatorTest {
 
     @Test
     fun `fails when nested field missing`() {
-        val schema = JsonResponseSchema.create("""
+        val schema = JsonResponseSchema.create(
+            """
             {
                 "user": {
                     "name": "string",
                     "age": 0
                 }
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         val parsed = ParsedResponse.JsonResponse(
             rawContent = "",
             jsonElement = json.parseToJsonElement("""{"user":{"name":"John"}}""")
@@ -129,14 +134,16 @@ class JsonResponseValidatorTest {
 
     @Test
     fun `fails when nested type mismatch`() {
-        val schema = JsonResponseSchema.create("""
+        val schema = JsonResponseSchema.create(
+            """
             {
                 "user": {
                     "name": "string",
                     "age": 0
                 }
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         val parsed = ParsedResponse.JsonResponse(
             rawContent = "",
             jsonElement = json.parseToJsonElement("""{"user":{"name":"John","age":"25"}}""")
@@ -148,7 +155,8 @@ class JsonResponseValidatorTest {
 
     @Test
     fun `validates deeply nested objects`() {
-        val schema = JsonResponseSchema.create("""
+        val schema = JsonResponseSchema.create(
+            """
             {
                 "level1": {
                     "level2": {
@@ -159,7 +167,8 @@ class JsonResponseValidatorTest {
                     }
                 }
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         val parsed = ParsedResponse.JsonResponse(
             rawContent = "",
             jsonElement = json.parseToJsonElement("""{"level1":{"level2":{"level3":{"value":"test","count":42}}}}""")
@@ -170,7 +179,8 @@ class JsonResponseValidatorTest {
 
     @Test
     fun `fails for deeply nested missing field`() {
-        val schema = JsonResponseSchema.create("""
+        val schema = JsonResponseSchema.create(
+            """
             {
                 "level1": {
                     "level2": {
@@ -181,7 +191,8 @@ class JsonResponseValidatorTest {
                     }
                 }
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         val parsed = ParsedResponse.JsonResponse(
             rawContent = "",
             jsonElement = json.parseToJsonElement("""{"level1":{"level2":{"level3":{"value":"test"}}}}""")
@@ -236,12 +247,14 @@ class JsonResponseValidatorTest {
 
     @Test
     fun `validates boolean types correctly`() {
-        val schema = JsonResponseSchema.create("""
+        val schema = JsonResponseSchema.create(
+            """
             {
                 "isActive": true,
                 "isValid": false
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         val parsed = ParsedResponse.JsonResponse(
             rawContent = "",
             jsonElement = json.parseToJsonElement("""{"isActive": true, "isValid": false}""")
@@ -252,13 +265,15 @@ class JsonResponseValidatorTest {
 
     @Test
     fun `validates different number types`() {
-        val schema = JsonResponseSchema.create("""
+        val schema = JsonResponseSchema.create(
+            """
             {
                 "integer": 0,
                 "float": 0.0,
                 "negative": -1
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         val parsed = ParsedResponse.JsonResponse(
             rawContent = "",
             jsonElement = json.parseToJsonElement("""{"integer": 42, "float": 3.14, "negative": -5}""")
@@ -291,13 +306,15 @@ class JsonResponseValidatorTest {
 
     @Test
     fun `validates zero and negative numbers`() {
-        val schema = JsonResponseSchema.create("""
+        val schema = JsonResponseSchema.create(
+            """
             {
                 "zero": 0,
                 "negative": -1,
                 "float": 0.0
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         val parsed = ParsedResponse.JsonResponse(
             rawContent = "",
             jsonElement = json.parseToJsonElement("""{"zero": 0, "negative": -100, "float": 0.0}""")
@@ -308,12 +325,14 @@ class JsonResponseValidatorTest {
 
     @Test
     fun `skips validation for arrays in schema`() {
-        val schema = JsonResponseSchema.create("""
+        val schema = JsonResponseSchema.create(
+            """
             {
                 "items": ["string"],
                 "value": "string"
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         val parsed = ParsedResponse.JsonResponse(
             rawContent = "",
             jsonElement = json.parseToJsonElement("""{"items": [1, 2, 3], "value": "test"}""")
@@ -324,24 +343,28 @@ class JsonResponseValidatorTest {
 
     @Test
     fun `handles mixed types in validation`() {
-        val schema = JsonResponseSchema.create("""
+        val schema = JsonResponseSchema.create(
+            """
             {
                 "stringField": "string",
                 "numberField": 0,
                 "booleanField": true,
                 "objectField": {"nested": "string"}
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         val parsed = ParsedResponse.JsonResponse(
             rawContent = "",
-            jsonElement = json.parseToJsonElement("""
+            jsonElement = json.parseToJsonElement(
+                """
                 {
                     "stringField": "test",
                     "numberField": 42,
                     "booleanField": false,
                     "objectField": {"nested": "value"}
                 }
-            """)
+            """
+            )
         )
         val err = validator.validate(parsed, schema)
         assertNull(err)
@@ -349,7 +372,8 @@ class JsonResponseValidatorTest {
 
     @Test
     fun `provides detailed error path for complex nesting`() {
-        val schema = JsonResponseSchema.create("""
+        val schema = JsonResponseSchema.create(
+            """
             {
                 "a": {
                     "b": {
@@ -359,7 +383,8 @@ class JsonResponseValidatorTest {
                     }
                 }
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         val parsed = ParsedResponse.JsonResponse(
             rawContent = "",
             jsonElement = json.parseToJsonElement("""{"a":{"b":{"c":{"d":123}}}}""")
@@ -371,13 +396,15 @@ class JsonResponseValidatorTest {
 
     @Test
     fun `validates when actual response has additional nested levels`() {
-        val schema = JsonResponseSchema.create("""
+        val schema = JsonResponseSchema.create(
+            """
             {
                 "user": {
                     "name": "string"
                 }
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         val parsed = ParsedResponse.JsonResponse(
             rawContent = "",
             jsonElement = json.parseToJsonElement("""{"user":{"name":"John","profile":{"age":25}}}""")
@@ -411,7 +438,8 @@ class JsonResponseValidatorTest {
 
     @Test
     fun `validates schema with only nested structure`() {
-        val schema = JsonResponseSchema.create("""
+        val schema = JsonResponseSchema.create(
+            """
             {
                 "nested": {
                     "deep": {
@@ -419,7 +447,8 @@ class JsonResponseValidatorTest {
                     }
                 }
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         val parsed = ParsedResponse.JsonResponse(
             rawContent = "",
             jsonElement = json.parseToJsonElement("""{"nested":{"deep":{"value":"correct","extra":"ignored"}}}""")

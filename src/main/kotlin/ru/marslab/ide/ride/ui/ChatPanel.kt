@@ -1,7 +1,5 @@
 package ru.marslab.ide.ride.ui
 
-import ru.marslab.ide.ride.model.chat.ConversationMessage
-import ru.marslab.ide.ride.model.chat.ConversationRole
 import com.intellij.ide.ui.LafManagerListener
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
@@ -19,9 +17,9 @@ import ru.marslab.ide.ride.ui.config.ChatPanelConfig
 import ru.marslab.ide.ride.ui.manager.HtmlDocumentManager
 import ru.marslab.ide.ride.ui.manager.MessageDisplayManager
 import ru.marslab.ide.ride.ui.renderer.ChatContentRenderer
-import ru.marslab.ide.ride.ui.renderer.AgentOutputRenderer
 import java.awt.BorderLayout
-import javax.swing.*
+import javax.swing.JPanel
+import javax.swing.SwingUtilities
 
 /**
  * Главная панель чата (гибрид Swing + JCEF)
@@ -50,7 +48,7 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
             try {
                 Class.forName("com.intellij.ui.jcef.JBCefBrowser")
                 println("DEBUG: JCEF classes are available")
-                
+
                 val view = JcefChatView()
                 println("✓ JCEF ChatView initialized successfully - подсветка кода будет доступна")
                 view
@@ -70,7 +68,13 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
     init {
         initializeComponents()
         buildUI()
-        loadInitialState()
+        // Инициализируем ChatService с проектом
+        chatService.initializeWithProject(project)
+
+        // Откладываем загрузку начального состояния до полной инициализации UI
+        SwingUtilities.invokeLater {
+            loadInitialState()
+        }
     }
 
     /**
@@ -80,8 +84,7 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         // Инициализируем менеджеры и рендереры
         htmlDocumentManager = HtmlDocumentManager(settings, jcefView)
         contentRenderer = ChatContentRenderer()
-        val agentOutputRenderer = AgentOutputRenderer()
-        messageDisplayManager = MessageDisplayManager(htmlDocumentManager, contentRenderer, agentOutputRenderer)
+        messageDisplayManager = MessageDisplayManager(htmlDocumentManager, contentRenderer)
         uiBuilder = ChatUiBuilder(chatService, htmlDocumentManager) { this }
 
         // Настраиваем ChatService для отображения progress tool agents
@@ -126,12 +129,12 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         if (!settings.isConfigured()) {
             messageDisplayManager.displaySystemMessage(ChatPanelConfig.Messages.CONFIGURATION_WARNING)
         }
-        
+
         // Уведомляем о режиме отображения
         if (jcefView == null) {
             messageDisplayManager.displaySystemMessage(
                 "⚠️ JCEF недоступен - используется упрощенный режим отображения без подсветки кода. " +
-                "Для полноценной подсветки синтаксиса убедитесь, что используется JetBrains Runtime (JBR)."
+                        "Для полноценной подсветки синтаксиса убедитесь, что используется JetBrains Runtime (JBR)."
             )
         } else {
             messageDisplayManager.displaySystemMessage("✓ JCEF активен - доступна подсветка синтаксиса кода")
@@ -165,6 +168,7 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                 val command = text.removePrefix("/terminal ").removePrefix("/exec ").trim()
                 executeTerminalCommand(command)
             }
+
             text.startsWith("/plan ") -> {
                 // Режим планирования с оркестратором
                 val actualMessage = text.removePrefix("/plan ").trim()
@@ -187,6 +191,7 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                     }
                 )
             }
+
             text.startsWith("/file ") -> {
                 // Команда с поддержкой файлов (используем MCPFileSystemAgent)
                 val actualMessage = text.removePrefix("/file ").trim()
@@ -209,6 +214,7 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                     }
                 )
             }
+
             else -> {
                 // Обычное сообщение в чат
                 chatService.sendMessage(
@@ -373,7 +379,7 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
     private fun updateContextSize() {
         val history = chatService.getHistory()
         val tokenCounter = chatService.getTokenCounter()
-        
+
         // Подсчитываем токены в истории
         val conversationHistory = history
             .filter { it.role != MessageRole.SYSTEM }
@@ -387,7 +393,7 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                     }
                 )
             }
-        
+
         // Получаем системный промпт из настроек (как в ChatAgent)
         val systemPrompt = """
             Ты - AI-ассистент для разработчиков в IntelliJ IDEA.
@@ -403,13 +409,13 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
             - Форматируй код в блоках с указанием языка
             - Будь конкретным и практичным
         """.trimIndent()
-        
+
         val contextTokens = tokenCounter.countRequestTokens(
             systemPrompt = systemPrompt,
             userMessage = "",
             conversationHistory = conversationHistory
         )
-        
+
         // Обновляем label
         topComponents.contextSizeLabel.text = "Контекст: $contextTokens токенов"
     }

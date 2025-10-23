@@ -27,21 +27,21 @@ data class StepInput(
 ) {
     companion object {
         fun empty() = StepInput()
-        
+
         fun of(vararg pairs: Pair<String, Any>) = StepInput(pairs.toMap())
     }
-    
+
     fun <T> get(key: String): T? {
         @Suppress("UNCHECKED_CAST")
         return data[key] as? T
     }
-    
+
     fun getString(key: String): String? = get(key)
-    
+
     fun getInt(key: String): Int? = get(key)
-    
+
     fun getBoolean(key: String): Boolean? = get(key)
-    
+
     fun <T> getList(key: String): List<T>? = get(key)
 }
 
@@ -53,10 +53,10 @@ data class StepOutput(
 ) {
     companion object {
         fun empty() = StepOutput()
-        
+
         fun of(vararg pairs: Pair<String, Any>) = StepOutput(pairs.toMap())
     }
-    
+
     fun <T> get(key: String): T? {
         @Suppress("UNCHECKED_CAST")
         return data[key] as? T
@@ -75,13 +75,13 @@ data class StepResult(
     val metadata: Map<String, Any> = emptyMap()
 ) {
     companion object {
-        fun success(output: StepOutput, metadata: Map<String, Any> = emptyMap()) = 
+        fun success(output: StepOutput, metadata: Map<String, Any> = emptyMap()) =
             StepResult(true, output, metadata = metadata)
-        
-        fun error(error: String, output: StepOutput = StepOutput.empty()) = 
+
+        fun error(error: String, output: StepOutput = StepOutput.empty()) =
             StepResult(false, output, error)
-        
-        fun requiresInput(prompt: String, output: StepOutput = StepOutput.empty()) = 
+
+        fun requiresInput(prompt: String, output: StepOutput = StepOutput.empty()) =
             StepResult(false, output, null, true, prompt)
     }
 }

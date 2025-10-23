@@ -1,14 +1,19 @@
 package ru.marslab.ide.ride.agent.tools
 
-import com.intellij.openapi.diagnostic.Logger
 import ru.marslab.ide.ride.agent.BaseToolAgent
 import ru.marslab.ide.ride.agent.ValidationResult
-import ru.marslab.ide.ride.model.orchestrator.*
-import ru.marslab.ide.ride.model.tool.*
+import ru.marslab.ide.ride.model.orchestrator.AgentType
+import ru.marslab.ide.ride.model.orchestrator.ExecutionContext
+import ru.marslab.ide.ride.model.orchestrator.InteractionType
+import ru.marslab.ide.ride.model.orchestrator.UserPrompt
+import ru.marslab.ide.ride.model.tool.StepInput
+import ru.marslab.ide.ride.model.tool.StepOutput
+import ru.marslab.ide.ride.model.tool.StepResult
+import ru.marslab.ide.ride.model.tool.ToolPlanStep
 
 /**
  * Агент для взаимодействия с пользователем
- * 
+ *
  * Поддерживает различные типы взаимодействия:
  * - Подтверждение (Да/Нет)
  * - Выбор из списка
@@ -26,10 +31,10 @@ class UserInteractionAgent : BaseToolAgent(
     )
 ) {
     override fun getDescription(): String = "Агент для интерактивного взаимодействия с пользователем"
-    
+
     override suspend fun doExecuteStep(step: ToolPlanStep, context: ExecutionContext): StepResult {
         logger.info("Executing user interaction step: ${step.id}")
-        
+
         try {
             // Извлекаем параметры из входных данных
             val promptType = step.input.getString("prompt_type") ?: "confirmation"
@@ -38,7 +43,7 @@ class UserInteractionAgent : BaseToolAgent(
             val defaultValue = step.input.getString("default_value")
             val timeoutMs = step.input.get<Long>("timeout_ms")
             val data = step.input.get<Map<String, Any>>("data") ?: emptyMap()
-            
+
             // Создаем UserPrompt
             val interactionType = parseInteractionType(promptType)
             val userPrompt = UserPrompt(
@@ -49,12 +54,12 @@ class UserInteractionAgent : BaseToolAgent(
                 timeout = timeoutMs,
                 metadata = data
             )
-            
+
             // Форматируем запрос для пользователя
             val formattedPrompt = userPrompt.format()
-            
+
             logger.info("User interaction prompt created: $formattedPrompt")
-            
+
             // Возвращаем результат, требующий пользовательского ввода
             return StepResult.requiresInput(
                 prompt = formattedPrompt,
@@ -64,7 +69,7 @@ class UserInteractionAgent : BaseToolAgent(
                     "prompt_data" to userPrompt
                 )
             )
-            
+
         } catch (e: Exception) {
             logger.error("Error executing user interaction step", e)
             return StepResult.error(
@@ -73,7 +78,7 @@ class UserInteractionAgent : BaseToolAgent(
             )
         }
     }
-    
+
     /**
      * Обрабатывает ответ пользователя
      */
@@ -82,7 +87,7 @@ class UserInteractionAgent : BaseToolAgent(
         userInput: String
     ): StepResult {
         logger.info("Processing user response for prompt: ${prompt.id}")
-        
+
         // Валидируем ввод
         val validationResult = prompt.validate(userInput)
         if (!validationResult.isValid) {
@@ -92,25 +97,28 @@ class UserInteractionAgent : BaseToolAgent(
                 output = StepOutput.of("validation_errors" to validationResult.errors)
             )
         }
-        
+
         // Обрабатываем ответ в зависимости от типа
         val processedValue = when (prompt.type) {
             InteractionType.CONFIRMATION -> {
                 parseConfirmation(userInput)
             }
+
             InteractionType.CHOICE -> {
                 userInput
             }
+
             InteractionType.MULTI_CHOICE -> {
                 userInput.split(",").map { it.trim() }
             }
+
             InteractionType.INPUT -> {
                 userInput.ifBlank { prompt.defaultValue ?: "" }
             }
         }
-        
+
         logger.info("User response processed successfully: $processedValue")
-        
+
         return StepResult.success(
             output = StepOutput.of(
                 "user_input" to userInput,
@@ -123,23 +131,23 @@ class UserInteractionAgent : BaseToolAgent(
             )
         )
     }
-    
+
     override fun validateInput(input: StepInput): ValidationResult {
         val message = input.getString("message")
         if (message.isNullOrBlank()) {
             return ValidationResult.failure("Сообщение для пользователя не может быть пустым")
         }
-        
+
         val promptType = input.getString("prompt_type") ?: "confirmation"
         try {
             parseInteractionType(promptType)
         } catch (e: IllegalArgumentException) {
             return ValidationResult.failure("Неизвестный тип взаимодействия: $promptType")
         }
-        
+
         return ValidationResult.success()
     }
-    
+
     /**
      * Парсит тип взаимодействия из строки
      */
@@ -152,7 +160,7 @@ class UserInteractionAgent : BaseToolAgent(
             else -> throw IllegalArgumentException("Unknown interaction type: $type")
         }
     }
-    
+
     /**
      * Возвращает опции по умолчанию для типа взаимодействия
      */
@@ -162,7 +170,7 @@ class UserInteractionAgent : BaseToolAgent(
             else -> emptyList()
         }
     }
-    
+
     /**
      * Парсит подтверждение в булево значение
      */
@@ -174,5 +182,5 @@ class UserInteractionAgent : BaseToolAgent(
             else -> normalized.startsWith("да") || normalized.startsWith("yes")
         }
     }
-    
+
 }

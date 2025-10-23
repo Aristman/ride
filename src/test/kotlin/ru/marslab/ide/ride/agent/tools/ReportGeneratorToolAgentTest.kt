@@ -1,15 +1,18 @@
 package ru.marslab.ide.ride.agent.tools
 
+import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
-import kotlin.test.*
+import ru.marslab.ide.ride.integration.llm.LLMProvider
 import ru.marslab.ide.ride.model.orchestrator.AgentType
 import ru.marslab.ide.ride.model.orchestrator.ExecutionContext
 import ru.marslab.ide.ride.model.tool.*
+import kotlin.test.*
 
 class ReportGeneratorToolAgentTest {
-    
-    private val agent = ReportGeneratorToolAgent()
-    
+
+    private val mockLlmProvider = mockk<LLMProvider>(relaxed = true)
+    private val agent = ReportGeneratorToolAgent(mockLlmProvider)
+
     @Test
     fun `should have correct agent type and capabilities`() {
         assertEquals(AgentType.REPORT_GENERATOR, agent.agentType)
@@ -17,26 +20,26 @@ class ReportGeneratorToolAgentTest {
         assertTrue(agent.toolCapabilities.contains("html_generation"))
         assertTrue(agent.toolCapabilities.contains("json_export"))
     }
-    
+
     @Test
     fun `should validate format is required`() {
         val input = StepInput.empty()
-        
+
         val result = agent.validateInput(input)
-        
+
         assertFalse(result.isValid)
         assertTrue(result.errors.any { it.contains("format") })
     }
-    
+
     @Test
     fun `should validate format is supported`() {
         val input = StepInput.of("format" to "xml")
-        
+
         val result = agent.validateInput(input)
-        
+
         assertFalse(result.isValid)
     }
-    
+
     @Test
     fun `should generate markdown report`() = runTest {
         val findings = listOf(
@@ -49,7 +52,7 @@ class ReportGeneratorToolAgentTest {
                 description = "Null pointer exception risk"
             )
         )
-        
+
         val step = ToolPlanStep(
             description = "Generate markdown report",
             agentType = AgentType.REPORT_GENERATOR,
@@ -59,9 +62,9 @@ class ReportGeneratorToolAgentTest {
                 "findings" to findings
             )
         )
-        
+
         val result = agent.executeStep(step, ExecutionContext())
-        
+
         assertTrue(result.success)
         val report = result.output.get<String>("report")
         assertNotNull(report)
@@ -69,7 +72,7 @@ class ReportGeneratorToolAgentTest {
         assertTrue(report.contains("Potential NPE"))
         assertTrue(report.contains("HIGH"))
     }
-    
+
     @Test
     fun `should generate html report`() = runTest {
         val findings = listOf(
@@ -81,7 +84,7 @@ class ReportGeneratorToolAgentTest {
                 message = "Critical bug"
             )
         )
-        
+
         val step = ToolPlanStep(
             description = "Generate HTML report",
             agentType = AgentType.REPORT_GENERATOR,
@@ -90,9 +93,9 @@ class ReportGeneratorToolAgentTest {
                 "findings" to findings
             )
         )
-        
+
         val result = agent.executeStep(step, ExecutionContext())
-        
+
         assertTrue(result.success)
         val report = result.output.get<String>("report")
         assertNotNull(report)
@@ -100,7 +103,7 @@ class ReportGeneratorToolAgentTest {
         assertTrue(report.contains("Critical bug"))
         assertTrue(report.contains("critical"))
     }
-    
+
     @Test
     fun `should generate json report`() = runTest {
         val findings = listOf(
@@ -112,7 +115,7 @@ class ReportGeneratorToolAgentTest {
                 message = "Code smell"
             )
         )
-        
+
         val step = ToolPlanStep(
             description = "Generate JSON report",
             agentType = AgentType.REPORT_GENERATOR,
@@ -121,9 +124,9 @@ class ReportGeneratorToolAgentTest {
                 "findings" to findings
             )
         )
-        
+
         val result = agent.executeStep(step, ExecutionContext())
-        
+
         assertTrue(result.success)
         val report = result.output.get<String>("report")
         assertNotNull(report)
@@ -131,14 +134,14 @@ class ReportGeneratorToolAgentTest {
         assertTrue(report.contains("Code smell"))
         assertTrue(report.contains("MEDIUM"))
     }
-    
+
     @Test
     fun `should include metrics in report`() = runTest {
         val metrics = mapOf(
             "total_files" to 10,
             "total_lines" to 1000
         )
-        
+
         val step = ToolPlanStep(
             description = "Generate report with metrics",
             agentType = AgentType.REPORT_GENERATOR,
@@ -148,9 +151,9 @@ class ReportGeneratorToolAgentTest {
                 "findings" to emptyList<Finding>()
             )
         )
-        
+
         val result = agent.executeStep(step, ExecutionContext())
-        
+
         assertTrue(result.success)
         val report = result.output.get<String>("report")
         assertNotNull(report)
@@ -158,7 +161,7 @@ class ReportGeneratorToolAgentTest {
         assertTrue(report.contains("10"))
         assertTrue(report.contains("1000"))
     }
-    
+
     @Test
     fun `should handle empty findings`() = runTest {
         val step = ToolPlanStep(
@@ -169,24 +172,36 @@ class ReportGeneratorToolAgentTest {
                 "findings" to emptyList<Finding>()
             )
         )
-        
+
         val result = agent.executeStep(step, ExecutionContext())
-        
+
         assertTrue(result.success)
         val report = result.output.get<String>("report")
         assertNotNull(report)
         assertTrue(report!!.contains("Проблем не обнаружено"))
     }
-    
+
     @Test
     fun `should group findings by severity in markdown`() = runTest {
         val findings = listOf(
-            Finding(file = "Test1.kt", line = 1, severity = Severity.CRITICAL, category = "bug", message = "Critical 1"),
-            Finding(file = "Test2.kt", line = 2, severity = Severity.CRITICAL, category = "bug", message = "Critical 2"),
+            Finding(
+                file = "Test1.kt",
+                line = 1,
+                severity = Severity.CRITICAL,
+                category = "bug",
+                message = "Critical 1"
+            ),
+            Finding(
+                file = "Test2.kt",
+                line = 2,
+                severity = Severity.CRITICAL,
+                category = "bug",
+                message = "Critical 2"
+            ),
             Finding(file = "Test3.kt", line = 3, severity = Severity.HIGH, category = "bug", message = "High 1"),
             Finding(file = "Test4.kt", line = 4, severity = Severity.LOW, category = "quality", message = "Low 1")
         )
-        
+
         val step = ToolPlanStep(
             description = "Generate grouped report",
             agentType = AgentType.REPORT_GENERATOR,
@@ -195,9 +210,9 @@ class ReportGeneratorToolAgentTest {
                 "findings" to findings
             )
         )
-        
+
         val result = agent.executeStep(step, ExecutionContext())
-        
+
         assertTrue(result.success)
         val report = result.output.get<String>("report")
         assertNotNull(report)
@@ -205,7 +220,7 @@ class ReportGeneratorToolAgentTest {
         assertTrue(report.contains("HIGH"))
         assertTrue(report.contains("LOW"))
     }
-    
+
     @Test
     fun `should return metadata with generation info`() = runTest {
         val step = ToolPlanStep(
@@ -216,9 +231,9 @@ class ReportGeneratorToolAgentTest {
                 "findings" to emptyList<Finding>()
             )
         )
-        
+
         val result = agent.executeStep(step, ExecutionContext())
-        
+
         assertTrue(result.success)
         assertTrue(result.metadata.containsKey("findings_count"))
         assertTrue(result.metadata.containsKey("generated_at"))

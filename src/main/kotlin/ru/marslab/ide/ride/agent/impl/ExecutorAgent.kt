@@ -2,18 +2,16 @@
 
 import com.intellij.openapi.diagnostic.Logger
 import ru.marslab.ide.ride.agent.Agent
+import ru.marslab.ide.ride.formatter.ChatOutputFormatter
 import ru.marslab.ide.ride.integration.llm.LLMProvider
-import ru.marslab.ide.ride.model.agent.*
-import ru.marslab.ide.ride.model.chat.*
-import ru.marslab.ide.ride.model.llm.*
-import ru.marslab.ide.ride.model.task.*
-import ru.marslab.ide.ride.model.schema.*
-import ru.marslab.ide.ride.model.mcp.*
-import ru.marslab.ide.ride.formatter.CodeBlockFormatter
+import ru.marslab.ide.ride.model.agent.AgentCapabilities
+import ru.marslab.ide.ride.model.agent.AgentRequest
+import ru.marslab.ide.ride.model.agent.AgentResponse
+import ru.marslab.ide.ride.model.agent.AgentSettings
 
 /**
  * Агент для выполнения задач из плана
- * 
+ *
  * Получает отдельную задачу с промптом и выполняет её.
  * НЕ видит другие задачи и результаты предыдущих задач.
  *
@@ -24,8 +22,8 @@ class ExecutorAgent(
 ) : Agent {
 
     private val logger = Logger.getInstance(ExecutorAgent::class.java)
-    private val codeBlockFormatter = CodeBlockFormatter()
-    
+    private val chatOutputFormatter = ChatOutputFormatter()
+
     override val capabilities: AgentCapabilities = AgentCapabilities(
         stateful = false,
         streaming = false,
@@ -65,7 +63,7 @@ class ExecutorAgent(
             }
 
             // Используем форматтер для обработки блоков кода в ответе
-            val formattedOutput = codeBlockFormatter.formatAsHtml(llmResponse.content)
+            val formattedOutput = chatOutputFormatter.formatAsHtml(llmResponse.content)
 
             // Возвращаем результат выполнения с форматированным выводом
             AgentResponse.success(

@@ -5,8 +5,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import ru.marslab.ide.ride.integration.llm.LLMProvider
 import ru.marslab.ide.ride.model.llm.LLMParameters
-import ru.marslab.ide.ride.model.chat.ConversationMessage
-import ru.marslab.ide.ride.model.llm.LLMResponse
 
 /**
  * Сервис для нормализации путей файловой системы через LLM

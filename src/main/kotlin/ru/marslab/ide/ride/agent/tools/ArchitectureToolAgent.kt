@@ -8,7 +8,10 @@ import ru.marslab.ide.ride.model.codeanalysis.*
 import ru.marslab.ide.ride.model.llm.LLMParameters
 import ru.marslab.ide.ride.model.orchestrator.AgentType
 import ru.marslab.ide.ride.model.orchestrator.ExecutionContext
-import ru.marslab.ide.ride.model.tool.*
+import ru.marslab.ide.ride.model.tool.StepInput
+import ru.marslab.ide.ride.model.tool.StepOutput
+import ru.marslab.ide.ride.model.tool.StepResult
+import ru.marslab.ide.ride.model.tool.ToolPlanStep
 import java.io.File
 
 /**
@@ -538,7 +541,9 @@ class ArchitectureToolAgent(
     private fun createVirtualFileFromFile(file: File): VirtualFile {
         return object : VirtualFile() {
             override fun getName() = file.name
-            override fun getFileSystem() = throw UnsupportedOperationException("FileSystem not supported for file-based VirtualFile")
+            override fun getFileSystem() =
+                throw UnsupportedOperationException("FileSystem not supported for file-based VirtualFile")
+
             override fun getPath() = file.absolutePath
             override fun isWritable() = false
             override fun isDirectory() = file.isDirectory
@@ -547,13 +552,16 @@ class ArchitectureToolAgent(
                 val parentFile = file.parentFile
                 return if (parentFile != null) createVirtualFileFromFile(parentFile) else null
             }
+
             override fun getChildren(): Array<VirtualFile> {
                 return if (file.isDirectory) {
                     file.listFiles()?.map { createVirtualFileFromFile(it) }?.toTypedArray() ?: emptyArray()
                 } else emptyArray()
             }
+
             override fun getOutputStream(requestor: Any?, newModificationStamp: Long, newTimeStamp: Long) =
                 throw UnsupportedOperationException("Write operations not supported")
+
             override fun contentsToByteArray() = file.readBytes()
             override fun getTimeStamp() = file.lastModified()
             override fun getLength() = file.length()

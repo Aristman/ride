@@ -106,7 +106,8 @@ class HtmlDocumentManager(
             jcefView.removeLoadingSystemMessage()
             // Очищаем буфер только если есть маркеры загрузки
             if (loadingStart != -1 && loadingEnd != -1 &&
-                loadingStart < loadingEnd && loadingEnd <= htmlBuffer.length) {
+                loadingStart < loadingEnd && loadingEnd <= htmlBuffer.length
+            ) {
                 val loadingContent = htmlBuffer.substring(loadingStart, loadingEnd)
                 // Удаляем только если это действительно сообщение загрузки
                 if (loadingContent.contains("<!--LOADING_MARKER-->")) {
@@ -118,7 +119,8 @@ class HtmlDocumentManager(
         } else {
             // Для fallback режима удаляем сразу
             if (loadingStart != -1 && loadingEnd != -1 &&
-                loadingStart < loadingEnd && loadingEnd <= htmlBuffer.length) {
+                loadingStart < loadingEnd && loadingEnd <= htmlBuffer.length
+            ) {
                 val loadingContent = htmlBuffer.substring(loadingStart, loadingEnd)
                 // Удаляем только если это действительно сообщение загрузки
                 if (loadingContent.contains("<!--LOADING_MARKER-->")) {

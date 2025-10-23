@@ -23,23 +23,23 @@ data class LLMParameters(
         frequencyPenalty?.let { require(it in -2.0..2.0) { "Frequency penalty must be between -2.0 and 2.0" } }
         presencePenalty?.let { require(it in -2.0..2.0) { "Presence penalty must be between -2.0 and 2.0" } }
     }
-    
+
     companion object {
         /**
          * Параметры по умолчанию для сбалансированной генерации
          */
         val DEFAULT = LLMParameters()
-        
+
         /**
          * Параметры для более креативной генерации
          */
         val CREATIVE = LLMParameters(temperature = 0.9, maxTokens = 2000)
-        
+
         /**
          * Параметры для более точной и предсказуемой генерации
          */
         val PRECISE = LLMParameters(temperature = 0.3, maxTokens = 2000)
-        
+
         /**
          * Сбалансированные параметры для анализа
          */

@@ -1,14 +1,14 @@
 package ru.marslab.ide.ride.agent.parser
 
 import junit.framework.TestCase.assertFalse
-import kotlin.test.Test
-import kotlin.test.assertIs
-import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
 import ru.marslab.ide.ride.model.schema.JsonResponseSchema
 import ru.marslab.ide.ride.model.schema.ParsedResponse
 import ru.marslab.ide.ride.model.schema.ResponseFormat
+import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 class JsonResponseParserTest {
 

@@ -11,7 +11,6 @@ import ru.marslab.ide.ride.model.orchestrator.PlanState
 import ru.marslab.ide.ride.orchestrator.PlanStorage
 import ru.marslab.ide.ride.orchestrator.StorageStats
 import java.io.File
-import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -138,8 +137,8 @@ class PersistentPlanStorage(
         return mutex.withLock {
             memoryCache.values.filter { plan ->
                 plan.currentState != PlanState.COMPLETED &&
-                plan.currentState != PlanState.CANCELLED &&
-                plan.currentState != PlanState.FAILED
+                        plan.currentState != PlanState.CANCELLED &&
+                        plan.currentState != PlanState.FAILED
             }.sortedByDescending { it.createdAt }
         }
     }
@@ -180,7 +179,7 @@ class PersistentPlanStorage(
             val searchTextLower = searchText.lowercase()
             memoryCache.values.filter { plan ->
                 plan.originalRequest.lowercase().contains(searchTextLower) ||
-                plan.analysis.reasoning.lowercase().contains(searchTextLower)
+                        plan.analysis.reasoning.lowercase().contains(searchTextLower)
             }.sortedByDescending { it.createdAt }
         }
     }
@@ -229,8 +228,8 @@ class PersistentPlanStorage(
             val totalPlans = memoryCache.size
             val activePlans = memoryCache.values.count { plan ->
                 plan.currentState != PlanState.COMPLETED &&
-                plan.currentState != PlanState.CANCELLED &&
-                plan.currentState != PlanState.FAILED
+                        plan.currentState != PlanState.CANCELLED &&
+                        plan.currentState != PlanState.FAILED
             }
             val completedPlans = memoryCache.values.count { it.currentState == PlanState.COMPLETED }
             val failedPlans = memoryCache.values.count { it.currentState == PlanState.FAILED }

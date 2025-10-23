@@ -16,9 +16,9 @@ class MCPToolExecutor(
     private val mcpClient: MCPClient,
     private val pathNormalizer: PathNormalizer
 ) {
-    
+
     private val logger = Logger.getInstance(MCPToolExecutor::class.java)
-    
+
     /**
      * Выполнить tool call и вернуть результат
      */
@@ -42,7 +42,7 @@ class MCPToolExecutor(
                     "Error: Unknown tool '${functionCall.name}'"
                 }
             }
-            
+
             ToolResult(
                 functionResult = FunctionResult(
                     name = functionCall.name,
@@ -60,7 +60,7 @@ class MCPToolExecutor(
         }
     }
 
-  
+
     private suspend fun executeCreateFile(args: JsonObject): String {
         val path = args["path"]?.jsonPrimitive?.content
             ?: return "Error: 'path' parameter is required"
@@ -79,7 +79,7 @@ class MCPToolExecutor(
         val response = mcpClient.createFile(normalizedPath, content, overwrite)
         return "File '$normalizedPath' created successfully. Size: ${response.size} bytes, Checksum: ${response.checksum}"
     }
-    
+
     private suspend fun executeReadFile(args: JsonObject): String {
         val path = args["path"]?.jsonPrimitive?.content
             ?: return "Error: 'path' parameter is required"
@@ -101,7 +101,7 @@ class MCPToolExecutor(
             ${response.content}
         """.trimIndent()
     }
-    
+
     private suspend fun executeUpdateFile(args: JsonObject): String {
         val path = args["path"]?.jsonPrimitive?.content
             ?: return "Error: 'path' parameter is required"
@@ -128,13 +128,13 @@ class MCPToolExecutor(
         val response = mcpClient.deleteFile(normalizedPath)
         return response.message
     }
-    
+
     private suspend fun executeListFiles(args: JsonObject): String {
         val dir = args["dir"]?.jsonPrimitive?.contentOrNull
         val normalizedDir = dir?.let { it.replace("\\", "/").replace("\u0001", "/") }
 
         val response = mcpClient.listFiles(normalizedDir)
-        
+
         val filesText = if (response.files.isEmpty()) {
             "No files"
         } else {
@@ -142,7 +142,7 @@ class MCPToolExecutor(
                 "  - ${file.name} (${file.size} bytes)"
             }
         }
-        
+
         val dirsText = if (response.directories.isEmpty()) {
             "No directories"
         } else {
@@ -150,7 +150,7 @@ class MCPToolExecutor(
                 "  - ${dir.name}/"
             }
         }
-        
+
         return """
             Directory: ${response.path}
             
@@ -161,7 +161,7 @@ class MCPToolExecutor(
             $dirsText
         """.trimIndent()
     }
-    
+
     private suspend fun executeCreateDirectory(args: JsonObject): String {
         val path = args["path"]?.jsonPrimitive?.content
             ?: return "Error: 'path' parameter is required"
@@ -180,7 +180,7 @@ class MCPToolExecutor(
         val response = mcpClient.deleteDirectory(normalizedPath)
         return response.message
     }
-    
+
     private suspend fun executeListDirectory(args: JsonObject): String {
         val path = args["path"]?.jsonPrimitive?.contentOrNull
         val normalizedPath = path?.let { it.replace("\\", "/").replace("\u0001", "/") }

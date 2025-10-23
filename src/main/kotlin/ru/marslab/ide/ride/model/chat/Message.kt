@@ -1,6 +1,6 @@
 package ru.marslab.ide.ride.model.chat
 
-import java.util.UUID
+import java.util.*
 
 /**
  * Модель сообщения в чате
@@ -22,12 +22,12 @@ data class Message(
      * Проверяет, является ли сообщение от пользователя
      */
     fun isFromUser(): Boolean = role == MessageRole.USER
-    
+
     /**
      * Проверяет, является ли сообщение от ассистента
      */
     fun isFromAssistant(): Boolean = role == MessageRole.ASSISTANT
-    
+
     /**
      * Проверяет, является ли сообщение системным
      */

@@ -1,20 +1,21 @@
 ﻿package ru.marslab.ide.ride.agent.impl
 
-import ru.marslab.ide.ride.model.schema.TaskPlanData
 import com.intellij.openapi.diagnostic.Logger
 import ru.marslab.ide.ride.agent.Agent
 import ru.marslab.ide.ride.agent.formatter.PromptFormatter
 import ru.marslab.ide.ride.integration.llm.LLMProvider
-import ru.marslab.ide.ride.model.agent.*
-import ru.marslab.ide.ride.model.chat.*
-import ru.marslab.ide.ride.model.llm.*
-import ru.marslab.ide.ride.model.task.*
-import ru.marslab.ide.ride.model.schema.*
-import ru.marslab.ide.ride.model.mcp.*
+import ru.marslab.ide.ride.model.agent.AgentCapabilities
+import ru.marslab.ide.ride.model.agent.AgentRequest
+import ru.marslab.ide.ride.model.agent.AgentResponse
+import ru.marslab.ide.ride.model.agent.AgentSettings
+import ru.marslab.ide.ride.model.schema.ResponseFormat
+import ru.marslab.ide.ride.model.schema.ResponseSchema
+import ru.marslab.ide.ride.model.schema.TaskPlanData
+import ru.marslab.ide.ride.model.schema.TaskPlanSchema
 
 /**
  * Агент для создания плана задач
- * 
+ *
  * Получает запрос пользователя и создает структурированный план задач,
  * который затем будет выполнен ExecutorAgent.
  *
@@ -26,7 +27,7 @@ class PlannerAgent(
 
     private val logger = Logger.getInstance(PlannerAgent::class.java)
     private var responseSchema: ResponseSchema = TaskPlanSchema.createJsonSchema()
-    
+
     override val capabilities: AgentCapabilities = AgentCapabilities(
         stateful = false,
         streaming = false,
@@ -52,7 +53,7 @@ class PlannerAgent(
         return try {
             // Формируем системный промпт с инструкциями по формату
             val systemPromptWithSchema = PromptFormatter.formatPrompt(SYSTEM_PROMPT, responseSchema)
-            
+
             // Отправляем запрос в LLM
             val llmResponse = llmProvider.sendRequest(
                 systemPrompt = systemPromptWithSchema,
@@ -70,7 +71,7 @@ class PlannerAgent(
 
             // Парсим план из ответа
             val parsedPlan = responseSchema.parseResponse(llmResponse.content)
-            
+
             if (parsedPlan == null || parsedPlan !is TaskPlanData) {
                 logger.warn("Failed to parse task plan from response")
                 return AgentResponse.error(
@@ -87,7 +88,7 @@ class PlannerAgent(
             }
 
             val plan = parsedPlan.plan
-            
+
             // Проверяем, что план не пустой
             if (plan.isEmpty()) {
                 return AgentResponse.error(

@@ -1,7 +1,10 @@
 package ru.marslab.ide.ride.orchestrator
 
 import com.intellij.openapi.diagnostic.Logger
-import ru.marslab.ide.ride.model.orchestrator.*
+import ru.marslab.ide.ride.model.orchestrator.ExecutionPlan
+import ru.marslab.ide.ride.model.orchestrator.InvalidStateTransitionException
+import ru.marslab.ide.ride.model.orchestrator.PlanEvent
+import ru.marslab.ide.ride.model.orchestrator.PlanState
 
 /**
  * Машина состояний для управления жизненным циклом планов выполнения
@@ -66,12 +69,14 @@ class PlanStateMachine {
                     startedAt = kotlinx.datetime.Clock.System.now()
                 )
             }
+
             PlanState.COMPLETED -> {
                 plan.copy(
                     currentState = toState,
                     completedAt = kotlinx.datetime.Clock.System.now()
                 )
             }
+
             else -> {
                 plan.copy(currentState = toState)
             }
@@ -91,6 +96,7 @@ class PlanStateMachine {
             PlanState.CREATED -> {
                 toState == PlanState.ANALYZING && event is PlanEvent.Start
             }
+
             PlanState.ANALYZING -> {
                 when (toState) {
                     PlanState.IN_PROGRESS -> event is PlanEvent.Start
@@ -100,6 +106,7 @@ class PlanStateMachine {
                     else -> false
                 }
             }
+
             PlanState.IN_PROGRESS -> {
                 when (toState) {
                     PlanState.PAUSED -> event is PlanEvent.Pause
@@ -110,6 +117,7 @@ class PlanStateMachine {
                     else -> false
                 }
             }
+
             PlanState.PAUSED -> {
                 when (toState) {
                     PlanState.RESUMED -> event is PlanEvent.Resume
@@ -117,9 +125,11 @@ class PlanStateMachine {
                     else -> false
                 }
             }
+
             PlanState.RESUMED -> {
                 toState == PlanState.IN_PROGRESS && event is PlanEvent.Resume
             }
+
             PlanState.REQUIRES_INPUT -> {
                 when (toState) {
                     PlanState.IN_PROGRESS -> event is PlanEvent.UserInputReceived
@@ -127,10 +137,12 @@ class PlanStateMachine {
                     else -> false
                 }
             }
+
             PlanState.COMPLETED -> {
                 // Завершенное состояние не может быть изменено
                 false
             }
+
             PlanState.FAILED -> {
                 // Можно только повторить попытку или отменить
                 when (toState) {
@@ -139,10 +151,12 @@ class PlanStateMachine {
                     else -> false
                 }
             }
+
             PlanState.CANCELLED -> {
                 // Отмененное состояние не может быть изменено
                 false
             }
+
             else -> false
         }
     }
@@ -158,6 +172,7 @@ class PlanStateMachine {
                     else -> currentState
                 }
             }
+
             PlanState.ANALYZING -> {
                 when (event) {
                     is PlanEvent.Start -> {
@@ -167,11 +182,13 @@ class PlanStateMachine {
                             PlanState.IN_PROGRESS
                         }
                     }
+
                     is PlanEvent.Error -> PlanState.FAILED
                     is PlanEvent.Cancel -> PlanState.CANCELLED
                     else -> currentState
                 }
             }
+
             PlanState.IN_PROGRESS -> {
                 when (event) {
                     is PlanEvent.Pause -> PlanState.PAUSED
@@ -182,6 +199,7 @@ class PlanStateMachine {
                     else -> currentState
                 }
             }
+
             PlanState.PAUSED -> {
                 when (event) {
                     is PlanEvent.Resume -> PlanState.RESUMED
@@ -189,12 +207,14 @@ class PlanStateMachine {
                     else -> currentState
                 }
             }
+
             PlanState.RESUMED -> {
                 when (event) {
                     is PlanEvent.Resume -> PlanState.IN_PROGRESS
                     else -> currentState
                 }
             }
+
             PlanState.REQUIRES_INPUT -> {
                 when (event) {
                     is PlanEvent.UserInputReceived -> PlanState.IN_PROGRESS
@@ -202,6 +222,7 @@ class PlanStateMachine {
                     else -> currentState
                 }
             }
+
             PlanState.FAILED -> {
                 when (event) {
                     is PlanEvent.Start -> PlanState.ANALYZING
@@ -209,6 +230,7 @@ class PlanStateMachine {
                     else -> currentState
                 }
             }
+
             PlanState.COMPLETED, PlanState.CANCELLED -> currentState
         }
     }
@@ -249,8 +271,21 @@ class PlanStateMachine {
     fun getPossibleTransitions(fromState: PlanState): List<PlanState> {
         return when (fromState) {
             PlanState.CREATED -> listOf(PlanState.ANALYZING)
-            PlanState.ANALYZING -> listOf(PlanState.IN_PROGRESS, PlanState.REQUIRES_INPUT, PlanState.FAILED, PlanState.CANCELLED)
-            PlanState.IN_PROGRESS -> listOf(PlanState.PAUSED, PlanState.REQUIRES_INPUT, PlanState.COMPLETED, PlanState.FAILED, PlanState.CANCELLED)
+            PlanState.ANALYZING -> listOf(
+                PlanState.IN_PROGRESS,
+                PlanState.REQUIRES_INPUT,
+                PlanState.FAILED,
+                PlanState.CANCELLED
+            )
+
+            PlanState.IN_PROGRESS -> listOf(
+                PlanState.PAUSED,
+                PlanState.REQUIRES_INPUT,
+                PlanState.COMPLETED,
+                PlanState.FAILED,
+                PlanState.CANCELLED
+            )
+
             PlanState.PAUSED -> listOf(PlanState.RESUMED, PlanState.CANCELLED)
             PlanState.RESUMED -> listOf(PlanState.IN_PROGRESS)
             PlanState.REQUIRES_INPUT -> listOf(PlanState.IN_PROGRESS, PlanState.CANCELLED)

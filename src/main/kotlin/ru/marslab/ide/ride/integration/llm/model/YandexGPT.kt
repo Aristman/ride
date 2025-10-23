@@ -61,7 +61,7 @@ data class YandexGPTResponse(
         @SerialName("modelVersion")
         val modelVersion: String
     )
-    
+
     @Serializable
     data class Alternative(
         @SerialName("message")
@@ -69,7 +69,7 @@ data class YandexGPTResponse(
         @SerialName("status")
         val status: String
     )
-    
+
     @Serializable
     data class Usage(
         @SerialName("inputTextTokens")

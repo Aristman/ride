@@ -1,3 +1,5 @@
+import java.io.File
+
 plugins {
     id("java")
     id("org.jetbrains.kotlin.jvm") version "2.1.0"
@@ -19,7 +21,7 @@ repositories {
 // Read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin.html
 dependencies {
     intellijPlatform {
-        create("IC", "2024.3")
+        create("IC", "2024.2.5")
         testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Platform)
 
         // Добавляем JetBrains Runtime с JCEF поддержкой
@@ -55,14 +57,13 @@ dependencies {
 intellijPlatform {
     pluginConfiguration {
         ideaVersion {
-            sinceBuild = "243"
+            sinceBuild = "242"
             untilBuild = provider { null }  // Открытая совместимость с будущими версиями
         }
 
         changeNotes = """
             Initial version
-            - Поддержка IntelliJ IDEA 2024.3+
-            - Поддержка Android Studio 2024.3+
+            - Поддержка Android Studio 2024.2+
         """.trimIndent()
     }
 }
@@ -77,10 +78,28 @@ tasks {
     // Add system properties to workaround Gradle JVM compatibility issue
     runIde {
         jvmArgs("-Didea.ignore.disabled.plugins=true",
+                "-Didea.plugins.disabled.plugins=com.intellij.gradle,org.jetbrains.plugins.gradle",
                 "-Dgradle-jvm-compatibility.disabled=true",
                 "-Dcom.intellij.gradle.jvm.support.skip=true",
+                // Включаем JCEF без sandbox (Linux): устраняет Embedded Browser is suspended
+                "-Dide.browser.jcef.sandbox.enable=false",
+                // Необязательный флаг: отключить GPU для стабильности (иногда помогает на Linux)
+                "-Dide.browser.jcef.gpu.disable=true",
                 "-Dfile.encoding=UTF-8",
                 "-Dconsole.encoding=UTF-8")
+
+        // Гарантированно отключаем bundled Gradle plugin через sandbox-конфиг
+        doFirst {
+            val configDir = File(buildDir, "idea-sandbox/config").apply { mkdirs() }
+            val optionsDir = File(configDir, "options").apply { mkdirs() }
+            // Перечень плагинов для отключения, по одному в строке (возможные ID)
+            val entries = listOf(
+                "com.intellij.gradle",
+                "org.jetbrains.plugins.gradle"
+            )
+            File(configDir, "disabled_plugins.txt").writeText(entries.joinToString("\n", postfix = "\n"))
+            File(optionsDir, "disabled_plugins.txt").writeText(entries.joinToString("\n", postfix = "\n"))
+        }
     }
 }
 

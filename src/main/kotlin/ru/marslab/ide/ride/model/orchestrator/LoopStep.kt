@@ -8,7 +8,7 @@ data class LoopStep(
      * Базовый шаг для выполнения
      */
     val step: PlanStep,
-    
+
     /**
      * Конфигурация цикла
      */
@@ -23,27 +23,27 @@ data class LoopConfig(
      * Тип цикла
      */
     val type: LoopType,
-    
+
     /**
      * Максимальное количество итераций
      */
     val maxIterations: Int = 10,
-    
+
     /**
      * Условие продолжения цикла
      */
     val continueCondition: ((ExecutionContext, Any?) -> Boolean)? = null,
-    
+
     /**
      * Условие выхода из цикла
      */
     val breakCondition: ((ExecutionContext, Any?) -> Boolean)? = null,
-    
+
     /**
      * Коллекция для итерации (для FOR_EACH)
      */
     val collection: List<Any>? = null,
-    
+
     /**
      * Переменная итератора
      */
@@ -61,7 +61,7 @@ data class LoopConfig(
             maxIterations = maxIterations,
             continueCondition = condition
         )
-        
+
         /**
          * Цикл for-each по коллекции
          */
@@ -74,7 +74,7 @@ data class LoopConfig(
             collection = collection,
             iteratorVariable = iteratorVariable
         )
-        
+
         /**
          * Цикл с фиксированным количеством итераций
          */
@@ -82,14 +82,14 @@ data class LoopConfig(
             type = LoopType.REPEAT,
             maxIterations = count
         )
-        
+
         /**
          * Цикл до успешного выполнения
          */
         fun untilSuccess(maxAttempts: Int = 5) = LoopConfig(
             type = LoopType.UNTIL_SUCCESS,
             maxIterations = maxAttempts,
-            breakCondition = { _, result -> 
+            breakCondition = { _, result ->
                 result != null && result.toString().contains("success", ignoreCase = true)
             }
         )
@@ -104,17 +104,17 @@ enum class LoopType {
      * Цикл while (выполняется пока условие истинно)
      */
     WHILE,
-    
+
     /**
      * Цикл for-each (итерация по коллекции)
      */
     FOR_EACH,
-    
+
     /**
      * Цикл repeat (фиксированное количество итераций)
      */
     REPEAT,
-    
+
     /**
      * Цикл до успешного выполнения
      */
@@ -129,17 +129,17 @@ data class LoopResult(
      * Количество выполненных итераций
      */
     val iterations: Int,
-    
+
     /**
      * Результаты каждой итерации
      */
     val iterationResults: List<Any?>,
-    
+
     /**
      * Причина завершения цикла
      */
     val terminationReason: LoopTerminationReason,
-    
+
     /**
      * Успешно ли завершился цикл
      */
@@ -154,27 +154,27 @@ enum class LoopTerminationReason {
      * Достигнуто максимальное количество итераций
      */
     MAX_ITERATIONS_REACHED,
-    
+
     /**
      * Условие продолжения стало ложным
      */
     CONDITION_FALSE,
-    
+
     /**
      * Условие выхода стало истинным
      */
     BREAK_CONDITION_MET,
-    
+
     /**
      * Коллекция полностью обработана
      */
     COLLECTION_EXHAUSTED,
-    
+
     /**
      * Достигнут успешный результат
      */
     SUCCESS_ACHIEVED,
-    
+
     /**
      * Ошибка выполнения
      */

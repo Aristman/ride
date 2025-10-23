@@ -1,18 +1,19 @@
 ﻿package ru.marslab.ide.ride.ui
 
+import com.intellij.ui.SimpleListCellRenderer
 import com.intellij.ui.components.JBList
 import com.intellij.ui.components.JBScrollPane
-import com.intellij.ui.SimpleListCellRenderer
 import ru.marslab.ide.ride.model.chat.ChatSession
 import ru.marslab.ide.ride.service.ChatService
+import java.awt.BorderLayout
 import javax.swing.JPanel
 import javax.swing.ListSelectionModel
-import java.awt.BorderLayout
 
 /**
  * Панель последних сессий (минимальный вариант).
  */
-class RecentSessionsPanel(private val chatService: ChatService, private val onSelect: (ChatSession) -> Unit) : JPanel(BorderLayout()) {
+class RecentSessionsPanel(private val chatService: ChatService, private val onSelect: (ChatSession) -> Unit) :
+    JPanel(BorderLayout()) {
     private val listModel = javax.swing.DefaultListModel<ChatSession>()
     private val list = JBList(listModel)
 

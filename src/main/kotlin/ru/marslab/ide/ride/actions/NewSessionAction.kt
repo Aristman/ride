@@ -2,10 +2,9 @@ package ru.marslab.ide.ride.actions
 
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
-import com.intellij.openapi.project.Project
-import ru.marslab.ide.ride.ui.ChatPanel
-import ru.marslab.ide.ride.service.ChatService
 import com.intellij.openapi.components.service
+import ru.marslab.ide.ride.service.ChatService
+import ru.marslab.ide.ride.ui.ChatPanel
 
 /**
  * Создание новой сессии чата.

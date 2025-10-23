@@ -7,7 +7,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Реестр Tool Agents для регистрации и управления агентами
- * 
+ *
  * Предоставляет централизованное управление всеми Tool Agents в системе:
  * - Регистрация и удаление агентов
  * - Поиск агентов по типу и capabilities
@@ -16,10 +16,10 @@ import java.util.concurrent.ConcurrentHashMap
 class ToolAgentRegistry {
     private val logger = Logger.getInstance(ToolAgentRegistry::class.java)
     private val agents = ConcurrentHashMap<AgentType, ToolAgent>()
-    
+
     /**
      * Регистрирует агента в реестре
-     * 
+     *
      * @param agent Агент для регистрации
      * @throws IllegalStateException если агент с таким типом уже зарегистрирован
      */
@@ -30,10 +30,10 @@ class ToolAgentRegistry {
         agents[agent.agentType] = agent
         logger.info("Registered agent: ${agent.agentType} with capabilities: ${agent.toolCapabilities}")
     }
-    
+
     /**
      * Удаляет агента из реестра
-     * 
+     *
      * @param agentType Тип агента для удаления
      * @return true, если агент был удален
      */
@@ -46,30 +46,30 @@ class ToolAgentRegistry {
         }
         return false
     }
-    
+
     /**
      * Получает агента по типу
-     * 
+     *
      * @param agentType Тип агента
      * @return Агент или null, если не найден
      */
     fun get(agentType: AgentType): ToolAgent? {
         return agents[agentType]
     }
-    
+
     /**
      * Находит агентов по capability
-     * 
+     *
      * @param capability Требуемая возможность
      * @return Список агентов с данной возможностью
      */
     fun findByCapability(capability: String): List<ToolAgent> {
         return agents.values.filter { it.toolCapabilities.contains(capability) }
     }
-    
+
     /**
      * Находит агента, способного обработать шаг
-     * 
+     *
      * @param step Шаг для обработки
      * @return Агент или null, если подходящий не найден
      */
@@ -79,50 +79,50 @@ class ToolAgentRegistry {
         if (agentByType != null && agentByType.canHandle(step)) {
             return agentByType
         }
-        
+
         // Если не найден, ищем среди всех агентов
         return agents.values.firstOrNull { it.canHandle(step) }
     }
-    
+
     /**
      * Получает агента для выполнения шага (алиас для findForStep)
-     * 
+     *
      * @param step Шаг для обработки
      * @return Агент или null, если подходящий не найден
      */
     fun getAgentForStep(step: ToolPlanStep): ToolAgent? {
         return findForStep(step)
     }
-    
+
     /**
      * Возвращает список всех зарегистрированных агентов
-     * 
+     *
      * @return Список агентов
      */
     fun listAll(): List<ToolAgent> {
         return agents.values.toList()
     }
-    
+
     /**
      * Проверяет, доступен ли агент данного типа
-     * 
+     *
      * @param agentType Тип агента
      * @return true, если агент зарегистрирован
      */
     fun isAvailable(agentType: AgentType): Boolean {
         return agents.containsKey(agentType)
     }
-    
+
     /**
      * Возвращает количество зарегистрированных агентов
      */
     fun count(): Int {
         return agents.size
     }
-    
+
     /**
      * Валидирует, что все требуемые типы агентов доступны
-     * 
+     *
      * @param requiredTypes Требуемые типы агентов
      * @return Результат валидации
      */
@@ -134,7 +134,7 @@ class ToolAgentRegistry {
             AvailabilityResult(false, missing)
         }
     }
-    
+
     /**
      * Очищает реестр и освобождает ресурсы всех агентов
      */
@@ -143,14 +143,14 @@ class ToolAgentRegistry {
         agents.values.forEach { it.dispose() }
         agents.clear()
     }
-    
+
     /**
      * Возвращает статистику по агентам
      */
     fun getStatistics(): RegistryStatistics {
         val capabilitiesCount = agents.values.flatMap { it.toolCapabilities }.distinct().size
         val agentsByType = agents.keys.groupBy { it }.mapValues { it.value.size }
-        
+
         return RegistryStatistics(
             totalAgents = agents.size,
             totalCapabilities = capabilitiesCount,

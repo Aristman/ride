@@ -22,7 +22,7 @@ data class HFChatCompletionsRequest(
 @Serializable
 data class HFChatCompletionsResponse(
     val id: String? = null,
-    val object_ : String? = null,
+    val object_: String? = null,
     val created: Long? = null,
     val model: String? = null,
     @SerialName("system_fingerprint") val systemFingerprint: String? = null,

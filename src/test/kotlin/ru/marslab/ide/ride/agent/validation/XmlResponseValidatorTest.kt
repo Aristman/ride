@@ -1,14 +1,12 @@
 package ru.marslab.ide.ride.agent.validation
 
+import ru.marslab.ide.ride.model.schema.JsonResponseSchema
+import ru.marslab.ide.ride.model.schema.ParsedResponse
+import ru.marslab.ide.ride.model.schema.XmlResponseSchema
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
-import ru.marslab.ide.ride.model.schema.JsonResponseSchema
-import ru.marslab.ide.ride.model.schema.ParsedResponse
-import ru.marslab.ide.ride.model.schema.ResponseFormat
-import ru.marslab.ide.ride.model.schema.TextResponseSchema
-import ru.marslab.ide.ride.model.schema.XmlResponseSchema
 
 class XmlResponseValidatorTest {
 
@@ -16,11 +14,13 @@ class XmlResponseValidatorTest {
 
     @Test
     fun `valid when root tag matches`() {
-        val schema = XmlResponseSchema.create("""
+        val schema = XmlResponseSchema.create(
+            """
             <response>
                 <answer>string</answer>
             </response>
-        """.trimIndent())
+        """.trimIndent()
+        )
         val parsed = ParsedResponse.XmlResponse(
             rawContent = "",
             xmlContent = "<response><answer>ok</answer></response>"
@@ -76,13 +76,15 @@ class XmlResponseValidatorTest {
 
     @Test
     fun `fails when root tag mismatched with complex schema`() {
-        val schema = XmlResponseSchema.create("""
+        val schema = XmlResponseSchema.create(
+            """
             <interview>
                 <candidate>
                     <name>string</name>
                 </candidate>
             </interview>
-        """.trimIndent())
+        """.trimIndent()
+        )
         val parsed = ParsedResponse.XmlResponse(
             rawContent = "",
             xmlContent = "<analysis><result>data</result></analysis>"
@@ -105,7 +107,8 @@ class XmlResponseValidatorTest {
 
     @Test
     fun `valid when root tag matches with nested schema`() {
-        val schema = XmlResponseSchema.create("""
+        val schema = XmlResponseSchema.create(
+            """
             <root>
                 <level1>
                     <level2>
@@ -113,7 +116,8 @@ class XmlResponseValidatorTest {
                     </level2>
                 </level1>
             </root>
-        """.trimIndent())
+        """.trimIndent()
+        )
         val parsed = ParsedResponse.XmlResponse(
             rawContent = "",
             xmlContent = "<root><level1><level2><data>actual content</data></level2></level1></root>"
@@ -270,7 +274,8 @@ class XmlResponseValidatorTest {
 
     @Test
     fun `valid when XML has nested structures`() {
-        val schema = XmlResponseSchema.create("""
+        val schema = XmlResponseSchema.create(
+            """
             <interview>
                 <candidate>
                     <name>string</name>
@@ -279,7 +284,8 @@ class XmlResponseValidatorTest {
                     </skills>
                 </candidate>
             </interview>
-        """.trimIndent())
+        """.trimIndent()
+        )
         val parsed = ParsedResponse.XmlResponse(
             rawContent = "",
             xmlContent = """
@@ -332,7 +338,8 @@ class XmlResponseValidatorTest {
 
     @Test
     fun `extracts root tag correctly from schema with complex structure`() {
-        val schema = XmlResponseSchema.create("""
+        val schema = XmlResponseSchema.create(
+            """
             <!-- Comment before root -->
             <?xml version="1.0" encoding="UTF-8"?>
             <complexResponse xmlns:ns="http://example.com" version="2.0">
@@ -343,7 +350,8 @@ class XmlResponseValidatorTest {
                     <content>string</content>
                 </body>
             </complexResponse>
-        """.trimIndent())
+        """.trimIndent()
+        )
         val parsed = ParsedResponse.XmlResponse(
             rawContent = "",
             xmlContent = "<complexResponse><data>test</data></complexResponse>"

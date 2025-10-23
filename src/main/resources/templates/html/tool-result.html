@@ -1,24 +1,24 @@
 <div class="tool-result-block">
-  <div class="tool-result-header">
-    <div class="tool-info">
-      <span class="tool-icon">🔧</span>
-      <span class="tool-name">{{toolName}}</span>
-      {{#operationType}}
-      <span class="operation-type">{{operationType}}</span>
-      {{/operationType}}
+    <div class="tool-result-header">
+        <div class="tool-info">
+            <span class="tool-icon">🔧</span>
+            <span class="tool-name">{{toolName}}</span>
+            {{#operationType}}
+            <span class="operation-type">{{operationType}}</span>
+            {{/operationType}}
+        </div>
+        <div class="tool-status">
+            {{#success}}
+            <span class="status-success">✅ Успешно</span>
+            {{/success}}
+            {{^success}}
+            <span class="status-error">❌ Ошибка</span>
+            {{/success}}
+        </div>
     </div>
-    <div class="tool-status">
-      {{#success}}
-      <span class="status-success">✅ Успешно</span>
-      {{/success}}
-      {{^success}}
-      <span class="status-error">❌ Ошибка</span>
-      {{/success}}
+    {{#content}}
+    <div class="tool-result-content">
+        <div class="result-value">{{content}}</div>
     </div>
-  </div>
-  {{#content}}
-  <div class="tool-result-content">
-    <div class="result-value">{{content}}</div>
-  </div>
-  {{/content}}
+    {{/content}}
 </div>

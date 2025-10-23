@@ -15,13 +15,13 @@ interface TransactionalStep {
 
 /**
  * Executor для выполнения шагов с поддержкой транзакционности и откатов
- * 
+ *
  * При ошибке выполнения автоматически откатывает все выполненные шаги
  */
 class TransactionalExecutor {
     private val logger = Logger.getInstance(TransactionalExecutor::class.java)
     private val executedSteps = mutableListOf<Pair<PlanStep, TransactionalStep>>()
-    
+
     /**
      * Выполняет шаги с поддержкой отката при ошибке
      */
@@ -31,43 +31,43 @@ class TransactionalExecutor {
         stepFactory: (PlanStep) -> TransactionalStep
     ): ExecutionResult {
         logger.info("Starting transactional execution of ${steps.size} steps")
-        
+
         try {
             for (step in steps) {
                 logger.info("Executing transactional step: ${step.id}")
-                
+
                 val transactionalStep = stepFactory(step)
                 val result = transactionalStep.execute(context)
-                
+
                 if (!result.success) {
                     logger.warn("Step ${step.id} failed: ${result.error}")
                     // Откатываем все выполненные шаги
                     rollbackAll(context)
                     return ExecutionResult.error(result.error ?: "Step execution failed")
                 }
-                
+
                 executedSteps.add(step to transactionalStep)
                 logger.info("Step ${step.id} completed successfully")
             }
-            
+
             logger.info("All ${steps.size} steps completed successfully")
             executedSteps.clear() // Очищаем после успешного выполнения
-            
+
             return ExecutionResult.success()
-            
+
         } catch (e: Exception) {
             logger.error("Exception during transactional execution", e)
             rollbackAll(context)
             return ExecutionResult.error(e.message ?: "Unknown error")
         }
     }
-    
+
     /**
      * Откатывает все выполненные шаги в обратном порядке
      */
     private suspend fun rollbackAll(context: ExecutionContext) {
         logger.warn("Rolling back ${executedSteps.size} steps")
-        
+
         // Откатываем в обратном порядке
         executedSteps.reversed().forEach { (step, transactionalStep) ->
             try {
@@ -79,11 +79,11 @@ class TransactionalExecutor {
                 // Продолжаем откат остальных шагов даже при ошибке
             }
         }
-        
+
         executedSteps.clear()
         logger.info("Rollback completed")
     }
-    
+
     /**
      * Очищает историю выполненных шагов
      */
@@ -97,36 +97,36 @@ class TransactionalExecutor {
  */
 abstract class BaseTransactionalStep : TransactionalStep {
     protected val logger = Logger.getInstance(this::class.java)
-    
+
     /**
      * Состояние до выполнения (для отката)
      */
     protected var previousState: Any? = null
-    
+
     override suspend fun execute(context: ExecutionContext): StepResult {
         // Сохраняем состояние перед выполнением
         previousState = captureState(context)
-        
+
         // Выполняем шаг
         return doExecute(context)
     }
-    
+
     override suspend fun rollback(context: ExecutionContext) {
         if (previousState != null) {
             restoreState(context, previousState!!)
         }
     }
-    
+
     /**
      * Захватывает текущее состояние для возможного отката
      */
     protected abstract fun captureState(context: ExecutionContext): Any?
-    
+
     /**
      * Выполняет основную логику шага
      */
     protected abstract suspend fun doExecute(context: ExecutionContext): StepResult
-    
+
     /**
      * Восстанавливает состояние при откате
      */

@@ -9,7 +9,7 @@ import kotlinx.serialization.Serializable
 enum class MCPServerType {
     /** Подключение через stdio (запуск процесса) */
     STDIO,
-    
+
     /** Подключение через HTTP */
     HTTP
 }
@@ -44,7 +44,7 @@ data class MCPServerConfig(
         if (name.isBlank()) {
             return ValidationResult.Error("Server name cannot be empty")
         }
-        
+
         return when (type) {
             MCPServerType.STDIO -> {
                 if (command.isNullOrBlank()) {
@@ -53,6 +53,7 @@ data class MCPServerConfig(
                     ValidationResult.Valid
                 }
             }
+
             MCPServerType.HTTP -> {
                 if (url.isNullOrBlank()) {
                     ValidationResult.Error("URL is required for HTTP type")
@@ -64,7 +65,7 @@ data class MCPServerConfig(
             }
         }
     }
-    
+
     private fun isValidUrl(url: String): Boolean {
         return try {
             val uri = java.net.URI(url)
@@ -73,14 +74,14 @@ data class MCPServerConfig(
             false
         }
     }
-    
+
     /**
      * Результат валидации
      */
     sealed class ValidationResult {
         object Valid : ValidationResult()
         data class Error(val message: String) : ValidationResult()
-        
+
         fun isValid(): Boolean = this is Valid
         fun getErrorMessage(): String? = (this as? Error)?.message
     }

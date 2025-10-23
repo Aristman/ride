@@ -57,7 +57,8 @@ abstract class BaseHtmlTemplate : HtmlTemplate {
 
             // Обработка отрицательных условных блоков
             // {{^condition}}...{{/condition}} - показывается если condition null/empty/false
-            val negativeConditionalRegex = Regex("""\{\{(\^)\n?(\w+)\}\}(.*?)\{\{/(\2)\}\}""", setOf(RegexOption.DOT_MATCHES_ALL))
+            val negativeConditionalRegex =
+                Regex("""\{\{(\^)\n?(\w+)\}\}(.*?)\{\{/(\2)\}\}""", setOf(RegexOption.DOT_MATCHES_ALL))
             result = negativeConditionalRegex.replace(result) { match ->
                 val condition = match.groupValues[2]
                 val content = match.groupValues[3]
@@ -68,10 +69,12 @@ abstract class BaseHtmlTemplate : HtmlTemplate {
                         hasChanges = true
                         content
                     }
+
                     value is Collection<*> && value.isEmpty() -> {
                         hasChanges = true
                         content
                     }
+
                     else -> ""
                 }
             }

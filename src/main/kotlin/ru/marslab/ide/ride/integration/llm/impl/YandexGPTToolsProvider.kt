@@ -4,12 +4,7 @@ import com.intellij.openapi.diagnostic.Logger
 import kotlinx.coroutines.delay
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import ru.marslab.ide.ride.model.agent.*
-import ru.marslab.ide.ride.model.chat.*
 import ru.marslab.ide.ride.model.llm.*
-import ru.marslab.ide.ride.model.task.*
-import ru.marslab.ide.ride.model.schema.*
-import ru.marslab.ide.ride.model.mcp.*
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -22,19 +17,19 @@ import java.time.Duration
 class YandexGPTToolsProvider(
     private val config: YandexGPTConfig
 ) {
-    
+
     private val logger = Logger.getInstance(YandexGPTToolsProvider::class.java)
-    
+
     private val httpClient = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(10))
         .build()
-    
+
     private val json = Json {
         ignoreUnknownKeys = true
         prettyPrint = false
         isLenient = true
     }
-    
+
     /**
      * Отправить запрос с tools
      */
@@ -66,7 +61,7 @@ class YandexGPTToolsProvider(
 
         return sendWithRetry(request)
     }
-    
+
     /**
      * Отправить запрос с retry логикой
      */
@@ -76,7 +71,7 @@ class YandexGPTToolsProvider(
     ): YandexGPTToolsResponse {
         var lastException: Exception? = null
         var currentDelay = 1000L
-        
+
         repeat(maxRetries) { attempt ->
             try {
                 val requestBody = json.encodeToString(request)
@@ -84,7 +79,7 @@ class YandexGPTToolsProvider(
                 println("📤 YandexGPT Request JSON:")
                 println(requestBody)
                 logger.debug("Request body: $requestBody")
-                
+
                 val httpRequest = HttpRequest.newBuilder()
                     .uri(URI.create(API_ENDPOINT))
                     .timeout(Duration.ofSeconds(config.timeout / 1000))
@@ -92,9 +87,9 @@ class YandexGPTToolsProvider(
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                     .build()
-                
+
                 val httpResponse = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString())
-                
+
                 return when (httpResponse.statusCode()) {
                     200 -> {
                         val responseBody = httpResponse.body()
@@ -103,9 +98,11 @@ class YandexGPTToolsProvider(
                         logger.debug("Response body: $responseBody")
                         json.decodeFromString<YandexGPTToolsResponse>(responseBody)
                     }
+
                     401 -> {
                         throw Exception("Invalid API key")
                     }
+
                     429 -> {
                         if (attempt < maxRetries - 1) {
                             logger.warn("Rate limit exceeded, retrying after delay...")
@@ -116,12 +113,13 @@ class YandexGPTToolsProvider(
                             throw Exception("Rate limit exceeded")
                         }
                     }
+
                     else -> {
                         logger.error("Yandex GPT API error: ${httpResponse.statusCode()}, body: ${httpResponse.body()}")
                         throw Exception("API error: ${httpResponse.statusCode()}")
                     }
                 }
-                
+
             } catch (e: Exception) {
                 lastException = e
                 if (attempt < maxRetries - 1 && shouldRetry(e)) {
@@ -133,10 +131,10 @@ class YandexGPTToolsProvider(
                 }
             }
         }
-        
+
         throw lastException ?: Exception("Unknown error")
     }
-    
+
     private fun shouldRetry(exception: Exception): Boolean {
         return when (exception) {
             is java.net.http.HttpTimeoutException -> true
@@ -145,7 +143,7 @@ class YandexGPTToolsProvider(
             else -> exception.message?.contains("Rate limit") == true
         }
     }
-    
+
     companion object {
         private const val API_ENDPOINT = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
     }

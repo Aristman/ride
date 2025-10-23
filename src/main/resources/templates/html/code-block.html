@@ -1,19 +1,18 @@
 <div class="code-block-container">
-  <div class="code-block-header">
-    <div class="code-block-info">
-      <span class="code-language">{{language}}</span>
-      {{#fileName}}
-      <span class="code-filename">{{fileName}}</span>
-      {{/fileName}}
+    <div class="code-block-header">
+        <div class="code-block-info">
+            <span class="code-language">{{language}}</span>
+            {{#fileName}}
+            <span class="code-filename">{{fileName}}</span>
+            {{/fileName}}
+        </div>
+        <div class="code-block-actions">
+            <button class="code-copy-btn" onclick="copyCodeBlock(this)">
+                <span class="copy-icon">📋</span>
+            </button>
+        </div>
     </div>
-    <div class="code-block-actions">
-      <button class="code-copy-btn" onclick="copyCodeBlock(this)" title="Copy code">
-        <span class="copy-icon">📋</span>
-        <span class="copy-text">Copy</span>
-      </button>
+    <div class="code-block-body">
+        <pre class="code-content"><code class="language-{{language}}">{{content}}</code></pre>
     </div>
-  </div>
-  <div class="code-block-body">
-    <pre class="code-content"><code class="language-{{language}}">{{content}}</code></pre>
-  </div>
 </div>

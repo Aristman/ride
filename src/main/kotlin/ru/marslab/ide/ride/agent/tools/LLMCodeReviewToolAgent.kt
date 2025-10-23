@@ -5,7 +5,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import ru.marslab.ide.ride.agent.BaseToolAgent
 import ru.marslab.ide.ride.integration.llm.LLMProvider
-import ru.marslab.ide.ride.model.agent.AgentRequest
 import ru.marslab.ide.ride.model.llm.LLMParameters
 import ru.marslab.ide.ride.model.orchestrator.AgentType
 import ru.marslab.ide.ride.model.orchestrator.ExecutionContext
@@ -108,7 +107,9 @@ class LLMCodeReviewToolAgent(
 
     private fun safeRead(file: File, maxChars: Int): String = try {
         file.inputStream().bufferedReader().use { it.readText() }.take(maxChars)
-    } catch (_: Exception) { "" }
+    } catch (_: Exception) {
+        ""
+    }
 
     private fun buildPrompt(language: String, path: String, code: String, maxFindings: Int): String = buildString {
         appendLine("Analyze the following ${'$'}language code and return potential bugs and code smells.")
@@ -129,15 +130,16 @@ class LLMCodeReviewToolAgent(
         return try {
             val findingsRaw = Regex("""\{\s*\"findings\"\s*:\s*\[(.*)]\s*}\""", RegexOption.DOT_MATCHES_ALL)
                 .find(jsonBlock)?.groupValues?.getOrNull(1) ?: run {
-                    // fallback без завершающей кавычки (если провайдер вернул чистый JSON)
-                    Regex("""\{\s*\"findings\"\s*:\s*\[(.*)]\s*}""", RegexOption.DOT_MATCHES_ALL)
-                        .find(jsonBlock)?.groupValues?.getOrNull(1) ?: return emptyList()
-                }
+                // fallback без завершающей кавычки (если провайдер вернул чистый JSON)
+                Regex("""\{\s*\"findings\"\s*:\s*\[(.*)]\s*}""", RegexOption.DOT_MATCHES_ALL)
+                    .find(jsonBlock)?.groupValues?.getOrNull(1) ?: return emptyList()
+            }
 
             val objs = splitObjects(findingsRaw)
             objs.mapNotNull { obj ->
                 val map = mutableMapOf<String, Any>("file" to path, "source" to "llm")
-                map["message"] = Regex(""""message"\s*:\s*"(.*?)"""").find(obj)?.groupValues?.getOrNull(1) ?: return@mapNotNull null
+                map["message"] =
+                    Regex(""""message"\s*:\s*"(.*?)"""").find(obj)?.groupValues?.getOrNull(1) ?: return@mapNotNull null
                 map["severity"] = Regex(""""severity"\s*:\s*"(.*?)"""").find(obj)?.groupValues?.getOrNull(1) ?: "medium"
                 map["rule"] = Regex(""""rule"\s*:\s*"(.*?)"""").find(obj)?.groupValues?.getOrNull(1) ?: "llm_suggestion"
                 val line = Regex(""""line"\s*:\s*(\d+|null)""").find(obj)?.groupValues?.getOrNull(1)
@@ -145,7 +147,9 @@ class LLMCodeReviewToolAgent(
                 map["suggestion"] = Regex(""""suggestion"\s*:\s*"(.*?)"""").find(obj)?.groupValues?.getOrNull(1) ?: ""
                 map
             }
-        } catch (_: Exception) { emptyList() }
+        } catch (_: Exception) {
+            emptyList()
+        }
     }
 
     private fun extractJson(text: String): String? {

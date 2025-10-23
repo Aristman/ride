@@ -3,21 +3,15 @@
 import com.intellij.openapi.diagnostic.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import ru.marslab.ide.ride.formatter.ToolResultFormatter
 import ru.marslab.ide.ride.integration.llm.LLMProvider
 import ru.marslab.ide.ride.integration.llm.impl.YandexGPTConfig
 import ru.marslab.ide.ride.integration.llm.impl.YandexGPTToolsProvider
-import ru.marslab.ide.ride.mcp.MCPClient
-import ru.marslab.ide.ride.mcp.MCPServerManager
-import ru.marslab.ide.ride.mcp.MCPToolExecutor
-import ru.marslab.ide.ride.mcp.MCPToolsRegistry
-import ru.marslab.ide.ride.mcp.PathNormalizer
-import ru.marslab.ide.ride.model.agent.*
-import ru.marslab.ide.ride.model.chat.*
+import ru.marslab.ide.ride.mcp.*
+import ru.marslab.ide.ride.model.agent.AgentResponse
+import ru.marslab.ide.ride.model.chat.ConversationMessage
+import ru.marslab.ide.ride.model.chat.ConversationRole
 import ru.marslab.ide.ride.model.llm.*
-import ru.marslab.ide.ride.model.task.*
-import ru.marslab.ide.ride.model.schema.*
-import ru.marslab.ide.ride.model.mcp.*
-import ru.marslab.ide.ride.formatter.ToolResultFormatter
 
 /**
  * MCP FileSystem Agent - специализированный агент для работы с файловой системой через MCP Tools
@@ -33,16 +27,16 @@ class MCPFileSystemAgent(
     private val toolsProvider = YandexGPTToolsProvider(config)
     private val serverManager = MCPServerManager.getInstance()
     private val toolResultFormatter = ToolResultFormatter()
-    
+
     private val mcpClient by lazy {
         MCPClient(serverManager.getServerUrl())
     }
-    
+
     private val toolExecutor by lazy {
         val pathNormalizer = llmProvider?.let { PathNormalizer(it) }
         MCPToolExecutor(mcpClient, pathNormalizer ?: PathNormalizer(createFallbackProvider()))
     }
-    
+
     companion object {
         // Базовый системный промпт для работы с tools
         private const val DEFAULT_SYSTEM_PROMPT = """
@@ -102,7 +96,8 @@ class MCPFileSystemAgent(
                     parameters: LLMParameters
                 ): LLMResponse {
                     // Простая эвристика для базовой нормализации
-                    val path = userMessage.substringAfterLast("Нормализуй путь для").substringBeforeLast(":").trim().trim('"')
+                    val path =
+                        userMessage.substringAfterLast("Нормализуй путь для").substringBeforeLast(":").trim().trim('"')
 
                     val normalized = path
                         .replace("\\", "/")
@@ -124,7 +119,7 @@ class MCPFileSystemAgent(
             }
         }
     }
-    
+
     /**
      * Обработать запрос пользователя с поддержкой tool calling
      */
@@ -133,7 +128,7 @@ class MCPFileSystemAgent(
         conversationHistory: List<ConversationMessage> = emptyList(),
         parameters: LLMParameters = LLMParameters()
     ): AgentResponse = withContext(Dispatchers.IO) {
-        
+
         // Проверяем, запущен ли MCP Server
         val serverRunning = serverManager.isServerRunning()
         println("🔧 MCP Server running: $serverRunning")
@@ -152,7 +147,7 @@ class MCPFileSystemAgent(
                 )
             }
         }
-        
+
         try {
             // Получаем доступные tools
             val tools = MCPToolsRegistry.getAllTools()
@@ -170,7 +165,8 @@ class MCPFileSystemAgent(
 
             // Создаем форматированный вывод для результатов инструментов
             val formattedOutput = if (result.metadata.containsKey("executedTools") &&
-                                   result.metadata["executedTools"]?.isNotEmpty() == true) {
+                result.metadata["executedTools"]?.isNotEmpty() == true
+            ) {
                 // Извлекаем операции инструментов из результатов и форматируем их
                 createFormattedToolOutput(result.content, result.metadata)
             } else {
@@ -189,7 +185,7 @@ class MCPFileSystemAgent(
                     metadata = result.metadata.toMap()
                 )
             }
-            
+
         } catch (e: Exception) {
             logger.error("Error processing request with tools", e)
             AgentResponse.error(
@@ -198,7 +194,7 @@ class MCPFileSystemAgent(
             )
         }
     }
-    
+
     /**
      * Цикл tool calling
      */
@@ -210,7 +206,7 @@ class MCPFileSystemAgent(
         var messages = initialMessages.toMutableList()
         var iteration = 0
         val executedTools = mutableListOf<String>()
-        
+
         while (iteration < MAX_TOOL_ITERATIONS) {
             iteration++
             println("=== Tool Calling Iteration $iteration ===")
@@ -249,10 +245,10 @@ class MCPFileSystemAgent(
             if (message.toolCallList != null && message.toolCallList.toolCalls.isNotEmpty()) {
                 println("Tool calls requested: ${message.toolCallList.toolCalls.size}")
                 logger.info("LLM requested ${message.toolCallList.toolCalls.size} tool calls")
-                
+
                 // Добавляем сообщение ассистента с tool calls
                 messages.add(message)
-                
+
                 // Выполняем все tool calls
                 val toolResults = message.toolCallList.toolCalls.map { toolCall ->
                     val functionCall = toolCall.functionCall
@@ -264,8 +260,8 @@ class MCPFileSystemAgent(
                     println("✅ Tool result: ${result.functionResult.content}")
                     result
                 }
-                
-                 // Добавляем результаты tool calls как часть сообщения пользователя
+
+                // Добавляем результаты tool calls как часть сообщения пользователя
                 // (Yandex GPT API не поддерживает роль 'tool')
                 val toolResultsText = buildString {
                     appendLine("РЕЗУЛЬТАТЫ ВЫПОЛНЕНИЯ ИНСТРУМЕНТОВ:")
@@ -289,11 +285,11 @@ class MCPFileSystemAgent(
                         text = toolResultsText
                     )
                 )
-                
+
                 // Продолжаем цикл для получения финального ответа
                 continue
             }
-            
+
             // Нет tool calls - это финальный ответ
             val content = message.text ?: "Нет ответа"
             val usage = response.result.usage
@@ -316,7 +312,7 @@ class MCPFileSystemAgent(
                 )
             )
         }
-        
+
         // Достигнут лимит итераций
         return ToolCallingResult(
             content = "Достигнут лимит итераций tool calling ($MAX_TOOL_ITERATIONS)",
@@ -326,7 +322,7 @@ class MCPFileSystemAgent(
             )
         )
     }
-    
+
     /**
      * Построить начальные сообщения
      */
@@ -390,13 +386,15 @@ class MCPFileSystemAgent(
                 appendLine("🔧 **Выполненные операции:**")
                 appendLine(executedTools.split(", ").joinToString(", ") { "`$it`" })
             }
-            blocks.add(ru.marslab.ide.ride.model.agent.FormattedOutputBlock.toolResult(
-                content = toolsInfo,
-                toolName = "MCP Tools",
-                operationType = "multiple",
-                success = true,
-                order = order++
-            ))
+            blocks.add(
+                ru.marslab.ide.ride.model.agent.FormattedOutputBlock.toolResult(
+                    content = toolsInfo,
+                    toolName = "MCP Tools",
+                    operationType = "multiple",
+                    success = true,
+                    order = order++
+                )
+            )
         }
 
         // Дополнительная статистика

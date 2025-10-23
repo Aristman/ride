@@ -4,12 +4,15 @@ import ru.marslab.ide.ride.agent.BaseToolAgent
 import ru.marslab.ide.ride.agent.ValidationResult
 import ru.marslab.ide.ride.model.orchestrator.AgentType
 import ru.marslab.ide.ride.model.orchestrator.ExecutionContext
-import ru.marslab.ide.ride.model.tool.*
+import ru.marslab.ide.ride.model.tool.StepInput
+import ru.marslab.ide.ride.model.tool.StepOutput
+import ru.marslab.ide.ride.model.tool.StepResult
+import ru.marslab.ide.ride.model.tool.ToolPlanStep
 import java.io.File
 
 /**
  * Агент для разбиения больших файлов на чанки
- * 
+ *
  * Capabilities:
  * - file_chunking - разбиение файлов
  * - token_counting - подсчет токенов
@@ -21,56 +24,56 @@ class CodeChunkerToolAgent : BaseToolAgent(
         "token_counting"
     )
 ) {
-    
+
     companion object {
         private const val DEFAULT_CHUNK_SIZE = 1000 // строк
         private const val DEFAULT_OVERLAP = 50 // строк перекрытия
     }
-    
+
     override fun getDescription(): String {
         return "Разбивает большие файлы на управляемые чанки с перекрытием"
     }
-    
+
     override fun validateInput(input: StepInput): ValidationResult {
         val files = input.getList<String>("files")
-        
+
         if (files.isNullOrEmpty()) {
             return ValidationResult.failure("files is required and must not be empty")
         }
-        
+
         val chunkSize = input.getInt("chunk_size")
         if (chunkSize != null && chunkSize <= 0) {
             return ValidationResult.failure("chunk_size must be positive")
         }
-        
+
         return ValidationResult.success()
     }
-    
+
     override suspend fun doExecuteStep(step: ToolPlanStep, context: ExecutionContext): StepResult {
         val files = step.input.getList<String>("files") ?: emptyList()
         val chunkSize = step.input.getInt("chunk_size") ?: DEFAULT_CHUNK_SIZE
         val overlap = step.input.getInt("overlap") ?: DEFAULT_OVERLAP
-        
+
         logger.info("Chunking ${files.size} files with chunk_size=$chunkSize, overlap=$overlap")
-        
+
         val chunks = mutableListOf<FileChunk>()
         var totalTokens = 0
-        
+
         for (filePath in files) {
             val file = File(filePath)
             if (!file.exists() || !file.isFile) {
                 logger.warn("File does not exist: $filePath")
                 continue
             }
-            
+
             val fileChunks = chunkFile(file, chunkSize, overlap)
             chunks.addAll(fileChunks)
-            
+
             totalTokens += fileChunks.sumOf { it.estimatedTokens }
         }
-        
+
         logger.info("Chunking completed: ${chunks.size} chunks created, ~$totalTokens tokens")
-        
+
         return StepResult.success(
             output = StepOutput.of(
                 "chunks" to chunks,
@@ -84,13 +87,13 @@ class CodeChunkerToolAgent : BaseToolAgent(
             )
         )
     }
-    
+
     private fun chunkFile(file: File, chunkSize: Int, overlap: Int): List<FileChunk> {
         val chunks = mutableListOf<FileChunk>()
-        
+
         try {
             val lines = file.readLines()
-            
+
             if (lines.size <= chunkSize) {
                 // Файл помещается в один чанк
                 chunks.add(
@@ -107,11 +110,11 @@ class CodeChunkerToolAgent : BaseToolAgent(
                 // Разбиваем на чанки с перекрытием
                 var currentLine = 0
                 var chunkIndex = 0
-                
+
                 while (currentLine < lines.size) {
                     val endLine = minOf(currentLine + chunkSize, lines.size)
                     val chunkLines = lines.subList(currentLine, endLine)
-                    
+
                     chunks.add(
                         FileChunk(
                             file = file.absolutePath,
@@ -122,19 +125,19 @@ class CodeChunkerToolAgent : BaseToolAgent(
                             estimatedTokens = estimateTokens(chunkLines.joinToString("\n"))
                         )
                     )
-                    
+
                     currentLine += chunkSize - overlap
                     chunkIndex++
                 }
             }
-            
+
         } catch (e: Exception) {
             logger.error("Error chunking file ${file.absolutePath}", e)
         }
-        
+
         return chunks
     }
-    
+
     /**
      * Простая оценка количества токенов (примерно 1 токен = 4 символа)
      */

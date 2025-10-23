@@ -2,11 +2,7 @@ package ru.marslab.ide.ride.agent
 
 import com.intellij.openapi.components.service
 import ru.marslab.ide.ride.integration.llm.LLMProvider
-import ru.marslab.ide.ride.integration.llm.impl.YandexGPTConfig
-import ru.marslab.ide.ride.integration.llm.impl.YandexGPTProvider
-import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceConfig
-import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceProvider
-import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceModel
+import ru.marslab.ide.ride.integration.llm.impl.*
 import ru.marslab.ide.ride.settings.PluginSettings
 
 /**
@@ -31,11 +27,13 @@ object LLMProviderFactory {
                 val modelId = settings.yandexModelId
                 createYandexGPTProvider(apiKey, folderId, modelId)
             }
+
             PluginSettings.PROVIDER_HUGGINGFACE -> {
                 val hfToken = settings.getHuggingFaceToken()
                 val modelId = settings.huggingFaceModelId
                 createHuggingFaceProvider(hfToken, modelId)
             }
+
             else -> {
                 // По умолчанию Yandex
                 val apiKey = settings.getApiKey()

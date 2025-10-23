@@ -9,7 +9,7 @@ import java.io.File
 
 /**
  * Агент для анализа качества кода и code smells
- * 
+ *
  * Capabilities:
  * - code_quality_analysis - анализ качества
  * - code_smell_detection - поиск code smells
@@ -23,37 +23,37 @@ class CodeQualityToolAgent : BaseToolAgent(
         "complexity_analysis"
     )
 ) {
-    
+
     override fun getDescription(): String {
         return "Анализирует качество кода и выявляет code smells"
     }
-    
+
     override fun validateInput(input: StepInput): ValidationResult {
         val files = input.getList<String>("files")
-        
+
         if (files.isNullOrEmpty()) {
             return ValidationResult.failure("files is required and must not be empty")
         }
-        
+
         return ValidationResult.success()
     }
-    
+
     override suspend fun doExecuteStep(step: ToolPlanStep, context: ExecutionContext): StepResult {
         val files = step.input.getList<String>("files") ?: emptyList()
         val checkComplexity = step.input.getBoolean("check_complexity") ?: true
         val maxComplexity = step.input.getInt("max_complexity") ?: 10
-        
+
         // Входные логи
         logger.info("CODE_QUALITY input: files=${files.size}, check_complexity=${checkComplexity}, max_complexity=${maxComplexity}")
         files.take(10).forEach { logger.info("CODE_QUALITY file: $it") }
-        
+
         val findings = mutableListOf<Finding>()
         val metrics = mutableMapOf<String, Any>()
-        
+
         var totalLines = 0
         var totalMethods = 0
         var totalClasses = 0
-        
+
         for (filePath in files) {
             val file = File(filePath)
             if (!file.exists() || !file.isFile) {
@@ -65,7 +65,7 @@ class CodeQualityToolAgent : BaseToolAgent(
                 val preview = file.readText().lineSequence().filter { it.isNotBlank() }.joinToString("\n").take(200)
                 logger.info("CODE_QUALITY preview($filePath): ${'$'}preview ...")
             }
-            
+
             val fileAnalysis = analyzeFile(file, checkComplexity, maxComplexity)
             findings.addAll(fileAnalysis.findings)
             logger.info("CODE_QUALITY end file: $filePath, findings=${fileAnalysis.findings.size}, lines=${fileAnalysis.lines}, methods=${fileAnalysis.methods}, classes=${fileAnalysis.classes}")
@@ -73,9 +73,9 @@ class CodeQualityToolAgent : BaseToolAgent(
         metrics["total_methods"] = totalMethods
         metrics["total_classes"] = totalClasses
         metrics["avg_lines_per_method"] = if (totalMethods > 0) totalLines / totalMethods else 0
-        
+
         logger.info("Code quality analysis completed: ${findings.size} issues found")
-        
+
         return StepResult.success(
             output = StepOutput.of(
                 "findings" to findings,
@@ -88,30 +88,31 @@ class CodeQualityToolAgent : BaseToolAgent(
             )
         )
     }
-    
+
     private fun analyzeFile(file: File, checkComplexity: Boolean, maxComplexity: Int): FileAnalysis {
         val findings = mutableListOf<Finding>()
-        
+
         try {
             val lines = file.readLines()
             val nonEmptyLines = lines.count { it.trim().isNotEmpty() }
             var methodCount = 0
             var classCount = 0
-            
+
             lines.forEachIndexed { index, line ->
                 val lineNumber = index + 1
                 val trimmed = line.trim()
-                
+
                 // Подсчет классов и методов
-                if (trimmed.startsWith("class ") || trimmed.startsWith("data class ") || 
-                    trimmed.startsWith("object ") || trimmed.startsWith("interface ")) {
+                if (trimmed.startsWith("class ") || trimmed.startsWith("data class ") ||
+                    trimmed.startsWith("object ") || trimmed.startsWith("interface ")
+                ) {
                     classCount++
                 }
-                
+
                 if (trimmed.startsWith("fun ") || trimmed.contains(" fun ")) {
                     methodCount++
                 }
-                
+
                 // Long lines
                 if (line.length > 120) {
                     findings.add(
@@ -125,7 +126,7 @@ class CodeQualityToolAgent : BaseToolAgent(
                         )
                     )
                 }
-                
+
                 // Magic numbers
                 val magicNumberRegex = Regex("""[^a-zA-Z_]\d{2,}[^a-zA-Z_]""")
                 if (magicNumberRegex.containsMatchIn(line) && !trimmed.startsWith("//")) {
@@ -140,7 +141,7 @@ class CodeQualityToolAgent : BaseToolAgent(
                         )
                     )
                 }
-                
+
                 // Deep nesting
                 val indentLevel = line.takeWhile { it == ' ' || it == '\t' }.length / 4
                 if (indentLevel > 4) {
@@ -155,10 +156,11 @@ class CodeQualityToolAgent : BaseToolAgent(
                         )
                     )
                 }
-                
+
                 // Commented code
-                if (trimmed.startsWith("//") && trimmed.length > 10 && 
-                    (trimmed.contains("fun ") || trimmed.contains("val ") || trimmed.contains("var "))) {
+                if (trimmed.startsWith("//") && trimmed.length > 10 &&
+                    (trimmed.contains("fun ") || trimmed.contains("val ") || trimmed.contains("var "))
+                ) {
                     findings.add(
                         Finding(
                             file = file.absolutePath,
@@ -171,7 +173,7 @@ class CodeQualityToolAgent : BaseToolAgent(
                     )
                 }
             }
-            
+
             // Check for god classes
             if (nonEmptyLines > 500) {
                 findings.add(
@@ -185,20 +187,20 @@ class CodeQualityToolAgent : BaseToolAgent(
                     )
                 )
             }
-            
+
             return FileAnalysis(
                 findings = findings,
                 lines = nonEmptyLines,
                 methods = methodCount,
                 classes = classCount
             )
-            
+
         } catch (e: Exception) {
             logger.error("Error analyzing file ${file.absolutePath}", e)
             return FileAnalysis(emptyList(), 0, 0, 0)
         }
     }
-    
+
     private data class FileAnalysis(
         val findings: List<Finding>,
         val lines: Int,

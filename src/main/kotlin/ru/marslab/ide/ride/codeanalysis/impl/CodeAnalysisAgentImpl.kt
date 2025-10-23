@@ -61,7 +61,7 @@ class CodeAnalysisAgentImpl(
         println("Analysis types: ${request.analysisTypes}")
         println("File patterns: ${request.filePatterns}")
         println("Exclude patterns: ${request.excludePatterns}")
-        
+
         // 1. Сканируем проект
         println("\n[1/8] Scanning project files...")
         val files = projectScanner.scanProject(
@@ -69,7 +69,7 @@ class CodeAnalysisAgentImpl(
             request.excludePatterns
         )
         println("Found ${files.size} files to analyze")
-        
+
         if (files.isEmpty()) {
             println("WARNING: No files found! Check file patterns and project path.")
         }
@@ -99,8 +99,9 @@ class CodeAnalysisAgentImpl(
 
         // 5. Строим структуру проекта если запрошено
         println("\n[5/8] Building project structure...")
-        val structure = if (AnalysisType.ARCHITECTURE in request.analysisTypes || 
-                            AnalysisType.ALL in request.analysisTypes) {
+        val structure = if (AnalysisType.ARCHITECTURE in request.analysisTypes ||
+            AnalysisType.ALL in request.analysisTypes
+        ) {
             println("  Architecture analysis requested")
             val struct = architectureAnalyzer.analyze(files, request.projectPath)
             println("  Found ${struct.modules.size} modules, ${struct.layers.size} layers")
@@ -134,11 +135,11 @@ class CodeAnalysisAgentImpl(
             summary = summary,
             recommendations = recommendations
         )
-        
+
         println("\n=== CodeAnalysisAgent: Analysis completed ===")
         println("Total findings: ${result.findings.size}")
         println("Project: ${result.projectName}")
-        
+
         return result
     }
 
@@ -279,7 +280,7 @@ class CodeAnalysisAgentImpl(
             appendLine("- Критических: $criticalCount")
             appendLine("- Высокий приоритет: $highCount")
             appendLine("- Средний приоритет: $mediumCount")
-            
+
             if (criticalCount > 0) {
                 appendLine("\n⚠️ Обнаружены критические проблемы, требующие немедленного внимания!")
             }

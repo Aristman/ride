@@ -17,7 +17,7 @@ data class TaskPlan(
      * Проверяет, пуст ли план
      */
     fun isEmpty(): Boolean = tasks.isEmpty()
-    
+
     /**
      * Возвращает количество задач в плане
      */

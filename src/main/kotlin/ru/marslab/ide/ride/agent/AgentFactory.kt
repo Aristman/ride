@@ -5,24 +5,20 @@ import ru.marslab.ide.ride.agent.impl.ChatAgent
 import ru.marslab.ide.ride.agent.impl.EnhancedChatAgent
 import ru.marslab.ide.ride.agent.impl.TerminalAgent
 import ru.marslab.ide.ride.integration.llm.LLMProvider
-import ru.marslab.ide.ride.integration.llm.impl.YandexGPTConfig
-import ru.marslab.ide.ride.integration.llm.impl.YandexGPTProvider
-import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceConfig
-import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceProvider
 import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceModel
-import ru.marslab.ide.ride.settings.PluginSettings
 import ru.marslab.ide.ride.model.agent.AgentSettings
 import ru.marslab.ide.ride.model.schema.ResponseFormat
 import ru.marslab.ide.ride.model.schema.ResponseSchema
+import ru.marslab.ide.ride.settings.PluginSettings
 
 /**
  * Фабрика для создания агентов
  */
 object AgentFactory {
-    
+
     /**
      * Создает ChatAgent с настроенным LLM провайдером из настроек плагина
-     * 
+     *
      * @return Настроенный агент
      */
     fun createChatAgent(): Agent {
@@ -48,11 +44,11 @@ object AgentFactory {
 
     /**
      * Создает EnhancedChatAgent с автоматическим определением сложности задач
-     * 
+     *
      * EnhancedChatAgent автоматически выбирает:
      * - Простые вопросы → базовый ChatAgent
      * - Сложные задачи → EnhancedAgentOrchestrator
-     * 
+     *
      * @return Настроенный EnhancedChatAgent
      */
     fun createEnhancedChatAgent(): Agent {
@@ -72,12 +68,12 @@ object AgentFactory {
 
         return agent
     }
-    
+
     /**
      * Создает агента с кастомным провайдером
-     * 
+     *
      * Полезно для тестов или специальных случаев
-     * 
+     *
      * @param llmProvider Провайдер для использования
      * @return Агент с указанным провайдером
      */
@@ -121,7 +117,7 @@ object AgentFactory {
         agent.updateSettings(agentSettings)
         return agent
     }
-    
+
     /**
      * Создает провайдер Yandex GPT с указанными настройками
      */

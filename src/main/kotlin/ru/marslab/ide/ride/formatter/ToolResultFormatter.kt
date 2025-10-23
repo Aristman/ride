@@ -113,22 +113,26 @@ class ToolResultFormatter {
             operationMetadata["fileSize"] = fileSize
         }
 
-        blocks.add(FormattedOutputBlock(
-            type = AgentOutputType.TOOL_RESULT,
-            content = operationContent,
-            cssClasses = listOf("file-operation", if (success) "file-success" else "file-error"),
-            metadata = operationMetadata,
-            order = order++
-        ))
+        blocks.add(
+            FormattedOutputBlock(
+                type = AgentOutputType.TOOL_RESULT,
+                content = operationContent,
+                cssClasses = listOf("file-operation", if (success) "file-success" else "file-error"),
+                metadata = operationMetadata,
+                order = order++
+            )
+        )
 
         // Если операция чтения и результат содержит код, создаем блок кода
         if (operation.lowercase() in listOf("read", "чтение") && success && result.trim().isNotEmpty()) {
             val language = detectLanguage(path)
-            blocks.add(FormattedOutputBlock.codeBlock(
-                content = result,
-                language = language,
-                order = order++
-            ))
+            blocks.add(
+                FormattedOutputBlock.codeBlock(
+                    content = result,
+                    language = language,
+                    order = order++
+                )
+            )
         }
 
         return FormattedOutput.multiple(blocks)
@@ -164,11 +168,13 @@ class ToolResultFormatter {
 
         // Блок с изменениями (diff или просто контент)
         if (success && changes.trim().isNotEmpty()) {
-            blocks.add(FormattedOutputBlock.codeBlock(
-                content = changes,
-                language = detectLanguage(path),
-                order = order++
-            ))
+            blocks.add(
+                FormattedOutputBlock.codeBlock(
+                    content = changes,
+                    language = detectLanguage(path),
+                    order = order++
+                )
+            )
         }
 
         return FormattedOutput.multiple(blocks)

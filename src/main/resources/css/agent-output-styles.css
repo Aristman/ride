@@ -502,9 +502,32 @@
     }
 
     .code-block-header {
-        flex-direction: column;
-        align-items: flex-start;
+        /* Сохраняем заголовок в одну строку даже на узких экранах */
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
         gap: 8px;
+        flex-wrap: nowrap;
+    }
+
+    .code-block-info {
+        /* Разрешаем сжиматься, чтобы кнопки действий не переносились */
+        min-width: 0;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .code-filename {
+        /* Усечение длинных имён файлов, чтобы не вытесняли кнопки */
+        max-width: 60vw;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .code-block-actions {
+        flex: 0 0 auto;
     }
 
     .tool-result-header {

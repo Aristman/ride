@@ -1,4 +1,3 @@
-<script>
 function copyCodeBlock(button) {
     const container = button.closest('.code-block-container');
     const codeElement = container.querySelector('.code-content code');
@@ -60,4 +59,3 @@ function viewFullContent(button) {
         button.textContent = 'View Full';
     }
 }
-</script>

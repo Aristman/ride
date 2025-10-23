@@ -10,11 +10,11 @@ import ru.marslab.ide.ride.service.ChatService
  * Action для сброса формата ответа к TEXT (по умолчанию)
  */
 class ClearFormatAction : AnAction("Clear Format (Text)") {
-    
+
     override fun actionPerformed(e: AnActionEvent) {
         val chatService = service<ChatService>()
         chatService.clearResponseFormat()
-        
+
         Messages.showInfoMessage(
             e.project,
             "Формат сброшен. Ответы будут в обычном текстовом формате.",

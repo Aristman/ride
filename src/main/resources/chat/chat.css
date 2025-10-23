@@ -2,74 +2,74 @@
 @import url("../css/common-styles.css");
 
 /* Дополнительные стили для JCEF режима */
-:root{
-  --bg: #0f1115; /* fallback */
-  --textPrimary: #e6e6e6;
-  --textSecondary: #9aa0a6;
-  --userBg: #e3ecff;
-  --userBorder: #6d8fd8;
-  --codeBg: #2b2b2b;
-  --codeText: #e6e6e6;
-  --codeBorder: #444444;
-  --prefix: #6b6b6b;
+:root {
+    --bg: #0f1115; /* fallback */
+    --textPrimary: #e6e6e6;
+    --textSecondary: #9aa0a6;
+    --userBg: #e3ecff;
+    --userBorder: #6d8fd8;
+    --codeBg: #2b2b2b;
+    --codeText: #e6e6e6;
+    --codeBorder: #444444;
+    --prefix: #6b6b6b;
 }
 
 /* Дополнительные стили специфичные для JCEF режима */
 table.code-block {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 8px;
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
 }
 
 table.code-block td {
-  padding: 0;
+    padding: 0;
 }
 
 td.code-lang {
-  font-size: 12px;
-  color: var(--prefix);
-  padding: 4px 6px;
+    font-size: 12px;
+    color: var(--prefix);
+    padding: 4px 6px;
 }
 
 td.code-copy-cell {
-  text-align: right;
-  padding: 4px 6px;
+    text-align: right;
+    padding: 4px 6px;
 }
 
 a.code-copy-link {
-  color: var(--prefix);
-  text-decoration: none;
-  display: inline-block;
-  width: 20px;
-  height: 20px;
-  text-align: center;
-  line-height: 20px;
+    color: var(--prefix);
+    text-decoration: none;
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    text-align: center;
+    line-height: 20px;
 }
 
 pre {
-  background: var(--codeBg);
-  color: var(--codeText);
-  padding: 8px;
-  border: 1px solid var(--codeBorder);
-  margin: 0;
-  overflow: auto;
-  white-space: pre;
+    background: var(--codeBg);
+    color: var(--codeText);
+    padding: 8px;
+    border: 1px solid var(--codeBorder);
+    margin: 0;
+    overflow: auto;
+    white-space: pre;
 }
 
 pre code {
-  display: block;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
-  white-space: pre;
+    display: block;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    white-space: pre;
 }
 
 /* Стили для системных сообщений в JCEF */
 .msg.system .system-content {
-  display: inline-block;
-  color: var(--textSecondary);
-  font-size: 12px;
-  opacity: 0.8;
-  padding: 4px 12px;
-  border-radius: 4px;
-  background-color: rgba(255, 255, 255, 0.03);
+    display: inline-block;
+    color: var(--textSecondary);
+    font-size: 12px;
+    opacity: 0.8;
+    padding: 4px 12px;
+    border-radius: 4px;
+    background-color: rgba(255, 255, 255, 0.03);
 }

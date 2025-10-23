@@ -25,12 +25,12 @@ data class ChatContext(
     fun getRecentHistory(count: Int): List<Message> {
         return history.takeLast(count)
     }
-    
+
     /**
      * Проверяет, есть ли выделенный текст
      */
     fun hasSelectedText(): Boolean = !selectedText.isNullOrBlank()
-    
+
     /**
      * Проверяет, есть ли текущий файл
      */

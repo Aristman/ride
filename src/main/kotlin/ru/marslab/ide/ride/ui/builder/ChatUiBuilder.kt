@@ -1,16 +1,17 @@
 package ru.marslab.ide.ride.ui.builder
 
 import com.intellij.openapi.actionSystem.ActionManager
-import com.intellij.openapi.actionSystem.ActionToolbar
 import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTabbedPane
 import com.intellij.ui.components.JBTextArea
 import com.intellij.util.ui.JBUI
 import ru.marslab.ide.ride.service.ChatService
-import ru.marslab.ide.ride.ui.config.ChatPanelConfig
-import ru.marslab.ide.ride.ui.manager.HtmlDocumentManager
 import ru.marslab.ide.ride.ui.ChatPanel
+import ru.marslab.ide.ride.ui.components.ClosableTabbedPane
+import ru.marslab.ide.ride.ui.config.ChatPanelConfig
+import ru.marslab.ide.ride.ui.dialogs.CloseChatConfirmationDialog
+import ru.marslab.ide.ride.ui.manager.HtmlDocumentManager
 import java.awt.BorderLayout
 import java.awt.Dimension
 import java.awt.event.KeyAdapter
@@ -35,7 +36,7 @@ class ChatUiBuilder(
             ?: DefaultActionGroup()
         val toolbar = actionManager.createActionToolbar("RideToolbar", toolbarGroup, true)
 
-        val sessionsTabs = JBTabbedPane()
+        val sessionsTabs = ClosableTabbedPane()
         sessionsTabs.addChangeListener {
             val idx = sessionsTabs.selectedIndex
             val sessions = chatService.getSessions()
@@ -46,7 +47,31 @@ class ChatUiBuilder(
                 }
             }
         }
-        
+
+        sessionsTabs.closeListener = object : ClosableTabbedPane.CloseListener {
+            override fun onTabClose(index: Int) {
+                val sessions = chatService.getSessions()
+                if (index !in sessions.indices) return
+                val session = sessions[index]
+                val parent = chatPanel?.invoke()
+                val dialog = CloseChatConfirmationDialog(parent)
+                val result = dialog.showAndGet()
+                when (result.action) {
+                    CloseChatConfirmationDialog.Action.CLOSE -> {
+                        chatService.removeSession(session.id, deleteFromStorage = true)
+                    }
+
+                    CloseChatConfirmationDialog.Action.HIDE -> {
+                        chatService.removeSession(session.id, deleteFromStorage = false)
+                    }
+
+                    CloseChatConfirmationDialog.Action.CANCEL -> return
+                }
+                refreshTabs(sessionsTabs)
+                parent?.refreshAppearance()
+            }
+        }
+
         // Label для отображения размера контекста
         val contextSizeLabel = JLabel("Контекст: 0 токенов")
         contextSizeLabel.border = BorderFactory.createEmptyBorder(2, 8, 2, 8)
@@ -140,7 +165,10 @@ class ChatUiBuilder(
         val sessions = chatService.getSessions()
         sessionsTabs.removeAll()
         sessions.forEach { session ->
-            sessionsTabs.addTab(session.title, JPanel())
+            when (sessionsTabs) {
+                is ClosableTabbedPane -> sessionsTabs.addClosableTab(session.title, JPanel())
+                else -> sessionsTabs.addTab(session.title, JPanel())
+            }
         }
         val current = chatService.getCurrentSessionId()
         val idx = sessions.indexOfFirst { it.id == current }

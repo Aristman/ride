@@ -1,5 +1,7 @@
 package ru.marslab.ide.ride.model.agent
 
+import kotlinx.serialization.Serializable
+
 /**
  * Блок форматированного вывода от агента
  *
@@ -10,11 +12,13 @@ package ru.marslab.ide.ride.model.agent
  * @property metadata Дополнительные данные блока
  * @property order Порядок отображения блока
  */
+@Serializable
 data class FormattedOutputBlock(
     val type: AgentOutputType,
     val content: String,
     val htmlTemplate: String? = null,
     val cssClasses: List<String> = emptyList(),
+    @Serializable(with = AnyMapSerializer::class)
     val metadata: Map<String, Any> = emptyMap(),
     val order: Int = 0
 ) {

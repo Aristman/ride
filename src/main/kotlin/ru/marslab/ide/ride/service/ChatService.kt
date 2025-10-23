@@ -8,24 +8,24 @@ import com.intellij.openapi.project.Project
 import kotlinx.coroutines.*
 import ru.marslab.ide.ride.agent.Agent
 import ru.marslab.ide.ride.agent.AgentFactory
-import ru.marslab.ide.ride.agent.OrchestratorStep
-import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceProvider
-import ru.marslab.ide.ride.integration.llm.impl.YandexGPTProvider
-import ru.marslab.ide.ride.agent.impl.ChatAgent
-import ru.marslab.ide.ride.agent.impl.MCPFileSystemAgent
-import ru.marslab.ide.ride.integration.llm.impl.YandexGPTConfig
 import ru.marslab.ide.ride.agent.LLMProviderFactory
+import ru.marslab.ide.ride.agent.impl.ChatAgent
+import ru.marslab.ide.ride.agent.impl.EnhancedChatAgent
+import ru.marslab.ide.ride.agent.impl.MCPFileSystemAgent
+import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceProvider
+import ru.marslab.ide.ride.integration.llm.impl.YandexGPTConfig
+import ru.marslab.ide.ride.integration.llm.impl.YandexGPTProvider
 import ru.marslab.ide.ride.mcp.MCPServerManager
-import ru.marslab.ide.ride.model.agent.*
+import ru.marslab.ide.ride.model.agent.AgentRequest
+import ru.marslab.ide.ride.model.agent.AgentSettings
 import ru.marslab.ide.ride.model.chat.*
-import ru.marslab.ide.ride.model.llm.*
-import ru.marslab.ide.ride.model.schema.*
-import ru.marslab.ide.ride.model.chat.ChatSession
-import ru.marslab.ide.ride.model.chat.ToolAgentStatusMessage
-import ru.marslab.ide.ride.model.chat.ToolAgentExecutionStatus
+import ru.marslab.ide.ride.model.llm.LLMParameters
+import ru.marslab.ide.ride.model.llm.TokenUsage
+import ru.marslab.ide.ride.model.schema.ResponseFormat
+import ru.marslab.ide.ride.model.schema.ResponseSchema
 import ru.marslab.ide.ride.orchestrator.EnhancedAgentOrchestrator
 import ru.marslab.ide.ride.orchestrator.ToolAgentProgressListener
-import ru.marslab.ide.ride.agent.impl.EnhancedChatAgent
+import ru.marslab.ide.ride.service.storage.ChatStorageService
 import ru.marslab.ide.ride.settings.PluginSettings
 import ru.marslab.ide.ride.ui.chat.JcefChatView
 import ru.marslab.ide.ride.util.TokenEstimator
@@ -45,8 +45,11 @@ class ChatService {
     // Несколько сессий и история сообщений по каждой
     private val sessionHistories = mutableMapOf<String, MessageHistory>()
     private val sessions = mutableListOf<ChatSession>()
-    private var currentSessionId: String = createNewSessionInternal().id
+    private var currentSessionId: String = ""
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    // Временное хранилище текущего проекта для вызовов saveCurrentSession()
+    private var currentProject: Project? = null
 
     // Текущие настройки формата ответа (для UI)
     private var currentFormat: ResponseFormat? = null
@@ -87,6 +90,44 @@ class ChatService {
     private val activeProgressMessages = mutableMapOf<String, Message>()
 
     /**
+     * Инициализирует сервис с проектом (синхронно)
+     */
+    fun initializeWithProject(project: Project) {
+        currentProject = project
+        try {
+            // Синхронная загрузка через runBlocking
+            kotlinx.coroutines.runBlocking {
+                val storage = service<ChatStorageService>()
+                val (loadedSessions, histories) = storage.loadAllSessions(project)
+
+                // Инициализируем состояния
+                sessions.clear()
+                if (loadedSessions.isNotEmpty()) {
+                    sessions.addAll(loadedSessions)
+                    // Восстанавливаем истории
+                    histories.forEach { (sid, msgs) ->
+                        val mh = MessageHistory()
+                        msgs.forEach { mh.addMessage(it) }
+                        sessionHistories[sid] = mh
+                    }
+                    currentSessionId = loadedSessions.first().id
+                    logger.info("ChatService: sessions loaded for project ${project.name}: ${sessions.size}")
+                } else {
+                    // Нет сохранённых сессий — создаём новую
+                    currentSessionId = createNewSessionInternal().id
+                    logger.info("ChatService: created new session for project ${project.name}")
+                }
+            }
+        } catch (e: Exception) {
+            logger.warn("ChatService: failed to load sessions for project ${project.name}, fallback to in-memory", e)
+            if (currentSessionId.isBlank()) {
+                currentSessionId = createNewSessionInternal().id
+            }
+        }
+    }
+
+
+    /**
      * Устанавливает chat view для отображения progress сообщений
      */
     fun setChatView(view: JcefChatView) {
@@ -124,6 +165,7 @@ class ChatService {
                         return orchestrator as? EnhancedAgentOrchestrator
                     }
                 }
+
                 else -> {
                     // Другие типы агентов не поддерживают progress tracking
                 }
@@ -179,15 +221,19 @@ class ChatService {
                 ToolAgentExecutionStatus.RUNNING -> {
                     message.toHtml() // Используем HTML для progress сообщений
                 }
+
                 ToolAgentExecutionStatus.COMPLETED -> {
                     message.toHtml() // Используем HTML для завершенных сообщений с результатами
                 }
+
                 ToolAgentExecutionStatus.FAILED -> {
                     message.toHtml() // Используем HTML для сообщений об ошибках
                 }
+
                 ToolAgentExecutionStatus.CANCELLED -> {
                     "**${message.result.agentName} отменен**"
                 }
+
                 else -> {
                     "**${message.displayMessage}**"
                 }
@@ -254,6 +300,8 @@ class ChatService {
         val history = getCurrentHistory()
         val wasEmpty = history.getMessageCount() == 0
         history.addMessage(userMsg)
+        // Автосохранение после пользовательского сообщения
+        scope.launch { saveCurrentSession() }
         if (wasEmpty) {
             // Авто-именование сессии по первым словам
             val title = deriveTitleFrom(userMessage)
@@ -306,9 +354,9 @@ class ChatService {
                             // Fallback: оцениваем токены по размеру запроса и ответа
                             TokenEstimator.estimateTotalTokens(userMessage, agentResponse.content)
                         }
-                        
+
                         // Создаем и сохраняем сообщение ассистента с учетом анализа неопределенности
-                        val metadata = agentResponse.metadata + mapOf<String, Any>(
+                        val metadata = agentResponse.metadata + mapOf(
                             "isFinal" to agentResponse.isFinal,
                             "uncertainty" to (agentResponse.uncertainty ?: 0.0),
                             "responseTimeMs" to responseTime,
@@ -323,7 +371,7 @@ class ChatService {
                             // Получаем сжатую историю из метаданных
                             @Suppress("UNCHECKED_CAST")
                             val compressedHistory = agentResponse.metadata["compressedHistory"] as? List<Message>
-                            
+
                             if (compressedHistory != null) {
                                 // Заменяем всю историю на сжатую
                                 val currentHistory = getCurrentHistory()
@@ -331,7 +379,7 @@ class ChatService {
                                 compressedHistory.forEach { currentHistory.addMessage(it) }
                                 logger.info("History replaced with compressed version: ${compressedHistory.size} messages")
                             }
-                            
+
                             // Добавляем системное сообщение в историю
                             val sysMsg = Message(
                                 content = systemMessage,
@@ -341,7 +389,7 @@ class ChatService {
                             getCurrentHistory().addMessage(sysMsg)
                             onResponse(sysMsg)
                         }
-                        
+
                         val assistantMsg = Message(
                             content = agentResponse.content,
                             role = MessageRole.ASSISTANT,
@@ -349,6 +397,8 @@ class ChatService {
                         )
                         getCurrentHistory().addMessage(assistantMsg)
                         onResponse(assistantMsg)
+                        // Автосохранение сессии
+                        scope.launch { saveCurrentSession() }
                     } else {
                         logger.warn("Agent returned error: ${agentResponse.error}")
                         onError(agentResponse.error ?: "Неизвестная ошибка")
@@ -366,7 +416,7 @@ class ChatService {
 
     /**
      * Отправляет сообщение с поддержкой MCP Tools
-     * 
+     *
      * @param userMessage Текст сообщения пользователя
      * @param project Текущий проект
      * @param onResponse Callback для получения ответа
@@ -426,17 +476,17 @@ class ChatService {
             try {
                 // Получаем настройки
                 val settings = service<PluginSettings>()
-                
+
                 // Создаем конфигурацию для Yandex GPT
                 val config = YandexGPTConfig(
                     apiKey = settings.getApiKey(),
                     folderId = settings.folderId,
                     modelId = "yandexgpt-lite"
                 )
-                
+
                 // Создаем агента с поддержкой tools
                 val mcpFileSystemAgent = MCPFileSystemAgent(config)
-                
+
                 // Формируем историю для агента (включаем системные сообщения для контекста)
                 val allMessages = if (wasEmpty) {
                     // Если история была пустой, пользовательское сообщение уже добавлено
@@ -457,7 +507,7 @@ class ChatService {
                             content = msg.content
                         )
                     }
-                
+
                 // Получаем параметры
                 val llmParameters = LLMParameters(
                     temperature = settings.temperature,
@@ -479,17 +529,17 @@ class ChatService {
                         // Извлекаем информацию о выполненных tools
                         val executedTools = agentResponse.metadata["executedTools"] as? String
                         val iterations = agentResponse.metadata["iterations"] as? String
-                        
+
                         // Если были выполнены tools, показываем индикатор
                         if (!executedTools.isNullOrBlank() && onToolExecution != null) {
                             onToolExecution("Executed tools: $executedTools")
                         }
-                        
+
                         // Получаем статистику токенов
                         val inputTokens = agentResponse.metadata["inputTokens"] as? String
                         val outputTokens = agentResponse.metadata["outputTokens"] as? String
                         val totalTokens = agentResponse.metadata["totalTokens"] as? String
-                        
+
                         val tokenUsage = if (inputTokens != null && outputTokens != null && totalTokens != null) {
                             TokenUsage(
                                 inputTokens = inputTokens.toIntOrNull() ?: 0,
@@ -499,7 +549,7 @@ class ChatService {
                         } else {
                             TokenUsage.EMPTY
                         }
-                        
+
                         // Добавляем сообщение пользователя в историю (если еще не добавлено)
                         if (!wasEmpty) {
                             getCurrentHistory().addMessage(userMsg)
@@ -669,7 +719,7 @@ class ChatService {
 
     /**
      * Выполняет терминальную команду через TerminalAgent
-     * 
+     *
      * @param command Команда для выполнения
      * @param project Текущий проект
      * @param onResponse Callback для получения ответа
@@ -692,25 +742,25 @@ class ChatService {
             try {
                 // Создаем терминальный агент
                 val terminalAgent = AgentFactory.createTerminalAgent()
-                
+
                 // Формируем контекст
                 val context = ChatContext(
                     project = project,
                     history = getCurrentHistory().getMessages()
                 )
-                
+
                 // Создаем запрос
                 val request = AgentRequest(
                     request = command,
                     context = context,
                     parameters = LLMParameters.DEFAULT
                 )
-                
+
                 // Выполняем команду
                 val startTime = System.currentTimeMillis()
                 val response = terminalAgent.ask(request)
                 val responseTime = System.currentTimeMillis() - startTime
-                
+
                 withContext(Dispatchers.EDT) {
                     // Всегда показываем результат выполнения команды (даже при ошибке)
                     val metadata = response.metadata + mapOf<String, Any>(
@@ -721,25 +771,27 @@ class ChatService {
                         "commandSuccess" to response.success,
                         "formattedOutput" to (response.formattedOutput ?: Unit)
                     )
-                    
+
                     val message = Message(
                         content = response.content,
                         role = MessageRole.ASSISTANT,
                         metadata = metadata
                     )
-                    
+
                     getCurrentHistory().addMessage(message)
                     onResponse(message)
-                    
+                    // Автосохранение сессии
+                    scope.launch { saveCurrentSession() }
+
                     // Логируем ошибку, но не прерываем показ результата
                     if (!response.success) {
                         logger.warn("Terminal command failed: ${response.error}")
                     }
                 }
-                
+
                 // Освобождаем ресурсы
                 terminalAgent.dispose()
-                
+
             } catch (e: Exception) {
                 logger.error("Error executing terminal command", e)
                 withContext(Dispatchers.EDT) {
@@ -762,6 +814,8 @@ class ChatService {
     fun clearHistory() {
         logger.info("Clearing chat history for session $currentSessionId")
         getCurrentHistory().clear()
+        // Автосохранение пустой истории
+        scope.launch { saveCurrentSession() }
     }
 
     /**
@@ -881,7 +935,7 @@ class ChatService {
                 else -> provider.getProviderName()
             }
         }
-        
+
         // Проверяем обычный ChatAgent
         val chatAgent = agent as? ChatAgent
         if (chatAgent != null) {
@@ -899,6 +953,8 @@ class ChatService {
     fun createNewSession(title: String = "Session"): ChatSession {
         val s = createNewSessionInternal(title)
         currentSessionId = s.id
+        // Сохраняем новую сессию в индекс
+        scope.launch { saveCurrentSession() }
         return s
     }
 
@@ -925,7 +981,41 @@ class ChatService {
         val idx = sessions.indexOfFirst { it.id == sessionId }
         if (idx >= 0) {
             sessions[idx] = sessions[idx].copy(title = title.take(50), updatedAt = Instant.now())
+            // Сохранить переименованную сессию
+            if (sessionId == currentSessionId) {
+                scope.launch { saveCurrentSession() }
+            }
         }
+    }
+
+    /**
+     * Удаляет или скрывает сессию из UI
+     * @param deleteFromStorage true — полностью удалить и из диска; false — только убрать из UI (оставить файлы)
+     */
+    fun removeSession(sessionId: String, deleteFromStorage: Boolean) {
+        val idx = sessions.indexOfFirst { it.id == sessionId }
+        if (idx < 0) return
+        sessions.removeAt(idx)
+        sessionHistories.remove(sessionId)
+
+        scope.launch {
+            try {
+                if (deleteFromStorage) {
+                    currentProject?.let {
+                        service<ChatStorageService>().deleteSession(
+                            it,
+                            sessionId,
+                            withBackup = true
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                logger.warn("Failed to ${if (deleteFromStorage) "delete" else "hide"} session $sessionId", e)
+            }
+        }
+
+        // Переключаемся на первую доступную или создаем новую
+        currentSessionId = sessions.firstOrNull()?.id ?: createNewSessionInternal().id
     }
 
     private fun deriveTitleFrom(text: String): String {
@@ -938,7 +1028,25 @@ class ChatService {
 
     private fun getCurrentHistory(): MessageHistory =
         sessionHistories.getOrPut(currentSessionId) { MessageHistory() }
-    
+
+    /**
+     * Сохраняет текущую сессию и её сообщения в персистентное хранилище
+     */
+    private suspend fun saveCurrentSession() {
+        currentProject?.let { saveCurrentSession(it) }
+    }
+
+    private suspend fun saveCurrentSession(project: Project) {
+        try {
+            if (currentSessionId.isBlank()) return
+            val session = sessions.firstOrNull { it.id == currentSessionId } ?: return
+            val messages = getCurrentHistory().getMessages()
+            service<ChatStorageService>().saveSession(project, session, messages)
+        } catch (e: Exception) {
+            logger.warn("Failed to save current session", e)
+        }
+    }
+
     /**
      * Возвращает TokenCounter для подсчёта токенов
      */
