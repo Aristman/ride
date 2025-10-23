@@ -7,6 +7,7 @@ import ru.marslab.ide.ride.model.agent.FormattedOutputBlock
 /**
  * Форматтер для блоков кода
  */
+@Deprecated("Данный класс не используется. Удалить")
 class CodeBlockFormatter {
 
     /**
