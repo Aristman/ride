@@ -94,8 +94,9 @@ class ProjectScannerToolAgent : BaseToolAgent(
     override suspend fun doExecuteStep(step: ToolPlanStep, context: ExecutionContext): StepResult {
         val startTime = System.currentTimeMillis()
 
-        val projectPath = context.projectPath
-            ?: return StepResult.error("Project path is not specified in context")
+        val inputProjectPath = step.input.get<String>("project_path")
+        val projectPath = inputProjectPath ?: context.projectPath
+            ?: return StepResult.error("Project path is not specified (neither in input `project_path` nor in context)")
 
         // Инициализируем file listener если еще не инициализирован
         if (!fileListenerInitialized) {
@@ -108,6 +109,7 @@ class ProjectScannerToolAgent : BaseToolAgent(
         logger.info("Enhanced scanning project at $projectPath (force_rescan=${scanSettings.forceRescan})")
 
         val projectDir = File(projectPath)
+        println("projectDir -> $projectDir")
         if (!projectDir.exists() || !projectDir.isDirectory) {
             return StepResult.error("Project path does not exist or is not a directory: $projectPath")
         }
@@ -400,10 +402,10 @@ class ProjectScannerToolAgent : BaseToolAgent(
                             children.add(subtree)
                         }
                     } else if (child.isRegularFile()) {
-                        // Проверяем include паттерны
+                        // Проверяем include паттерны (учитываем и полное относительное имя, и только имя файла)
                         val included = includeMatchers.isEmpty() || includeMatchers.any { matcher ->
                             try {
-                                matcher.matches(relativePath)
+                                matcher.matches(relativePath) || matcher.matches(relativePath.fileName)
                             } catch (e: Exception) {
                                 false
                             }
@@ -499,7 +501,11 @@ class ProjectScannerToolAgent : BaseToolAgent(
         }
 
         val excludeMatchers = allExcludePatterns.map { createGlobMatcher(it) }
-        val includeMatchers = allIncludePatterns.map { createGlobMatcher(it) }
+        // Расширяем include-паттерны: добавляем вариант без "**/" для матчей по имени файла на верхних уровнях
+        val expandedIncludePatterns = allIncludePatterns.flatMap { pattern ->
+            if (pattern.contains("**/")) listOf(pattern, pattern.replace("**/", "")) else listOf(pattern)
+        }.distinct()
+        val includeMatchers = expandedIncludePatterns.map { createGlobMatcher(it) }
 
         // Используем пул потоков для параллельной обработки
         val processorCount = Runtime.getRuntime().availableProcessors()
@@ -663,10 +669,10 @@ class ProjectScannerToolAgent : BaseToolAgent(
                     directories.add(child.pathString)
                     directoriesToProcess.add(child)
                 } else if (child.isRegularFile()) {
-                    // Проверяем include паттерны
+                    // Проверяем include паттерны (учитываем и полное относительное имя, и только имя файла)
                     val included = includeMatchers.isEmpty() || includeMatchers.any { matcher ->
                         try {
-                            matcher.matches(relativePath)
+                            matcher.matches(relativePath) || matcher.matches(relativePath.fileName)
                         } catch (e: Exception) {
                             false
                         }
