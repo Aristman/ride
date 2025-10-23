@@ -12,7 +12,7 @@ data class PersistentMessage(
     val content: String,
     val role: PersistentRole,
     val timestamp: Long,
-    val metadata: Map<String, String> = emptyMap()
+    val metadataJson: String = "{}"  // Храним metadata как JSON строку
 )
 
 @Serializable

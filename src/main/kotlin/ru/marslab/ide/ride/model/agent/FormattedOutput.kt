@@ -1,11 +1,14 @@
 package ru.marslab.ide.ride.model.agent
 
+import kotlinx.serialization.Serializable
+
 /**
  * Контейнер для форматированного вывода агента
  *
  * @property blocks Список форматированных блоков
  * @property rawContent Сырой контент для fallback (опционально)
  */
+@Serializable
 data class FormattedOutput(
     val blocks: List<FormattedOutputBlock>,
     val rawContent: String? = null

@@ -1,4 +1,4 @@
-﻿package ru.marslab.ide.ride.ui.manager
+package ru.marslab.ide.ride.ui.manager
 
 import com.intellij.openapi.components.service
 import ru.marslab.ide.ride.model.chat.Message
@@ -107,17 +107,30 @@ class MessageDisplayManager(
     private fun displayAssistantMessage(message: Message) {
         val prefix = createAssistantPrefix(message)
 
-        // Проверяем наличие форматированного вывода
-        val formattedOutput = message.metadata["formattedOutput"] as? FormattedOutput
-        val bodyHtml = if (formattedOutput != null) {
-            try {
-                contentRenderer.renderFormattedOutput(formattedOutput)
-            } catch (e: Exception) {
-                // Fallback на стандартный рендеринг в случае ошибки
+        // Определяем тип сообщения из metadata
+        val messageType = message.metadata["type"] as? String
+        val isProgress = message.metadata["isProgress"] as? Boolean ?: false
+        
+        // Выбираем способ рендеринга в зависимости от типа сообщения
+        val bodyHtml = when {
+            // Сообщения прогресса tool agents уже содержат готовый HTML
+            messageType == "tool_agent_progress" || isProgress -> {
+                message.content
+            }
+            // Проверяем наличие форматированного вывода
+            message.metadata["formattedOutput"] is FormattedOutput -> {
+                val formattedOutput = message.metadata["formattedOutput"] as FormattedOutput
+                try {
+                    contentRenderer.renderFormattedOutput(formattedOutput)
+                } catch (e: Exception) {
+                    // Fallback на стандартный рендеринг в случае ошибки
+                    contentRenderer.renderContentToHtml(message.content, isJcefMode())
+                }
+            }
+            // Стандартный рендеринг для обычных сообщений
+            else -> {
                 contentRenderer.renderContentToHtml(message.content, isJcefMode())
             }
-        } else {
-            contentRenderer.renderContentToHtml(message.content, isJcefMode())
         }
 
         val statusHtml = createAssistantStatusHtml(message)

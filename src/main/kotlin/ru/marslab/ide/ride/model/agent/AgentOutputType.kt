@@ -1,8 +1,11 @@
 package ru.marslab.ide.ride.model.agent
 
+import kotlinx.serialization.Serializable
+
 /**
  * Типы вывода агентов для форматирования
  */
+@Serializable
 enum class AgentOutputType {
     /**
      * Обычный markdown (по умолчанию)

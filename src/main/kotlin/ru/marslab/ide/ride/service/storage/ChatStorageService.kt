@@ -8,6 +8,10 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import ru.marslab.ide.ride.model.agent.FormattedOutput
 import ru.marslab.ide.ride.model.chat.Message
 import ru.marslab.ide.ride.model.chat.MessageRole
 import ru.marslab.ide.ride.model.chat.ChatSession
@@ -80,7 +84,7 @@ class ChatStorageService {
                             PersistentRole.SYSTEM -> MessageRole.SYSTEM
                         },
                         timestamp = pm.timestamp,
-                        metadata = pm.metadata.mapValues { it.value }
+                        metadata = parseMetadataFromJson(pm.metadataJson)
                     )
                 }
 
@@ -120,7 +124,7 @@ class ChatStorageService {
                         MessageRole.SYSTEM -> PersistentRole.SYSTEM
                     },
                     timestamp = m.timestamp,
-                    metadata = m.metadata.mapValues { it.value.toString() }
+                    metadataJson = serializeMetadataToJson(m.metadata)
                 )
             }
             val messagesPath = dir.resolve("messages.json")
@@ -172,5 +176,80 @@ class ChatStorageService {
     private fun zipDirectory(sourceDir: Path, zipFile: Path) {
         // Упрощенно: резервное копирование пропускаем для сокращения зависимости, можно реализовать позже
         // Здесь можно добавить real zip при необходимости
+    }
+
+    /**
+     * Сериализует metadata в JSON строку
+     * Сохраняет примитивные типы (String, Number, Boolean) и FormattedOutput
+     */
+    private fun serializeMetadataToJson(metadata: Map<String, Any>): String {
+        return try {
+            val jsonObject = buildJsonObject {
+                metadata.forEach { (key, value) ->
+                    when (value) {
+                        is String -> put(key, JsonPrimitive(value))
+                        is Number -> put(key, JsonPrimitive(value))
+                        is Boolean -> put(key, JsonPrimitive(value))
+                        is FormattedOutput -> {
+                            // Сериализуем FormattedOutput как вложенный JSON
+                            try {
+                                val formattedJson = json.encodeToString(FormattedOutput.serializer(), value)
+                                put(key, JsonPrimitive(formattedJson))
+                            } catch (e: Exception) {
+                                logger.warn("Failed to serialize FormattedOutput: ${e.message}")
+                            }
+                        }
+                        // Игнорируем другие сложные объекты
+                    }
+                }
+            }
+            json.encodeToString(JsonObject.serializer(), jsonObject)
+        } catch (e: Exception) {
+            logger.warn("Failed to serialize metadata: ${e.message}", e)
+            "{}"
+        }
+    }
+
+    /**
+     * Парсит metadata из JSON строки
+     * Восстанавливает правильные типы для примитивов и FormattedOutput
+     */
+    private fun parseMetadataFromJson(metadataJson: String): Map<String, Any> {
+        return try {
+            if (metadataJson.isBlank() || metadataJson == "{}") {
+                return emptyMap()
+            }
+            
+            val jsonObject = json.decodeFromString(JsonObject.serializer(), metadataJson)
+            jsonObject.mapValues { (key, jsonElement) ->
+                when (val primitive = jsonElement as? JsonPrimitive) {
+                    null -> jsonElement.toString()
+                    else -> when {
+                        primitive.isString -> {
+                            val content = primitive.content
+                            // Пытаемся десериализовать FormattedOutput если ключ подходящий
+                            if (key == "formattedOutput" && content.startsWith("{")) {
+                                try {
+                                    json.decodeFromString(FormattedOutput.serializer(), content)
+                                } catch (e: Exception) {
+                                    logger.warn("Failed to deserialize FormattedOutput: ${e.message}")
+                                    content
+                                }
+                            } else {
+                                content
+                            }
+                        }
+                        primitive.content == "true" -> true
+                        primitive.content == "false" -> false
+                        primitive.content.toLongOrNull() != null -> primitive.content.toLong()
+                        primitive.content.toDoubleOrNull() != null -> primitive.content.toDouble()
+                        else -> primitive.content
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            logger.warn("Failed to parse metadata from JSON: ${e.message}", e)
+            emptyMap()
+        }
     }
 }
