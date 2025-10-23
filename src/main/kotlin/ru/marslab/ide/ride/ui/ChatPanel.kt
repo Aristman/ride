@@ -69,7 +69,13 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
     init {
         initializeComponents()
         buildUI()
-        loadInitialState()
+        // Инициализируем ChatService с проектом
+        chatService.initializeWithProject(project)
+
+        // Откладываем загрузку начального состояния до полной инициализации UI
+        SwingUtilities.invokeLater {
+            loadInitialState()
+        }
     }
 
     /**

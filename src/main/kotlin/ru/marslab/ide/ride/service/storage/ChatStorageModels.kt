@@ -8,8 +8,10 @@ enum class PersistentRole { USER, ASSISTANT, SYSTEM }
 
 @Serializable
 data class PersistentMessage(
+    val id: String,
     val content: String,
     val role: PersistentRole,
+    val timestamp: Long,
     val metadata: Map<String, String> = emptyMap()
 )
 

@@ -1,9 +1,9 @@
 ﻿package ru.marslab.ide.ride.ui.renderer
 
-import ru.marslab.ide.ride.model.llm.TokenUsage
 import ru.marslab.ide.ride.model.agent.AgentOutputType
 import ru.marslab.ide.ride.model.agent.FormattedOutput
 import ru.marslab.ide.ride.model.agent.FormattedOutputBlock
+import ru.marslab.ide.ride.model.llm.TokenUsage
 import ru.marslab.ide.ride.ui.config.ChatPanelConfig
 import ru.marslab.ide.ride.ui.processor.MarkdownProcessor
 import ru.marslab.ide.ride.ui.templates.*

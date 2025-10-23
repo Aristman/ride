@@ -2,6 +2,7 @@ package ru.marslab.ide.ride.service.storage
 
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.project.Project
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.builtins.ListSerializer
@@ -31,15 +32,23 @@ class ChatStorageService {
         encodeDefaults = true
     }
 
-    // ~/.idea/plugins/ride/chats/
-    private val baseDir: Path by lazy {
-        val home = System.getProperty("user.home")
-        Paths.get(home, ".idea", "plugins", "ride", "chats")
+    /**
+     * Получает базовую директорию для хранения чатов проекта
+     */
+    private fun getBaseDir(project: Project): Path {
+        val projectBasePath = project.basePath
+        return if (projectBasePath != null) {
+            Paths.get(projectBasePath, ".idea", "ride", "chats")
+        } else {
+            logger.warn("Project base path is null for ${project.name}, using fallback directory")
+            Paths.get(System.getProperty("user.home"), ".idea", "plugins", "ride", "chats")
+        }
     }
 
-    suspend fun loadAllSessions(): Pair<List<ChatSession>, Map<String, List<Message>>> = mutex.withLock {
+    suspend fun loadAllSessions(project: Project): Pair<List<ChatSession>, Map<String, List<Message>>> = mutex.withLock {
         return@withLock try {
-            val indexPath = baseDir.resolve("index.json")
+            val baseDirPath = getBaseDir(project)
+            val indexPath = baseDirPath.resolve("index.json")
             if (!indexPath.exists()) return@withLock Pair(emptyList(), emptyMap())
 
             val index = json.decodeFromString(ChatIndex.serializer(), indexPath.readText())
@@ -47,7 +56,7 @@ class ChatStorageService {
             val histories = mutableMapOf<String, List<Message>>()
 
             for (id in index.sessions) {
-                val dir = baseDir.resolve("sessions").resolve(id)
+                val dir = baseDirPath.resolve("sessions").resolve(id)
                 val metadataPath = dir.resolve("metadata.json")
                 val messagesPath = dir.resolve("messages.json")
                 if (!metadataPath.exists() || !messagesPath.exists()) continue
@@ -63,13 +72,15 @@ class ChatStorageService {
                 )
                 val messages = messagesStored.map { pm ->
                     Message(
+                        id = pm.id,
                         content = pm.content,
                         role = when (pm.role) {
                             PersistentRole.USER -> MessageRole.USER
                             PersistentRole.ASSISTANT -> MessageRole.ASSISTANT
                             PersistentRole.SYSTEM -> MessageRole.SYSTEM
                         },
-                        metadata = pm.metadata
+                        timestamp = pm.timestamp,
+                        metadata = pm.metadata.mapValues { it.value }
                     )
                 }
 
@@ -83,9 +94,10 @@ class ChatStorageService {
         }
     }
 
-    suspend fun saveSession(session: ChatSession, messages: List<Message>) = mutex.withLock {
+    suspend fun saveSession(project: Project, session: ChatSession, messages: List<Message>) = mutex.withLock {
         try {
-            val sessionsDir = baseDir.resolve("sessions").createDirectoriesIfNeeded()
+            val baseDirPath = getBaseDir(project)
+            val sessionsDir = baseDirPath.resolve("sessions").createDirectoriesIfNeeded()
             val dir = sessionsDir.resolve(session.id).createDirectoriesIfNeeded()
 
             val persistentSession = PersistentChatSession(
@@ -100,12 +112,14 @@ class ChatStorageService {
 
             val persistentMessages = messages.map { m ->
                 PersistentMessage(
+                    id = m.id,
                     content = m.content,
                     role = when (m.role) {
                         MessageRole.USER -> PersistentRole.USER
                         MessageRole.ASSISTANT -> PersistentRole.ASSISTANT
                         MessageRole.SYSTEM -> PersistentRole.SYSTEM
                     },
+                    timestamp = m.timestamp,
                     metadata = m.metadata.mapValues { it.value.toString() }
                 )
             }
@@ -113,7 +127,7 @@ class ChatStorageService {
             messagesPath.writeText(json.encodeToString(persistentMessages))
 
             // обновляем индекс
-            val indexPath = baseDir.resolve("index.json")
+            val indexPath = baseDirPath.resolve("index.json")
             val idx = if (indexPath.exists()) json.decodeFromString(ChatIndex.serializer(), indexPath.readText()) else ChatIndex()
             val updated = idx.copy(sessions = (idx.sessions + session.id).toSet().toList())
             indexPath.parent?.createDirectoriesIfNeeded()
@@ -123,13 +137,14 @@ class ChatStorageService {
         }
     }
 
-    suspend fun deleteSession(sessionId: String, withBackup: Boolean = true) = mutex.withLock {
+    suspend fun deleteSession(project: Project, sessionId: String, withBackup: Boolean = true) = mutex.withLock {
         try {
-            val dir = baseDir.resolve("sessions").resolve(sessionId)
+            val baseDirPath = getBaseDir(project)
+            val dir = baseDirPath.resolve("sessions").resolve(sessionId)
             if (!dir.exists()) return@withLock
 
             if (withBackup) {
-                val backup = baseDir.resolve("backup").resolve("${sessionId}.zip")
+                val backup = baseDirPath.resolve("backup").resolve("${sessionId}.zip")
                 runCatching { zipDirectory(dir, backup) }
             }
             // простое удаление файлов
@@ -138,7 +153,7 @@ class ChatStorageService {
                 .forEach { Files.deleteIfExists(it) }
 
             // обновляем индекс
-            val indexPath = baseDir.resolve("index.json")
+            val indexPath = baseDirPath.resolve("index.json")
             if (indexPath.exists()) {
                 val idx = json.decodeFromString(ChatIndex.serializer(), indexPath.readText())
                 val updated = idx.copy(sessions = idx.sessions.filterNot { it == sessionId })
