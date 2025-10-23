@@ -516,6 +516,7 @@ class ProjectScannerToolAgent : BaseToolAgent(
 
             val directoryTree = buildDirectoryTreeParallel(
                 root,
+                root,
                 includeMatchers,
                 excludeMatchers,
                 settings.maxDirectoryDepth ?: filterConfig.maxDirectoryDepth,
@@ -614,6 +615,7 @@ class ProjectScannerToolAgent : BaseToolAgent(
      * Параллельное построение дерева директорий с оптимизацией для больших проектов
      */
     private fun buildDirectoryTreeParallel(
+        rootPath: Path,
         path: Path,
         includeMatchers: List<PathMatcher>,
         excludeMatchers: List<PathMatcher>,
@@ -692,6 +694,7 @@ class ProjectScannerToolAgent : BaseToolAgent(
                 directoriesToProcess.forEach { dir ->
                     val future = executor.submit<Map<String, Any>>(java.util.concurrent.Callable {
                         buildDirectoryTreeParallel(
+                            rootPath,
                             dir,
                             includeMatchers,
                             excludeMatchers,
@@ -723,6 +726,7 @@ class ProjectScannerToolAgent : BaseToolAgent(
                 // Последовательно обрабатываем директории на глубоких уровнях
                 directoriesToProcess.forEach { dir ->
                     val subtree = buildDirectoryTreeParallel(
+                        rootPath,
                         dir,
                         includeMatchers,
                         excludeMatchers,
@@ -768,7 +772,7 @@ class ProjectScannerToolAgent : BaseToolAgent(
 
                                 // Создаем информацию о файле
                                 val fileInfo = EnhancedFileInfo(
-                                    path = child.pathString,
+                                    path = rootPath.relativize(child).pathString,
                                     name = child.fileName.toString(),
                                     size = fileSize,
                                     lastModified = lastModified,
