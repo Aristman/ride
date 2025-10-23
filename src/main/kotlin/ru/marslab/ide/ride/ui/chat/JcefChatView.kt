@@ -150,10 +150,10 @@ class JcefChatView : JPanel(BorderLayout()) {
         pendingScripts.clear()
     }
 }
-
 private fun String.toJSString(): String =
     this.replace("\\", "\\\\")
         .replace("\n", "\\n")
         .replace("\r", "")
         .replace("\"", "\\\"")
+        .replace("_", "\\_")
         .let { "\"$it\"" }
