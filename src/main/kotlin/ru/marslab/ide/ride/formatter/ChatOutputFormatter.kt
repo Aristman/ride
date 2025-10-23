@@ -45,11 +45,13 @@ class ChatOutputFormatter {
             val language = match.groupValues[1].ifEmpty { "text" }
             val code = match.groupValues[2].trimEnd()
 
-            blocks.add(FormattedOutputBlock.codeBlock(
-                content = code,
-                language = language,
-                order = order++
-            ))
+            blocks.add(
+                FormattedOutputBlock.codeBlock(
+                    content = code,
+                    language = language,
+                    order = order++
+                )
+            )
 
             lastIndex = match.range.last + 1
         }
@@ -291,6 +293,7 @@ class ChatOutputFormatter {
                     val code = if (parts.size > 1) parts[1] else ""
                     blocks.add(createCodeBlock(code, language, order++))
                 }
+
                 "text" -> {
                     blocks.add(createTextBlock(content, order++))
                 }

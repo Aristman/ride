@@ -1,8 +1,6 @@
 package ru.marslab.ide.ride.ui.dialogs
 
-import javax.swing.JDialog
 import javax.swing.JOptionPane
-import javax.swing.JPanel
 
 class CloseChatConfirmationDialog(parent: java.awt.Component?) {
     enum class Action { CLOSE, HIDE, CANCEL }

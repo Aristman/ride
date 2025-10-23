@@ -31,7 +31,7 @@ class TerminalOutputFormatter {
         return FormattedOutput.single(terminalBlock)
     }
 
-  
+
     /**
      * Создает содержимое для терминального блока
      */

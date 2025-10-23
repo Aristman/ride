@@ -25,7 +25,7 @@ data class ExecutionResult(
                 content = content
             )
         }
-        
+
         /**
          * Создает результат с ошибкой
          */

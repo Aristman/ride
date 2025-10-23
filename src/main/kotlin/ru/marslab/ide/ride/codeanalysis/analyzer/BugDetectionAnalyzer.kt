@@ -5,7 +5,7 @@ import ru.marslab.ide.ride.model.codeanalysis.Finding
 import ru.marslab.ide.ride.model.codeanalysis.FindingType
 import ru.marslab.ide.ride.model.codeanalysis.Severity
 import ru.marslab.ide.ride.model.llm.LLMParameters
-import java.util.UUID
+import java.util.*
 
 /**
  * Анализатор для поиска багов и потенциальных проблем в коде
@@ -15,7 +15,7 @@ class BugDetectionAnalyzer(
 ) {
     /**
      * Анализирует код на наличие багов
-     * 
+     *
      * @param code Код для анализа
      * @param filePath Путь к файлу
      * @return Список найденных проблем
@@ -24,7 +24,7 @@ class BugDetectionAnalyzer(
         println("          BugDetectionAnalyzer.analyze() called for: $filePath")
         val language = detectLanguage(filePath)
         println("          Detected language: $language")
-        
+
         val prompt = buildBugDetectionPrompt(code, filePath, language)
         println("          Prompt length: ${prompt.length} chars")
 
@@ -46,7 +46,7 @@ class BugDetectionAnalyzer(
         println("          Parsing findings...")
         val findings = parseFindingsFromResponse(response.content, filePath, FindingType.BUG)
         println("          Parsed ${findings.size} findings")
-        
+
         return findings
     }
 
@@ -141,16 +141,20 @@ class BugDetectionAnalyzer(
                         textLine.startsWith("LINE:", ignoreCase = true) -> {
                             line = textLine.substringAfter(":").trim().toIntOrNull()
                         }
+
                         textLine.startsWith("SEVERITY:", ignoreCase = true) -> {
                             val severityStr = textLine.substringAfter(":").trim()
                             severity = parseSeverity(severityStr)
                         }
+
                         textLine.startsWith("TITLE:", ignoreCase = true) -> {
                             title = textLine.substringAfter(":").trim()
                         }
+
                         textLine.startsWith("DESCRIPTION:", ignoreCase = true) -> {
                             description = textLine.substringAfter(":").trim()
                         }
+
                         textLine.startsWith("SUGGESTION:", ignoreCase = true) -> {
                             suggestion = textLine.substringAfter(":").trim()
                         }

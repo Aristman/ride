@@ -1,8 +1,8 @@
 package ru.marslab.ide.ride.ui.chat
 
 import com.intellij.ui.jcef.JBCefBrowser
-import org.cef.handler.CefLoadHandlerAdapter
 import org.cef.browser.CefBrowser
+import org.cef.handler.CefLoadHandlerAdapter
 import java.awt.BorderLayout
 import javax.swing.JComponent
 import javax.swing.JPanel
@@ -14,6 +14,7 @@ import javax.swing.JPanel
  */
 class JcefChatView : JPanel(BorderLayout()) {
     private val browser = JBCefBrowser()
+
     // Флаг готовности страницы и очередь скриптов для выполнения после загрузки
     private var isReady: Boolean = false
     private val pendingScripts = mutableListOf<String>()
@@ -75,7 +76,8 @@ class JcefChatView : JPanel(BorderLayout()) {
      * Добавляет или обновляет сообщение о статусе tool agent
      */
     fun addOrUpdateToolAgentStatus(html: String, statusId: String) {
-        exec("""
+        exec(
+            """
             if (document.getElementById('status-${statusId}')) {
                 // Обновляем существующий статус
                 const existingElement = document.getElementById('status-${statusId}');
@@ -84,20 +86,23 @@ class JcefChatView : JPanel(BorderLayout()) {
                 // Добавляем новый статус
                 window.__ride_appendHtml && window.__ride_appendHtml(${html.toJSString()});
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     /**
      * Удаляет сообщение о статусе tool agent
      */
     fun removeToolAgentStatus(statusId: String) {
-        exec("""
+        exec(
+            """
             const element = document.getElementById('status-${statusId}');
             if (element) {
                 element.classList.add('fade-out');
                 setTimeout(() => element.remove(), 300);
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
     }
 
     /**
@@ -112,7 +117,8 @@ class JcefChatView : JPanel(BorderLayout()) {
      * Постоянные системные сообщения (о сжатии истории и т.д.) остаются
      */
     fun removeLoadingSystemMessage() {
-        exec("""
+        exec(
+            """
             (function() {
                 const messages = document.querySelectorAll('.msg.system');
                 for (let i = messages.length - 1; i >= 0; i--) {
@@ -123,7 +129,8 @@ class JcefChatView : JPanel(BorderLayout()) {
                     }
                 }
             })();
-        """)
+        """
+        )
     }
 
     private fun exec(script: String) {

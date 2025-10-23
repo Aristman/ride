@@ -155,9 +155,11 @@ class HuggingFaceProvider(
                 val httpResponse = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString())
                 return when (httpResponse.statusCode()) {
                     200 -> {
-                        val hfResponse = json.decodeFromString(HFChatCompletionsResponse.serializer(), httpResponse.body())
+                        val hfResponse =
+                            json.decodeFromString(HFChatCompletionsResponse.serializer(), httpResponse.body())
                         parseSuccessResponse(hfResponse)
                     }
+
                     401 -> LLMResponse.error("Неверный API ключ Hugging Face. Проверьте настройки.")
                     429 -> {
                         if (attempt < maxRetries - 1) {
@@ -169,6 +171,7 @@ class HuggingFaceProvider(
                             LLMResponse.error("Превышен лимит запросов Hugging Face. Попробуйте позже.")
                         }
                     }
+
                     else -> {
                         logger.error("HF API error: ${httpResponse.statusCode()}, body: ${httpResponse.body()}")
                         LLMResponse.error("Ошибка HF API: ${httpResponse.statusCode()}")

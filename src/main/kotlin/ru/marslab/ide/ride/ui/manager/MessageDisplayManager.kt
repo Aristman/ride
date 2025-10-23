@@ -1,6 +1,7 @@
 package ru.marslab.ide.ride.ui.manager
 
 import com.intellij.openapi.components.service
+import ru.marslab.ide.ride.model.agent.FormattedOutput
 import ru.marslab.ide.ride.model.chat.Message
 import ru.marslab.ide.ride.model.chat.MessageRole
 import ru.marslab.ide.ride.model.llm.TokenUsage
@@ -8,7 +9,6 @@ import ru.marslab.ide.ride.service.ChatService
 import ru.marslab.ide.ride.settings.PluginSettings
 import ru.marslab.ide.ride.ui.config.ChatPanelConfig
 import ru.marslab.ide.ride.ui.renderer.ChatContentRenderer
-import ru.marslab.ide.ride.model.agent.FormattedOutput
 import java.util.*
 
 /**
@@ -110,7 +110,7 @@ class MessageDisplayManager(
         // Определяем тип сообщения из metadata
         val messageType = message.metadata["type"] as? String
         val isProgress = message.metadata["isProgress"] as? Boolean ?: false
-        
+
         // Выбираем способ рендеринга в зависимости от типа сообщения
         val bodyHtml = when {
             // Сообщения прогресса tool agents уже содержат готовый HTML

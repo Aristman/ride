@@ -39,7 +39,7 @@ data class JsonRpcResponse(
      * Проверяет, успешен ли ответ
      */
     fun isSuccess(): Boolean = error == null && result != null
-    
+
     /**
      * Проверяет, есть ли ошибка
      */
@@ -66,35 +66,35 @@ data class JsonRpcError(
         const val METHOD_NOT_FOUND = -32601
         const val INVALID_PARAMS = -32602
         const val INTERNAL_ERROR = -32603
-        
+
         /**
          * Создает ошибку парсинга
          */
         fun parseError(message: String = "Parse error"): JsonRpcError {
             return JsonRpcError(PARSE_ERROR, message)
         }
-        
+
         /**
          * Создает ошибку невалидного запроса
          */
         fun invalidRequest(message: String = "Invalid request"): JsonRpcError {
             return JsonRpcError(INVALID_REQUEST, message)
         }
-        
+
         /**
          * Создает ошибку "метод не найден"
          */
         fun methodNotFound(method: String): JsonRpcError {
             return JsonRpcError(METHOD_NOT_FOUND, "Method not found: $method")
         }
-        
+
         /**
          * Создает ошибку невалидных параметров
          */
         fun invalidParams(message: String = "Invalid params"): JsonRpcError {
             return JsonRpcError(INVALID_PARAMS, message)
         }
-        
+
         /**
          * Создает внутреннюю ошибку
          */

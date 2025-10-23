@@ -104,9 +104,9 @@ data class ExecutionPlan(
     fun getReadySteps(): List<PlanStep> {
         return steps.filter { step ->
             step.status == StepStatus.PENDING &&
-            step.dependencies.all { depId ->
-                steps.find { it.id == depId }?.status == StepStatus.COMPLETED
-            }
+                    step.dependencies.all { depId ->
+                        steps.find { it.id == depId }?.status == StepStatus.COMPLETED
+                    }
         }
     }
 
@@ -120,7 +120,12 @@ data class ExecutionPlan(
     /**
      * Обновляет статус шага
      */
-    fun updateStepStatus(stepId: String, status: StepStatus, output: Any? = null, error: String? = null): ExecutionPlan {
+    fun updateStepStatus(
+        stepId: String,
+        status: StepStatus,
+        output: Any? = null,
+        error: String? = null
+    ): ExecutionPlan {
         val updatedSteps = steps.map { step ->
             if (step.id == stepId) {
                 step.copy(

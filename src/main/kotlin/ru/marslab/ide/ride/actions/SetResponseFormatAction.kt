@@ -5,9 +5,8 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.components.service
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.Messages
-import org.jetbrains.annotations.Nullable
-import ru.marslab.ide.ride.model.schema.ResponseFormat
 import ru.marslab.ide.ride.model.schema.JsonResponseSchema
+import ru.marslab.ide.ride.model.schema.ResponseFormat
 import ru.marslab.ide.ride.model.schema.XmlResponseSchema
 import ru.marslab.ide.ride.service.ChatService
 import java.awt.BorderLayout
@@ -37,6 +36,7 @@ class SetResponseFormatAction : AnAction("Set Response Format...") {
                     chatService.clearResponseFormat()
                     Messages.showInfoMessage(project, "Формат сброшен на TEXT.", "Формат изменён")
                 }
+
                 ResponseFormat.JSON -> {
                     val schema = if (schemaText.isBlank())
                         JsonResponseSchema.create("{}", "Структурированный JSON ответ")
@@ -45,6 +45,7 @@ class SetResponseFormatAction : AnAction("Set Response Format...") {
                     chatService.setResponseFormat(ResponseFormat.JSON, schema)
                     Messages.showInfoMessage(project, "JSON формат установлен.", "Формат изменён")
                 }
+
                 ResponseFormat.XML -> {
                     val schema = if (schemaText.isBlank())
                         XmlResponseSchema.create("<root></root>", "Структурированный XML ответ")

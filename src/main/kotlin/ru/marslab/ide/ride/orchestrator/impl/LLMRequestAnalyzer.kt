@@ -1,18 +1,16 @@
 package ru.marslab.ide.ride.orchestrator.impl
 
 import com.intellij.openapi.diagnostic.Logger
-import com.intellij.openapi.project.ProjectManager
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import ru.marslab.ide.ride.agent.UncertaintyAnalyzer
 import ru.marslab.ide.ride.integration.llm.LLMProvider
+import ru.marslab.ide.ride.model.chat.ChatContext
 import ru.marslab.ide.ride.model.llm.LLMParameters
-import ru.marslab.ide.ride.model.llm.TokenUsage
 import ru.marslab.ide.ride.model.orchestrator.*
 import ru.marslab.ide.ride.orchestrator.RequestAnalyzer
-import ru.marslab.ide.ride.agent.UncertaintyAnalyzer
-import ru.marslab.ide.ride.model.chat.ChatContext
 
 /**
  * Реализация RequestAnalyzer на основе LLM
@@ -283,22 +281,27 @@ class LLMRequestAnalyzer(
                 tools.add(AgentType.LLM_REVIEW)
                 // CODE_FIXER не добавляем, т.к. агент отсутствует в реализации/регистрации
             }
+
             TaskType.CODE_ANALYSIS -> {
                 tools.add(AgentType.PROJECT_SCANNER)
                 tools.add(AgentType.CODE_QUALITY)
                 tools.add(AgentType.LLM_REVIEW)
             }
+
             TaskType.ARCHITECTURE_ANALYSIS -> {
                 tools.add(AgentType.PROJECT_SCANNER)
                 tools.add(AgentType.ARCHITECTURE_ANALYSIS)
             }
+
             TaskType.PERFORMANCE_OPTIMIZATION -> {
                 tools.add(AgentType.PROJECT_SCANNER)
                 tools.add(AgentType.PERFORMANCE_ANALYZER)
             }
+
             TaskType.REPORT_GENERATION -> {
                 tools.add(AgentType.PROJECT_SCANNER)
             }
+
             else -> {
                 // Для остальных типов хотя бы сканер + отчёт
                 tools.add(AgentType.PROJECT_SCANNER)

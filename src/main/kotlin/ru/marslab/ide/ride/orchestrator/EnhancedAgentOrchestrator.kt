@@ -8,10 +8,8 @@ import ru.marslab.ide.ride.agent.UncertaintyAnalyzer
 import ru.marslab.ide.ride.integration.llm.LLMProvider
 import ru.marslab.ide.ride.model.agent.AgentRequest
 import ru.marslab.ide.ride.model.agent.AgentResponse
-import ru.marslab.ide.ride.model.chat.ChatContext
 import ru.marslab.ide.ride.model.chat.ToolAgentExecutionStatus
 import ru.marslab.ide.ride.model.chat.ToolAgentStatusManager
-import ru.marslab.ide.ride.model.llm.LLMParameters
 import ru.marslab.ide.ride.model.orchestrator.*
 import ru.marslab.ide.ride.model.tool.StepInput
 import ru.marslab.ide.ride.model.tool.ToolPlanStep
@@ -67,7 +65,7 @@ class EnhancedAgentOrchestrator(
         progressListeners.remove(listener)
     }
 
-    
+
     /**
      * Обрабатывает запрос пользователя с использованием расширенного оркестратора
      */
@@ -295,7 +293,7 @@ class EnhancedAgentOrchestrator(
         progressTracker.removeListener(this)
         toolAgentRegistry.clear()
     }
-    
+
     /**
      * Возвращает реестр Tool Agents для регистрации агентов
      */
@@ -470,7 +468,7 @@ class EnhancedAgentOrchestrator(
                     } else {
                         executeStep(step, executingPlan.analysis.context, stepResults)
                     }
-                    
+
                     completedSteps.add(step.id)
                     stepResults[step.id] = stepResult // Сохраняем результат
 
@@ -487,26 +485,27 @@ class EnhancedAgentOrchestrator(
             val finalPlan = stateMachine.transition(executingPlan, PlanEvent.Complete)
             activePlans[plan.id] = finalPlan
             planStorage.update(finalPlan)
-            
+
             // Извлекаем отчет из результата REPORT_GENERATOR
             val reportGeneratorStep = executingPlan.steps.find { it.agentType == AgentType.REPORT_GENERATOR }
             val finalContent = if (reportGeneratorStep != null) {
                 val reportResult = stepResults[reportGeneratorStep.id]
                 logger.info("Report result type: ${reportResult?.javaClass?.name}")
                 logger.info("Report result: $reportResult")
-                
+
                 when (reportResult) {
                     is Map<*, *> -> {
                         // Результат может быть вложенным: {output={report=..., format=..., size=...}}
                         val output = reportResult["output"]
                         logger.info("Output type: ${output?.javaClass?.name}")
-                        
+
                         when (output) {
                             is Map<*, *> -> {
                                 val report = output["report"] as? String
                                 logger.info("Extracted report length: ${report?.length}")
                                 report ?: "План успешно выполнен. Завершено ${completedSteps.size} шагов."
                             }
+
                             is String -> output
                             else -> {
                                 logger.warn("Unexpected output type: ${output?.javaClass?.name}")
@@ -514,11 +513,13 @@ class EnhancedAgentOrchestrator(
                             }
                         }
                     }
+
                     is String -> {
                         // Если результат уже строка, пытаемся извлечь report из нее
                         val reportMatch = Regex("report=(.+?), format=").find(reportResult)
                         reportMatch?.groupValues?.getOrNull(1) ?: reportResult
                     }
+
                     else -> {
                         logger.warn("Unexpected report result type: ${reportResult?.javaClass?.name}")
                         "План успешно выполнен. Завершено ${completedSteps.size} шагов."
@@ -720,12 +721,14 @@ class EnhancedAgentOrchestrator(
                 }
                 "Loop completed: ${loopResult.iterations} iterations, ${loopResult.terminationReason}"
             }
+
             step.retryPolicy != null -> {
                 // Выполнение с retry
                 retryLoopExecutor.executeWithRetry(step) { s ->
                     executeStepCore(s, executionContext, previousResults)
                 }
             }
+
             else -> {
                 executeStepCore(step, executionContext, previousResults)
             }
@@ -786,7 +789,9 @@ class EnhancedAgentOrchestrator(
                     .take(maxCount)
                     .map { it.absolutePath }
                     .toList()
-            } catch (_: Exception) { emptyList() }
+            } catch (_: Exception) {
+                emptyList()
+            }
         }
 
         // Для BUG_DETECTION/CODE_QUALITY/LLM_REVIEW/ARCHITECTURE_ANALYSIS гарантируем непустой 'files'

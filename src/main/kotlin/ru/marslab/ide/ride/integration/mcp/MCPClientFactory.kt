@@ -7,10 +7,10 @@ import ru.marslab.ide.ride.model.mcp.MCPServerType
  * Фабрика для создания MCP клиентов
  */
 object MCPClientFactory {
-    
+
     /**
      * Создает клиент на основе конфигурации
-     * 
+     *
      * @param config Конфигурация сервера
      * @param timeout Таймаут операций в миллисекундах (по умолчанию 30 секунд)
      * @return MCP клиент

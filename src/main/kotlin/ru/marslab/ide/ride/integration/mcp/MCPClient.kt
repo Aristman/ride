@@ -10,42 +10,42 @@ import ru.marslab.ide.ride.model.mcp.MCPMethodResult
 interface MCPClient {
     /**
      * Подключается к серверу
-     * 
+     *
      * @return true если подключение успешно
      * @throws MCPConnectionException если не удалось подключиться
      */
     suspend fun connect(): Boolean
-    
+
     /**
      * Отключается от сервера
      */
     suspend fun disconnect()
-    
+
     /**
      * Проверяет, подключен ли клиент
-     * 
+     *
      * @return true если подключен
      */
     fun isConnected(): Boolean
-    
+
     /**
      * Получает список доступных методов
-     * 
+     *
      * @return Список методов
      * @throws MCPException если произошла ошибка
      */
     suspend fun listMethods(): List<MCPMethod>
-    
+
     /**
      * Вызывает метод сервера
-     * 
+     *
      * @param methodName Имя метода
      * @param arguments Аргументы метода
      * @return Результат вызова
      * @throws MCPException если произошла ошибка
      */
     suspend fun callMethod(methodName: String, arguments: JsonElement?): MCPMethodResult
-    
+
     /**
      * Получает имя сервера
      */

@@ -22,17 +22,17 @@ data class MCPServerStatus(
      * Проверяет, есть ли ошибка
      */
     fun hasError(): Boolean = error != null
-    
+
     /**
      * Проверяет, есть ли доступные методы
      */
     fun hasMethods(): Boolean = methods.isNotEmpty()
-    
+
     /**
      * Получает количество доступных методов
      */
     fun getMethodCount(): Int = methods.size
-    
+
     /**
      * Создает копию с обновленным статусом подключения
      */
@@ -44,14 +44,14 @@ data class MCPServerStatus(
             lastError = if (!connected && error != null) System.currentTimeMillis() else lastError
         )
     }
-    
+
     /**
      * Создает копию с обновленным списком методов
      */
     fun withMethods(methods: List<MCPMethod>): MCPServerStatus {
         return copy(methods = methods)
     }
-    
+
     /**
      * Создает копию с ошибкой
      */

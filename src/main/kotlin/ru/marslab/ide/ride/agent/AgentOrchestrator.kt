@@ -4,15 +4,15 @@ import com.intellij.openapi.diagnostic.Logger
 import ru.marslab.ide.ride.agent.impl.ExecutorAgent
 import ru.marslab.ide.ride.agent.impl.PlannerAgent
 import ru.marslab.ide.ride.integration.llm.LLMProvider
-import ru.marslab.ide.ride.model.agent.*
-import ru.marslab.ide.ride.model.chat.*
-import ru.marslab.ide.ride.model.llm.*
-import ru.marslab.ide.ride.model.task.*
-import ru.marslab.ide.ride.model.schema.*
+import ru.marslab.ide.ride.model.agent.AgentRequest
+import ru.marslab.ide.ride.model.agent.AgentResponse
+import ru.marslab.ide.ride.model.llm.TokenUsage
+import ru.marslab.ide.ride.model.schema.TaskPlanData
+import ru.marslab.ide.ride.model.task.ExecutionResult
 
 /**
  * Оркестратор для координации работы PlannerAgent и ExecutorAgent
- * 
+ *
  * Управляет процессом:
  * 1. PlannerAgent создает план задач
  * 2. ExecutorAgent выполняет каждую задачу по очереди
@@ -30,7 +30,7 @@ class AgentOrchestrator(
 
     /**
      * Обрабатывает запрос пользователя через систему двух агентов
-     * 
+     *
      * @param request Запрос к агенту
      * @param onStepComplete Callback для каждого шага выполнения
      * @return Итоговый результат выполнения
@@ -40,17 +40,17 @@ class AgentOrchestrator(
         onStepComplete: suspend (OrchestratorStep) -> Unit
     ): AgentResponse {
         logger.info("Starting orchestration for request")
-        
+
         try {
             // Шаг 1: PlannerAgent создает план
             logger.info("Step 1: Creating task plan with PlannerAgent")
             val planStartTime = System.currentTimeMillis()
             val planResponse = plannerAgent.ask(request)
             val planResponseTime = System.currentTimeMillis() - planStartTime
-            
+
             // Извлекаем информацию о токенах
             val planTokenUsage = planResponse.metadata["tokenUsage"] as? TokenUsage ?: TokenUsage.EMPTY
-            
+
             // Отправляем результат планирования в чат
             onStepComplete(
                 OrchestratorStep.PlanningComplete(
@@ -62,7 +62,7 @@ class AgentOrchestrator(
                     tokenUsage = planTokenUsage
                 )
             )
-            
+
             // Если планирование не удалось, возвращаем ошибку
             if (!planResponse.success) {
                 logger.warn("Planning failed: ${planResponse.error}")
@@ -71,7 +71,7 @@ class AgentOrchestrator(
                     content = planResponse.content
                 )
             }
-            
+
             // Извлекаем план из ответа
             val parsedPlan = planResponse.parsedContent as? TaskPlanData
             if (parsedPlan == null) {
@@ -81,48 +81,48 @@ class AgentOrchestrator(
                     content = "Внутренняя ошибка при обработке плана"
                 )
             }
-            
+
             val plan = parsedPlan.plan
             logger.info("Plan created with ${plan.size()} tasks")
-            
+
             // Шаг 2: ExecutorAgent выполняет каждую задачу
             val executionResults = mutableListOf<ExecutionResult>()
             var totalExecutionTime = 0L
             var totalInputTokens = 0
             var totalOutputTokens = 0
-            
+
             for (task in plan.tasks) {
                 logger.info("Executing task ${task.id}: ${task.title}")
-                
+
                 // Создаем запрос для ExecutorAgent с промптом задачи
                 val executorRequest = AgentRequest(
                     request = task.prompt,
                     context = request.context,
                     parameters = request.parameters
                 )
-                
+
                 // Выполняем задачу и измеряем время
                 val taskStartTime = System.currentTimeMillis()
                 val executorResponse = executorAgent.ask(executorRequest)
                 val taskResponseTime = System.currentTimeMillis() - taskStartTime
-                
+
                 // Извлекаем информацию о токенах
                 val taskTokenUsage = executorResponse.metadata["tokenUsage"] as? TokenUsage ?: TokenUsage.EMPTY
-                
+
                 // Суммируем статистику
                 totalExecutionTime += taskResponseTime
                 totalInputTokens += taskTokenUsage.inputTokens
                 totalOutputTokens += taskTokenUsage.outputTokens
-                
+
                 // Создаем результат выполнения
                 val result = if (executorResponse.success) {
                     ExecutionResult.success(task.id, executorResponse.content)
                 } else {
                     ExecutionResult.error(task.id, executorResponse.error ?: "Неизвестная ошибка")
                 }
-                
+
                 executionResults.add(result)
-                
+
                 // Отправляем результат выполнения задачи в чат
                 onStepComplete(
                     OrchestratorStep.TaskComplete(
@@ -136,17 +136,17 @@ class AgentOrchestrator(
                         tokenUsage = taskTokenUsage
                     )
                 )
-                
+
                 // Если задача не выполнена, показываем ошибку но продолжаем
                 if (!executorResponse.success) {
                     logger.warn("Task ${task.id} failed: ${executorResponse.error}")
                 }
             }
-            
+
             // Формируем итоговый результат
             val successfulTasks = executionResults.count { it.success }
             val totalTasks = executionResults.size
-            
+
             // Общая статистика (планирование + выполнение)
             val totalTime = planResponseTime + totalExecutionTime
             val totalTokens = planTokenUsage.totalTokens + totalInputTokens + totalOutputTokens
@@ -155,7 +155,7 @@ class AgentOrchestrator(
                 outputTokens = planTokenUsage.outputTokens + totalOutputTokens,
                 totalTokens = totalTokens
             )
-            
+
             val summaryContent = buildString {
                 appendLine("✅ **Выполнение завершено**")
                 appendLine()
@@ -173,7 +173,7 @@ class AgentOrchestrator(
                     appendLine("- Всего токенов: $totalTokens (↑${totalTokenUsage.inputTokens} ↓${totalTokenUsage.outputTokens})")
                 }
             }
-            
+
             // Отправляем итоговую сводку
             onStepComplete(
                 OrchestratorStep.AllComplete(
@@ -184,7 +184,7 @@ class AgentOrchestrator(
                     totalTokenUsage = totalTokenUsage
                 )
             )
-            
+
             return AgentResponse.success(
                 content = summaryContent,
                 metadata = mapOf(
@@ -193,7 +193,7 @@ class AgentOrchestrator(
                     "failedTasks" to (totalTasks - successfulTasks)
                 )
             )
-            
+
         } catch (e: Exception) {
             logger.error("Error during orchestration", e)
             val errorStep = OrchestratorStep.Error(
@@ -201,14 +201,14 @@ class AgentOrchestrator(
                 content = "Произошла ошибка при выполнении задач"
             )
             onStepComplete(errorStep)
-            
+
             return AgentResponse.error(
                 error = e.message ?: "Неизвестная ошибка",
                 content = "Произошла ошибка при координации агентов"
             )
         }
     }
-    
+
     /**
      * Освобождает ресурсы
      */
@@ -234,7 +234,7 @@ sealed class OrchestratorStep {
         val responseTimeMs: Long = 0,
         val tokenUsage: TokenUsage = TokenUsage.EMPTY
     ) : OrchestratorStep()
-    
+
     /**
      * Задача выполнена
      */
@@ -248,7 +248,7 @@ sealed class OrchestratorStep {
         val responseTimeMs: Long = 0,
         val tokenUsage: TokenUsage = TokenUsage.EMPTY
     ) : OrchestratorStep()
-    
+
     /**
      * Все задачи выполнены
      */
@@ -259,7 +259,7 @@ sealed class OrchestratorStep {
         val totalTimeMs: Long = 0,
         val totalTokenUsage: TokenUsage = TokenUsage.EMPTY
     ) : OrchestratorStep()
-    
+
     /**
      * Ошибка выполнения
      */

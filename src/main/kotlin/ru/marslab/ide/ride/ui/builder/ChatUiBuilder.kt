@@ -1,19 +1,17 @@
 package ru.marslab.ide.ride.ui.builder
 
 import com.intellij.openapi.actionSystem.ActionManager
-import com.intellij.openapi.actionSystem.ActionToolbar
 import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTabbedPane
 import com.intellij.ui.components.JBTextArea
 import com.intellij.util.ui.JBUI
 import ru.marslab.ide.ride.service.ChatService
-import ru.marslab.ide.ride.ui.config.ChatPanelConfig
-import ru.marslab.ide.ride.ui.manager.HtmlDocumentManager
-import ru.marslab.ide.ride.ui.manager.MessageDisplayManager
 import ru.marslab.ide.ride.ui.ChatPanel
 import ru.marslab.ide.ride.ui.components.ClosableTabbedPane
+import ru.marslab.ide.ride.ui.config.ChatPanelConfig
 import ru.marslab.ide.ride.ui.dialogs.CloseChatConfirmationDialog
+import ru.marslab.ide.ride.ui.manager.HtmlDocumentManager
 import java.awt.BorderLayout
 import java.awt.Dimension
 import java.awt.event.KeyAdapter
@@ -62,16 +60,18 @@ class ChatUiBuilder(
                     CloseChatConfirmationDialog.Action.CLOSE -> {
                         chatService.removeSession(session.id, deleteFromStorage = true)
                     }
+
                     CloseChatConfirmationDialog.Action.HIDE -> {
                         chatService.removeSession(session.id, deleteFromStorage = false)
                     }
+
                     CloseChatConfirmationDialog.Action.CANCEL -> return
                 }
                 refreshTabs(sessionsTabs)
                 parent?.refreshAppearance()
             }
         }
-        
+
         // Label для отображения размера контекста
         val contextSizeLabel = JLabel("Контекст: 0 токенов")
         contextSizeLabel.border = BorderFactory.createEmptyBorder(2, 8, 2, 8)

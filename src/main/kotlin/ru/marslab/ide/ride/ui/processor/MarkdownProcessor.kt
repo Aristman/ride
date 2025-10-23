@@ -153,7 +153,10 @@ class MarkdownProcessor {
                 if (i < lines.size - 1) {
                     val nextLine = lines[i + 1].trim()
                     // Если следующая строка - не элемент списка, добавляем перенос
-                    if (!nextLine.startsWith("- ") && !nextLine.startsWith("* ") && !Regex("""^\d+\.\s+.*""").matches(nextLine)) {
+                    if (!nextLine.startsWith("- ") && !nextLine.startsWith("* ") && !Regex("""^\d+\.\s+.*""").matches(
+                            nextLine
+                        )
+                    ) {
                         result.append(if (isJcefMode) "<br/>" else "\n")
                     }
                 }

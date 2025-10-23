@@ -2,9 +2,6 @@ package ru.marslab.ide.ride.ui.mcp
 
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.ui.Messages
-import com.intellij.ui.AnActionButton
-import com.intellij.ui.ToolbarDecorator
 import com.intellij.util.ui.JBUI
 import kotlinx.coroutines.*
 import ru.marslab.ide.ride.model.mcp.MCPServerConfig
@@ -18,11 +15,11 @@ import javax.swing.*
  * Панель для отображения списка MCP серверов в виде карточек
  */
 class MCPServerListPanel(
-        private val project: Project,
-        private val onEditServer: (MCPServerConfig) -> Unit = {},
-        private val onDeleteServer: (MCPServerConfig) -> Unit = {},
-        private val onServerToggle: (MCPServerConfig) -> Unit = {}
-    ) : JPanel(BorderLayout()) {
+    private val project: Project,
+    private val onEditServer: (MCPServerConfig) -> Unit = {},
+    private val onDeleteServer: (MCPServerConfig) -> Unit = {},
+    private val onServerToggle: (MCPServerConfig) -> Unit = {}
+) : JPanel(BorderLayout()) {
 
     private val configService = MCPConfigService.getInstance(project)
     private val connectionManager = MCPConnectionManager.getInstance(project)
@@ -91,9 +88,9 @@ class MCPServerListPanel(
 
     fun refreshAllServersPublic(button: JButton? = null) {
         if (isRefreshing) return
-        
+
         isRefreshing = true
-        
+
         // Меняем иконку на процесс обновления
         SwingUtilities.invokeLater {
             button?.icon = AllIcons.Process.Step_1

@@ -5,6 +5,7 @@ import com.intellij.openapi.diagnostic.Logger
 import ru.marslab.ide.ride.agent.Agent
 import ru.marslab.ide.ride.agent.UncertaintyAnalyzer
 import ru.marslab.ide.ride.agent.formatter.PromptFormatter
+import ru.marslab.ide.ride.formatter.ChatOutputFormatter
 import ru.marslab.ide.ride.integration.llm.LLMProvider
 import ru.marslab.ide.ride.integration.llm.TokenCounter
 import ru.marslab.ide.ride.integration.llm.impl.TiktokenCounter
@@ -19,7 +20,6 @@ import ru.marslab.ide.ride.model.schema.*
 import ru.marslab.ide.ride.settings.PluginSettings
 import ru.marslab.ide.ride.ui.ResponseFormatter.formatJsonResponseData
 import ru.marslab.ide.ride.ui.ResponseFormatter.formatXmlResponseData
-import ru.marslab.ide.ride.formatter.ChatOutputFormatter
 
 /**
  * Универсальная реализация агента для общения с пользователем

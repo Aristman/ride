@@ -93,7 +93,11 @@ data class AgentResponse(
         /**
          * Создает ответ, требующий уточнений (неокончательный)
          */
-        fun clarification(content: String, uncertainty: Double, metadata: Map<String, Any> = emptyMap()): AgentResponse {
+        fun clarification(
+            content: String,
+            uncertainty: Double,
+            metadata: Map<String, Any> = emptyMap()
+        ): AgentResponse {
             return AgentResponse(
                 content = content,
                 success = true,
@@ -102,7 +106,7 @@ data class AgentResponse(
                 metadata = metadata
             )
         }
-        
+
         /**
          * Создает успешный ответ с форматированным выводом
          */

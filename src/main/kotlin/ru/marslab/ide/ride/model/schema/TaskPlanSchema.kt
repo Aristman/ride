@@ -1,21 +1,21 @@
 ﻿package ru.marslab.ide.ride.model.schema
 
-import ru.marslab.ide.ride.model.task.TaskPlan
-import ru.marslab.ide.ride.model.task.TaskItem
 import kotlinx.serialization.json.Json
 import org.w3c.dom.Element
+import ru.marslab.ide.ride.model.task.TaskItem
+import ru.marslab.ide.ride.model.task.TaskPlan
 import javax.xml.parsers.DocumentBuilderFactory
 
 /**
  * Схема для парсинга плана задач от PlannerAgent
  */
 object TaskPlanSchema {
-    
-    private val json = Json { 
+
+    private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
     }
-    
+
     /**
      * Создает JSON схему для плана задач
      */
@@ -33,10 +33,10 @@ object TaskPlanSchema {
   ]
 }
         """.trimIndent()
-        
+
         return TaskPlanJsonSchema(schemaDefinition)
     }
-    
+
     /**
      * Создает XML схему для плана задач
      */
@@ -53,10 +53,10 @@ object TaskPlanSchema {
   </tasks>
 </plan>
         """.trimIndent()
-        
+
         return TaskPlanXmlSchema(schemaDefinition)
     }
-    
+
     /**
      * Парсит план из JSON
      */
@@ -70,7 +70,7 @@ object TaskPlanSchema {
             null
         }
     }
-    
+
     /**
      * Парсит план из XML
      */
@@ -78,17 +78,17 @@ object TaskPlanSchema {
         return try {
             // Извлекаем XML из markdown блока если есть
             val xmlContent = extractXmlFromMarkdown(content)
-            
+
             val factory = DocumentBuilderFactory.newInstance()
             val builder = factory.newDocumentBuilder()
             val doc = builder.parse(xmlContent.byteInputStream())
-            
+
             val root = doc.documentElement
             val description = root.getElementsByTagName("description").item(0)?.textContent ?: ""
-            
+
             val tasksElement = root.getElementsByTagName("tasks").item(0) as? Element
             val taskNodes = tasksElement?.getElementsByTagName("task")
-            
+
             val tasks = mutableListOf<TaskItem>()
             if (taskNodes != null) {
                 for (i in 0 until taskNodes.length) {
@@ -97,18 +97,18 @@ object TaskPlanSchema {
                     val title = taskElement.getElementsByTagName("title").item(0)?.textContent ?: ""
                     val desc = taskElement.getElementsByTagName("description").item(0)?.textContent ?: ""
                     val prompt = taskElement.getElementsByTagName("prompt").item(0)?.textContent ?: ""
-                    
+
                     tasks.add(TaskItem(id, title, desc, prompt))
                 }
             }
-            
+
             val plan = TaskPlan(description, tasks)
             TaskPlanData(rawContent = content, plan = plan)
         } catch (e: Exception) {
             null
         }
     }
-    
+
     /**
      * Извлекает JSON из markdown блока
      */
@@ -117,7 +117,7 @@ object TaskPlanSchema {
         val match = jsonBlockRegex.find(content)
         return match?.groupValues?.get(1)?.trim() ?: content.trim()
     }
-    
+
     /**
      * Извлекает XML из markdown блока
      */
@@ -145,11 +145,11 @@ class TaskPlanJsonSchema(
     override val schemaDefinition: String,
     override val description: String = "План задач в формате JSON"
 ) : ResponseSchema {
-    
+
     override val format: ResponseFormat = ResponseFormat.JSON
-    
+
     override fun isValid(): Boolean = schemaDefinition.isNotBlank()
-    
+
     override fun parseResponse(rawContent: String): TaskPlanData? {
         return TaskPlanSchema.parseJsonPlan(rawContent)
     }
@@ -162,11 +162,11 @@ class TaskPlanXmlSchema(
     override val schemaDefinition: String,
     override val description: String = "План задач в формате XML"
 ) : ResponseSchema {
-    
+
     override val format: ResponseFormat = ResponseFormat.XML
-    
+
     override fun isValid(): Boolean = schemaDefinition.isNotBlank()
-    
+
     override fun parseResponse(rawContent: String): TaskPlanData? {
         return TaskPlanSchema.parseXmlPlan(rawContent)
     }

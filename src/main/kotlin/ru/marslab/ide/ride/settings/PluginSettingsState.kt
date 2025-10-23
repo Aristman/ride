@@ -2,7 +2,7 @@ package ru.marslab.ide.ride.settings
 
 /**
  * State класс для хранения настроек плагина
- * 
+ *
  * Используется для персистентности настроек между сессиями IDE
  */
 data class PluginSettingsState(

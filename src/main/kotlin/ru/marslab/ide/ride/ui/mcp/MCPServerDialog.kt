@@ -7,7 +7,9 @@ import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.ui.ValidationInfo
 import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.components.JBTextField
-import com.intellij.ui.dsl.builder.*
+import com.intellij.ui.dsl.builder.AlignX
+import com.intellij.ui.dsl.builder.columns
+import com.intellij.ui.dsl.builder.panel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -27,53 +29,53 @@ class MCPServerDialog(
     private val project: Project,
     private val existingServer: MCPServerConfig?
 ) : DialogWrapper(project) {
-    
+
     private lateinit var nameField: JBTextField
     private lateinit var typeComboBox: ComboBox<MCPServerType>
     private lateinit var enabledCheckBox: JBCheckBox
-    
+
     // Поля для STDIO
     private lateinit var commandField: JBTextField
     private lateinit var argsField: JBTextField
     private lateinit var envField: JBTextField
-    
+
     // Поля для HTTP
     private lateinit var urlField: JBTextField
     private lateinit var headersField: JBTextField
-    
+
     private lateinit var cardPanel: JPanel
     private lateinit var cardLayout: CardLayout
-    
+
     private var serverConfig: MCPServerConfig? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-    
+
     init {
         title = if (existingServer == null) "Add MCP Server" else "Edit MCP Server"
         init()
     }
-    
+
     override fun createCenterPanel(): JComponent {
         cardLayout = CardLayout()
         cardPanel = JPanel(cardLayout)
-        
+
         // Создаем панели для разных типов
         val stdioPanel = createStdioPanel()
         val httpPanel = createHttpPanel()
-        
+
         cardPanel.add(stdioPanel, MCPServerType.STDIO.name)
         cardPanel.add(httpPanel, MCPServerType.HTTP.name)
-        
+
         return panel {
             row("Name:") {
                 nameField = textField()
                     .columns(30)
                     .component
             }
-            
+
             row("Type:") {
                 typeComboBox = comboBox(MCPServerType.values().toList())
                     .component
-                
+
                 typeComboBox.addActionListener {
                     val selectedType = typeComboBox.selectedItem as? MCPServerType
                     if (selectedType != null) {
@@ -81,12 +83,12 @@ class MCPServerDialog(
                     }
                 }
             }
-            
+
             row {
                 cell(cardPanel)
                     .align(AlignX.FILL)
             }
-            
+
             row {
                 enabledCheckBox = checkBox("Enabled")
                     .component
@@ -97,19 +99,20 @@ class MCPServerDialog(
                 nameField.text = server.name
                 typeComboBox.selectedItem = server.type
                 enabledCheckBox.isSelected = server.enabled
-                
+
                 when (server.type) {
                     MCPServerType.STDIO -> {
                         commandField.text = server.command ?: ""
                         argsField.text = server.args.joinToString(" ")
                         envField.text = server.env.entries.joinToString(";") { "${it.key}=${it.value}" }
                     }
+
                     MCPServerType.HTTP -> {
                         urlField.text = server.url ?: ""
                         headersField.text = server.headers.entries.joinToString(";") { "${it.key}: ${it.value}" }
                     }
                 }
-                
+
                 cardLayout.show(cardPanel, server.type.name)
             } ?: run {
                 // Значения по умолчанию для нового сервера
@@ -119,7 +122,7 @@ class MCPServerDialog(
             }
         }
     }
-    
+
     private fun createStdioPanel(): JComponent {
         return panel {
             row("Command:") {
@@ -128,14 +131,14 @@ class MCPServerDialog(
                     .comment("Executable command (e.g., 'node', 'python')")
                     .component
             }
-            
+
             row("Arguments:") {
                 argsField = textField()
                     .columns(30)
                     .comment("Space-separated arguments (e.g., 'path/to/script.js --option')")
                     .component
             }
-            
+
             row("Environment:") {
                 envField = textField()
                     .columns(30)
@@ -144,7 +147,7 @@ class MCPServerDialog(
             }
         }
     }
-    
+
     private fun createHttpPanel(): JComponent {
         return panel {
             row("URL:") {
@@ -153,14 +156,14 @@ class MCPServerDialog(
                     .comment("HTTP endpoint URL (e.g., 'http://localhost:3000/mcp')")
                     .component
             }
-            
+
             row("Headers:") {
                 headersField = textField()
                     .columns(30)
                     .comment("Semicolon-separated headers (e.g., 'Authorization: Bearer TOKEN;X-Custom: value')")
                     .component
             }
-            
+
             row {
                 button("Test Connection") {
                     testConnection()
@@ -168,16 +171,16 @@ class MCPServerDialog(
             }
         }
     }
-    
+
     override fun doValidate(): ValidationInfo? {
         val name = nameField.text.trim()
         if (name.isEmpty()) {
             return ValidationInfo("Name is required", nameField)
         }
-        
+
         val type = typeComboBox.selectedItem as? MCPServerType
             ?: return ValidationInfo("Type is required", typeComboBox)
-        
+
         return when (type) {
             MCPServerType.STDIO -> {
                 val command = commandField.text.trim()
@@ -187,6 +190,7 @@ class MCPServerDialog(
                     null
                 }
             }
+
             MCPServerType.HTTP -> {
                 val url = urlField.text.trim()
                 if (url.isEmpty()) {
@@ -199,12 +203,12 @@ class MCPServerDialog(
             }
         }
     }
-    
+
     override fun doOKAction() {
         val name = nameField.text.trim()
         val type = typeComboBox.selectedItem as MCPServerType
         val enabled = enabledCheckBox.isSelected
-        
+
         serverConfig = when (type) {
             MCPServerType.STDIO -> {
                 val command = commandField.text.trim()
@@ -212,7 +216,7 @@ class MCPServerDialog(
                     .split("\\s+".toRegex())
                     .filter { it.isNotEmpty() }
                 val env = parseEnvironment(envField.text.trim())
-                
+
                 MCPServerConfig(
                     name = name,
                     type = type,
@@ -222,10 +226,11 @@ class MCPServerDialog(
                     enabled = enabled
                 )
             }
+
             MCPServerType.HTTP -> {
                 val url = urlField.text.trim()
                 val headers = parseHeaders(headersField.text.trim())
-                
+
                 MCPServerConfig(
                     name = name,
                     type = type,
@@ -235,13 +240,13 @@ class MCPServerDialog(
                 )
             }
         }
-        
+
         super.doOKAction()
     }
-    
+
     private fun parseEnvironment(envString: String): Map<String, String> {
         if (envString.isEmpty()) return emptyMap()
-        
+
         return envString.split(";")
             .mapNotNull { pair ->
                 val parts = pair.split("=", limit = 2)
@@ -253,10 +258,10 @@ class MCPServerDialog(
             }
             .toMap()
     }
-    
+
     private fun parseHeaders(headersString: String): Map<String, String> {
         if (headersString.isEmpty()) return emptyMap()
-        
+
         return headersString.split(";")
             .mapNotNull { pair ->
                 // Поддерживаем оба формата: "Key=Value" и "Key: Value"
@@ -267,7 +272,7 @@ class MCPServerDialog(
                 } else {
                     return@mapNotNull null
                 }
-                
+
                 if (parts.size == 2) {
                     parts[0].trim() to parts[1].trim()
                 } else {
@@ -276,10 +281,10 @@ class MCPServerDialog(
             }
             .toMap()
     }
-    
+
     private fun testConnection() {
         val type = typeComboBox.selectedItem as? MCPServerType ?: return
-        
+
         // Создаем временную конфигурацию для теста
         val testConfig = when (type) {
             MCPServerType.STDIO -> {
@@ -292,6 +297,7 @@ class MCPServerDialog(
                     enabled = true
                 )
             }
+
             MCPServerType.HTTP -> {
                 MCPServerConfig(
                     name = "test",
@@ -302,7 +308,7 @@ class MCPServerDialog(
                 )
             }
         }
-        
+
         // Валидация
         val validation = testConfig.validate()
         if (!validation.isValid()) {
@@ -313,13 +319,13 @@ class MCPServerDialog(
             )
             return
         }
-        
+
         // Тестируем подключение
         scope.launch {
             try {
                 val client = MCPClientFactory.createClient(testConfig)
                 val success = client.connect()
-                
+
                 SwingUtilities.invokeLater {
                     if (success) {
                         Messages.showInfoMessage(
@@ -335,7 +341,7 @@ class MCPServerDialog(
                         )
                     }
                 }
-                
+
                 client.disconnect()
             } catch (e: Exception) {
                 SwingUtilities.invokeLater {
@@ -348,6 +354,6 @@ class MCPServerDialog(
             }
         }
     }
-    
+
     fun getServerConfig(): MCPServerConfig? = serverConfig
 }

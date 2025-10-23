@@ -1,8 +1,6 @@
 package ru.marslab.ide.ride.model.agent
 
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * Блок форматированного вывода от агента

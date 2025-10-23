@@ -1,6 +1,5 @@
 ﻿package ru.marslab.ide.ride.agent
 
-import ru.marslab.ide.ride.model.agent.AgentResponse
 import ru.marslab.ide.ride.model.chat.ChatContext
 import java.util.regex.Pattern
 
@@ -17,7 +16,10 @@ object UncertaintyAnalyzer {
     private val UNCERTAINTY_PATTERNS = listOf(
         // Явные указания на неопределенность
         Pattern.compile("не (?:уверен|уверена|знаю|могу сказать|достаточно информации)", Pattern.CASE_INSENSITIVE),
-        Pattern.compile("(?:нужна|требуется|пожалуйста, предоставь|мне нужно) (?:дополнительная|больше) информаци", Pattern.CASE_INSENSITIVE),
+        Pattern.compile(
+            "(?:нужна|требуется|пожалуйста, предоставь|мне нужно) (?:дополнительная|больше) информаци",
+            Pattern.CASE_INSENSITIVE
+        ),
         Pattern.compile("(?:уточните|поясните|расскажите) (?:подробнее|более детально)", Pattern.CASE_INSENSITIVE),
 
         // Дополнительные паттерны для явной неопределенности - точные совпадения для тестов
@@ -26,14 +28,23 @@ object UncertaintyAnalyzer {
         Pattern.compile(".*уточните, пожалуйста.*", Pattern.CASE_INSENSITIVE),
 
         // Вопросы в ответе (уточняющие)
-        Pattern.compile("(?:каков|какая|какие|где|когда|почему|зачем|каким образом|какую).*\\?", Pattern.CASE_INSENSITIVE),
+        Pattern.compile(
+            "(?:каков|какая|какие|где|когда|почему|зачем|каким образом|какую).*\\?",
+            Pattern.CASE_INSENSITIVE
+        ),
 
         // Указания на неполноту - более широкие паттерны
-        Pattern.compile("(?:для|чтобы) (?:ответить|помочь|решить) .* (?:нужна|требуется|нужно) .* информаци", Pattern.CASE_INSENSITIVE),
+        Pattern.compile(
+            "(?:для|чтобы) (?:ответить|помочь|решить) .* (?:нужна|требуется|нужно) .* информаци",
+            Pattern.CASE_INSENSITIVE
+        ),
         Pattern.compile("мне нужно (?:больше|дополнительной) информаци", Pattern.CASE_INSENSITIVE),
 
         // Недостаток контекста
-        Pattern.compile("(?:без|при отсутствии) (?:дополнительного|более подробного) (?:контекста|описания)", Pattern.CASE_INSENSITIVE)
+        Pattern.compile(
+            "(?:без|при отсутствии) (?:дополнительного|более подробного) (?:контекста|описания)",
+            Pattern.CASE_INSENSITIVE
+        )
     )
 
     private val HIGH_UNCERTAINTY_PATTERNS = listOf(

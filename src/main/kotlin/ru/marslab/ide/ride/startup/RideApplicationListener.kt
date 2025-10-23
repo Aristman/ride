@@ -10,10 +10,10 @@ import ru.marslab.ide.ride.mcp.MCPServerManager
  */
 class RideApplicationListener : AppLifecycleListener {
     private val logger = Logger.getInstance(RideApplicationListener::class.java)
-    
+
     override fun appWillBeClosed(isRestart: Boolean) {
         logger.info("Ride plugin shutting down...")
-        
+
         try {
             val serverManager = MCPServerManager.getInstance()
             serverManager.stopServer()

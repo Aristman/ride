@@ -16,17 +16,17 @@ import java.time.Duration
  * HTTP клиент для взаимодействия с MCP Server
  */
 class MCPClient(private val baseUrl: String = "http://localhost:3000") {
-    
+
     private val logger = Logger.getInstance(MCPClient::class.java)
     private val client = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(10))
         .build()
-    
+
     private val json = Json {
         ignoreUnknownKeys = true
         prettyPrint = false
     }
-    
+
     /**
      * Создать файл
      */
@@ -35,7 +35,7 @@ class MCPClient(private val baseUrl: String = "http://localhost:3000") {
         val response = post("/files", request)
         return json.decodeFromString(FileResponse.serializer(), response)
     }
-    
+
     /**
      * Прочитать файл
      */
@@ -44,7 +44,7 @@ class MCPClient(private val baseUrl: String = "http://localhost:3000") {
         val response = get("/files/$encodedPath")
         return json.decodeFromString(FileContentResponse.serializer(), response)
     }
-    
+
     /**
      * Обновить файл
      */
@@ -63,7 +63,7 @@ class MCPClient(private val baseUrl: String = "http://localhost:3000") {
         val response = put(endpoint, request)
         return json.decodeFromString(FileResponse.serializer(), response)
     }
-    
+
     /**
      * Удалить файл
      */
@@ -72,7 +72,7 @@ class MCPClient(private val baseUrl: String = "http://localhost:3000") {
         val response = delete("/files/$encodedPath")
         return json.decodeFromString(DeleteResponse.serializer(), response)
     }
-    
+
     /**
      * Список файлов
      */
@@ -86,7 +86,7 @@ class MCPClient(private val baseUrl: String = "http://localhost:3000") {
         val response = get(url)
         return json.decodeFromString(DirectoryListResponse.serializer(), response)
     }
-    
+
     /**
      * Создать директорию
      */
@@ -95,7 +95,7 @@ class MCPClient(private val baseUrl: String = "http://localhost:3000") {
         val response = post("/directories", request)
         return json.decodeFromString(DirectoryResponse.serializer(), response)
     }
-    
+
     /**
      * Удалить директорию
      */
@@ -104,7 +104,7 @@ class MCPClient(private val baseUrl: String = "http://localhost:3000") {
         val response = delete("/directories/$encodedPath")
         return json.decodeFromString(DeleteResponse.serializer(), response)
     }
-    
+
     /**
      * Проверка health
      */
@@ -112,55 +112,55 @@ class MCPClient(private val baseUrl: String = "http://localhost:3000") {
         val response = get("/health")
         return json.decodeFromString(HealthResponse.serializer(), response)
     }
-    
+
     // HTTP методы
-    
+
     private inline fun <reified T : Any> post(endpoint: String, body: T): String {
         val jsonBody = json.encodeToString(serializer(), body)
-        
+
         val request = HttpRequest.newBuilder()
             .uri(URI.create("$baseUrl$endpoint"))
             .header("Content-Type", "application/json")
             .timeout(Duration.ofSeconds(30))
             .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
             .build()
-        
+
         return executeRequest(request)
     }
-    
+
     private inline fun <reified T : Any> put(endpoint: String, body: T): String {
         val jsonBody = json.encodeToString(serializer(), body)
-        
+
         val request = HttpRequest.newBuilder()
             .uri(URI.create("$baseUrl$endpoint"))
             .header("Content-Type", "application/json")
             .timeout(Duration.ofSeconds(30))
             .PUT(HttpRequest.BodyPublishers.ofString(jsonBody))
             .build()
-        
+
         return executeRequest(request)
     }
-    
+
     private fun get(endpoint: String): String {
         val request = HttpRequest.newBuilder()
             .uri(URI.create("$baseUrl$endpoint"))
             .timeout(Duration.ofSeconds(30))
             .GET()
             .build()
-        
+
         return executeRequest(request)
     }
-    
+
     private fun delete(endpoint: String): String {
         val request = HttpRequest.newBuilder()
             .uri(URI.create("$baseUrl$endpoint"))
             .timeout(Duration.ofSeconds(30))
             .DELETE()
             .build()
-        
+
         return executeRequest(request)
     }
-    
+
     private fun executeRequest(request: HttpRequest): String {
         try {
             println("🌐 MCPClient: HTTP Request")

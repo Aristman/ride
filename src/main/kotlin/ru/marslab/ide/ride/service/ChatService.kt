@@ -771,7 +771,7 @@ class ChatService {
                         "commandSuccess" to response.success,
                         "formattedOutput" to (response.formattedOutput ?: Unit)
                     )
-                    
+
                     val message = Message(
                         content = response.content,
                         role = MessageRole.ASSISTANT,

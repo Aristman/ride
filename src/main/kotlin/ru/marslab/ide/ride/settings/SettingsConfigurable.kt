@@ -27,7 +27,7 @@ class SettingsConfigurable : Configurable {
     private lateinit var apiKeyField: JBPasswordField
     private lateinit var hfTokenField: JBPasswordField
     private lateinit var folderIdField: JBTextField
-      private lateinit var temperatureField: JBTextField
+    private lateinit var temperatureField: JBTextField
     private lateinit var maxTokensField: JBTextField
     private lateinit var chatFontSizeField: JBTextField
     private lateinit var chatPrefixColorPanel: ColorPanel
@@ -139,15 +139,20 @@ class SettingsConfigurable : Configurable {
         when (selectedTop) {
             PluginSettings.PROVIDER_YANDEX -> {
                 settings.selectedProvider = PluginSettings.PROVIDER_YANDEX
-                settings.yandexModelId = yandexModelSelectorComboBox.selectedItem as? String ?: PluginSettingsState.DEFAULT_YANDEX_MODEL_ID
+                settings.yandexModelId =
+                    yandexModelSelectorComboBox.selectedItem as? String ?: PluginSettingsState.DEFAULT_YANDEX_MODEL_ID
             }
+
             PluginSettings.PROVIDER_HUGGINGFACE -> {
                 settings.selectedProvider = PluginSettings.PROVIDER_HUGGINGFACE
-                settings.huggingFaceModelId = hfModelSelectorComboBox.selectedItem as? String ?: PluginSettingsState.DEFAULT_HUGGINGFACE_MODEL_ID
+                settings.huggingFaceModelId =
+                    hfModelSelectorComboBox.selectedItem as? String ?: PluginSettingsState.DEFAULT_HUGGINGFACE_MODEL_ID
             }
+
             else -> {
                 settings.selectedProvider = PluginSettings.PROVIDER_YANDEX
-                settings.yandexModelId = yandexModelSelectorComboBox.selectedItem as? String ?: PluginSettingsState.DEFAULT_YANDEX_MODEL_ID
+                settings.yandexModelId =
+                    yandexModelSelectorComboBox.selectedItem as? String ?: PluginSettingsState.DEFAULT_YANDEX_MODEL_ID
             }
         }
 
@@ -158,6 +163,7 @@ class SettingsConfigurable : Configurable {
             PluginSettings.PROVIDER_YANDEX -> {
                 if (apiKey.isNotBlank()) settings.saveApiKey(apiKey)
             }
+
             PluginSettings.PROVIDER_HUGGINGFACE -> {
                 if (hfToken.isNotBlank()) settings.saveHuggingFaceToken(hfToken)
             }
@@ -200,10 +206,10 @@ class SettingsConfigurable : Configurable {
 
         // Флаг отображения имени провайдера в чате
         settings.showProviderName = showProviderNameCheck.isSelected
-        
+
         // Флаг анализа неопределенности
         settings.enableUncertaintyAnalysis = enableUncertaintyAnalysisCheck.isSelected
-        
+
         // Настройки управления токенами
         try {
             settings.maxContextTokens = maxContextTokensField.text.toInt()
@@ -421,9 +427,11 @@ class SettingsConfigurable : Configurable {
                 PluginSettings.PROVIDER_YANDEX -> {
                     layout.show(cardPanel, CARD_YANDEX)
                 }
+
                 PluginSettings.PROVIDER_HUGGINGFACE -> {
                     layout.show(cardPanel, CARD_HF)
                 }
+
                 else -> {
                     layout.show(cardPanel, CARD_YANDEX)
                 }
@@ -517,14 +525,14 @@ class SettingsConfigurable : Configurable {
                     .columns(10)
                     .comment("Максимальное количество токенов в ответе")
             }
-            
+
             row {
                 enableUncertaintyAnalysisCheck = JBCheckBox("Включить анализ неопределенности")
                 cell(enableUncertaintyAnalysisCheck)
                     .comment("Если включено, агент будет задавать уточняющие вопросы при неопределенности > 0.1")
             }
         }
-        
+
         group("Token Management") {
             row("Max Context Tokens:") {
                 maxContextTokensField = JBTextField()
@@ -532,7 +540,7 @@ class SettingsConfigurable : Configurable {
                     .columns(10)
                     .comment("Максимальное количество токенов в контексте (запрос + история). Рекомендуется: 8000")
             }
-            
+
             row {
                 enableAutoSummarizationCheck = JBCheckBox("Включить автоматическое сжатие истории")
                 cell(enableAutoSummarizationCheck)

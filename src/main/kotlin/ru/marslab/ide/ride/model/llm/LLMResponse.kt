@@ -70,7 +70,7 @@ data class LLMResponse(
                 metadata = metadata
             )
         }
-        
+
         /**
          * Создает ответ с ошибкой
          */

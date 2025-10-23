@@ -1,12 +1,11 @@
 package ru.marslab.ide.ride.agent
 
-import kotlin.test.Test
-import kotlin.test.assertTrue
-import kotlin.test.assertFalse
-import kotlin.test.assertNotNull
-import kotlin.test.assertEquals
 import io.mockk.mockk
 import ru.marslab.ide.ride.model.chat.ChatContext
+import kotlin.test.Test
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 /**
  * Тесты для анализа неопределенности в ответах
@@ -29,7 +28,10 @@ class ChatAgentUncertaintyTest {
         val hasExplicitUncertainty = UncertaintyAnalyzer.hasExplicitUncertainty(certainResponse)
 
         // Assert
-        assertTrue(uncertainty < 0.5, "Неопределенность должна быть низкой для уверенного ответа, фактическое: $uncertainty")
+        assertTrue(
+            uncertainty < 0.5,
+            "Неопределенность должна быть низкой для уверенного ответа, фактическое: $uncertainty"
+        )
         assertTrue(isFinal, "Ответ должен быть окончательным при низкой неопределенности")
         assertFalse(hasExplicitUncertainty, "В уверенном ответе не должно быть явной неопределенности")
     }
@@ -37,7 +39,8 @@ class ChatAgentUncertaintyTest {
     @Test
     fun `UncertaintyAnalyzer should detect uncertain response`() {
         // Arrange
-        val uncertainResponse = "Я не уверен, что правильно понял ваш вопрос. Уточните, пожалуйста, о чем именно идет речь?"
+        val uncertainResponse =
+            "Я не уверен, что правильно понял ваш вопрос. Уточните, пожалуйста, о чем именно идет речь?"
 
         // Act
         val uncertainty = UncertaintyAnalyzer.analyzeUncertainty(uncertainResponse, mockContext)
@@ -45,7 +48,10 @@ class ChatAgentUncertaintyTest {
         val hasExplicitUncertainty = UncertaintyAnalyzer.hasExplicitUncertainty(uncertainResponse)
 
         // Assert
-        assertTrue(uncertainty > 0.0, "Неопределенность должна быть выше нуля для неуверенного ответа, фактическое: $uncertainty")
+        assertTrue(
+            uncertainty > 0.0,
+            "Неопределенность должна быть выше нуля для неуверенного ответа, фактическое: $uncertainty"
+        )
         assertTrue(hasExplicitUncertainty, "Должна быть явная неопределенность")
     }
 
@@ -59,7 +65,10 @@ class ChatAgentUncertaintyTest {
         val questions = UncertaintyAnalyzer.extractClarifyingQuestions(responseWithQuestions)
 
         // Assert
-        assertTrue(uncertainty > 0.0, "Неопределенность должна быть выше нуля при наличии вопросов, фактическое: $uncertainty")
+        assertTrue(
+            uncertainty > 0.0,
+            "Неопределенность должна быть выше нуля при наличии вопросов, фактическое: $uncertainty"
+        )
         assertTrue(questions.isNotEmpty(), "Должны быть обнаружены уточняющие вопросы")
     }
 
@@ -126,7 +135,10 @@ class ChatAgentUncertaintyTest {
         val certainUncertainty = UncertaintyAnalyzer.analyzeUncertainty(russianCertainResponse, mockContext)
 
         assertTrue(uncertainUncertainty > 0.0, "Русский неуверенный ответ должен иметь неопределенность выше нуля")
-        assertTrue(certainUncertainty >= 0.0, "Русский уверенный ответ должен иметь неопределенность в допустимом диапазоне")
+        assertTrue(
+            certainUncertainty >= 0.0,
+            "Русский уверенный ответ должен иметь неопределенность в допустимом диапазоне"
+        )
     }
 
     @Test
@@ -152,7 +164,10 @@ class ChatAgentUncertaintyTest {
 
         explicitUncertainPhrases.forEach { response ->
             val uncertainty = UncertaintyAnalyzer.analyzeUncertainty(response, mockContext)
-            assertTrue(uncertainty > 0.0, "Ответ '$response' должен иметь неопределенность выше нуля, фактическое: $uncertainty")
+            assertTrue(
+                uncertainty > 0.0,
+                "Ответ '$response' должен иметь неопределенность выше нуля, фактическое: $uncertainty"
+            )
         }
     }
 
@@ -166,7 +181,10 @@ class ChatAgentUncertaintyTest {
         val longUncertainty = UncertaintyAnalyzer.analyzeUncertainty(longResponse, mockContext)
 
         // Short response should have higher uncertainty due to length penalty
-        assertTrue(shortUncertainty >= longUncertainty, "Короткий ответ должен иметь не ниже неопределенность, чем длинный")
+        assertTrue(
+            shortUncertainty >= longUncertainty,
+            "Короткий ответ должен иметь не ниже неопределенность, чем длинный"
+        )
     }
 
     @Test
@@ -178,7 +196,10 @@ class ChatAgentUncertaintyTest {
         val uncertainUncertainty = UncertaintyAnalyzer.analyzeUncertainty(uncertainWordsResponse, mockContext)
         val certainUncertainty = UncertaintyAnalyzer.analyzeUncertainty(certainWordsResponse, mockContext)
 
-        assertTrue(uncertainUncertainty >= certainUncertainty, "Ответ со словами неопределенности должен иметь не ниже рейтинг")
+        assertTrue(
+            uncertainUncertainty >= certainUncertainty,
+            "Ответ со словами неопределенности должен иметь не ниже рейтинг"
+        )
     }
 
     @Test

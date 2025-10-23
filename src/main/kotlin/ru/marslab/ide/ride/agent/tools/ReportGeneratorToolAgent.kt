@@ -10,9 +10,9 @@ import ru.marslab.ide.ride.model.tool.*
 
 /**
  * Агент для генерации отчетов в различных форматах
- * 
+ *
  * Использует LLM для создания структурированных отчетов на основе результатов анализа.
- * 
+ *
  * Capabilities:
  * - markdown_generation - генерация Markdown
  * - html_generation - генерация HTML
@@ -30,7 +30,7 @@ class ReportGeneratorToolAgent(
         "llm_report"
     )
 ) {
-    
+
     override fun getDescription(): String {
         return "Генерирует отчеты о результатах анализа в различных форматах"
     }
@@ -61,7 +61,11 @@ class ReportGeneratorToolAgent(
         val description = grp(""""description"\s*:\s*"(.*?)"""") ?: ""
         val category = grp(""""category"\s*:\s*"(.*?)"""") ?: "general"
         val suggestion = grp(""""suggestion"\s*:\s*"(.*?)"""")
-        val severity = try { Severity.valueOf((severityStr ?: "MEDIUM").uppercase()) } catch (_: Exception) { Severity.MEDIUM }
+        val severity = try {
+            Severity.valueOf((severityStr ?: "MEDIUM").uppercase())
+        } catch (_: Exception) {
+            Severity.MEDIUM
+        }
         val line = lineStr?.toIntOrNull() ?: 0
         return Finding(
             file = file ?: "",
@@ -73,21 +77,21 @@ class ReportGeneratorToolAgent(
             suggestion = suggestion
         )
     }
-    
+
     override fun validateInput(input: StepInput): ValidationResult {
         val format = input.getString("format")
-        
+
         if (format.isNullOrEmpty()) {
             return ValidationResult.failure("format is required")
         }
-        
+
         if (format !in listOf("markdown", "html", "json")) {
             return ValidationResult.failure("format must be one of: markdown, html, json")
         }
-        
+
         return ValidationResult.success()
     }
-    
+
     override suspend fun doExecuteStep(step: ToolPlanStep, context: ExecutionContext): StepResult {
         val format = step.input.getString("format") ?: "markdown"
         val useLLM = step.input.getBoolean("use_llm") ?: true
@@ -97,9 +101,9 @@ class ReportGeneratorToolAgent(
 
         // Собираем результаты из previousResults
         val previousResults = step.input.get<Map<String, Any>>("previousResults") ?: emptyMap()
-        
+
         logger.info("Generating report in $format format (use_llm=$useLLM, previous_results=${previousResults.size})")
-        
+
         val report = if (useLLM && format.lowercase() == "markdown" && previousResults.isNotEmpty()) {
             // Генерируем отчет через LLM на основе результатов всех шагов
             generateLLMReport(previousResults)
@@ -119,7 +123,7 @@ class ReportGeneratorToolAgent(
             }
 
             val findings = (explicitFindings + aggregatedFromDeps)
-            
+
             when (format.lowercase()) {
                 "markdown" -> generateMarkdownReport(title, findings, metrics)
                 "html" -> generateHtmlReport(title, findings, metrics)
@@ -127,9 +131,9 @@ class ReportGeneratorToolAgent(
                 else -> return StepResult.error("Unsupported format: $format")
             }
         }
-        
+
         logger.info("Report generated successfully (${report.length} characters)")
-        
+
         return StepResult.success(
             output = StepOutput.of(
                 "report" to report,
@@ -142,14 +146,14 @@ class ReportGeneratorToolAgent(
             )
         )
     }
-    
+
     private fun generateMarkdownReport(title: String, findings: List<Finding>, metrics: Map<String, Any>): String {
         return buildString {
             appendLine("# $title")
             appendLine()
             appendLine("**Дата генерации:** ${Clock.System.now()}")
             appendLine()
-            
+
             // Метрики
             if (metrics.isNotEmpty()) {
                 appendLine("## 📊 Метрики")
@@ -159,7 +163,7 @@ class ReportGeneratorToolAgent(
                 }
                 appendLine()
             }
-            
+
             // Сводка по severity
             if (findings.isNotEmpty()) {
                 appendLine("## 📋 Сводка")
@@ -179,16 +183,16 @@ class ReportGeneratorToolAgent(
                     }
                 }
                 appendLine()
-                
+
                 // Детали находок
                 appendLine("## 🔍 Детали")
                 appendLine()
-                
+
                 bySeverity.entries.sortedBy { it.key }.forEach { (severity, severityFindings) ->
                     if (severityFindings.isNotEmpty()) {
                         appendLine("### ${severity.name} (${severityFindings.size})")
                         appendLine()
-                        
+
                         severityFindings.forEach { finding ->
                             appendLine("#### ${finding.message}")
                             appendLine()
@@ -213,7 +217,7 @@ class ReportGeneratorToolAgent(
             }
         }
     }
-    
+
     private fun generateHtmlReport(title: String, findings: List<Finding>, metrics: Map<String, Any>): String {
         return buildString {
             appendLine("<!DOCTYPE html>")
@@ -236,14 +240,14 @@ class ReportGeneratorToolAgent(
             appendLine("<body>")
             appendLine("  <h1>$title</h1>")
             appendLine("  <p><strong>Дата генерации:</strong> ${Clock.System.now()}</p>")
-            
+
             if (metrics.isNotEmpty()) {
                 appendLine("  <h2>Метрики</h2>")
                 metrics.forEach { (key, value) ->
                     appendLine("  <div class=\"metric\"><strong>${formatKey(key)}:</strong> $value</div>")
                 }
             }
-            
+
             if (findings.isNotEmpty()) {
                 appendLine("  <h2>Находки (${findings.size})</h2>")
                 findings.forEach { finding ->
@@ -264,12 +268,12 @@ class ReportGeneratorToolAgent(
             } else {
                 appendLine("  <p>✅ Проблем не обнаружено!</p>")
             }
-            
+
             appendLine("</body>")
             appendLine("</html>")
         }
     }
-    
+
     private fun generateJsonReport(title: String, findings: List<Finding>, metrics: Map<String, Any>): String {
         // Простая JSON сериализация
         return buildString {
@@ -300,19 +304,19 @@ class ReportGeneratorToolAgent(
             appendLine("}")
         }
     }
-    
+
     private fun formatKey(key: String): String {
         return key.split("_").joinToString(" ") { it.capitalize() }
     }
-    
+
     /**
      * Генерирует отчет через LLM на основе результатов всех шагов
      */
     private suspend fun generateLLMReport(previousResults: Map<String, Any>): String {
         logger.info("Generating LLM report from ${previousResults.size} step results")
-        
+
         val reportPrompt = buildLLMReportPrompt(previousResults)
-        
+
         return try {
             val llmResponse = llmProvider.sendRequest(
                 systemPrompt = LLM_REPORT_SYSTEM_PROMPT,
@@ -320,7 +324,7 @@ class ReportGeneratorToolAgent(
                 conversationHistory = emptyList(),
                 parameters = ru.marslab.ide.ride.model.llm.LLMParameters.BALANCED
             )
-            
+
             if (llmResponse.success) {
                 llmResponse.content
             } else {
@@ -332,7 +336,7 @@ class ReportGeneratorToolAgent(
             buildFallbackReport(previousResults)
         }
     }
-    
+
     /**
      * Строит промпт для LLM на основе результатов шагов
      */
@@ -340,11 +344,11 @@ class ReportGeneratorToolAgent(
         return buildString {
             appendLine("# Результаты анализа кода")
             appendLine()
-            
+
             previousResults.forEach { (stepId, result) ->
                 appendLine("## Шаг: $stepId")
                 appendLine()
-                
+
                 when (result) {
                     is Map<*, *> -> {
                         val output = result["output"] as? Map<*, *>
@@ -353,12 +357,12 @@ class ReportGeneratorToolAgent(
                             val findings = output["findings"] as? List<*>
                             if (findings != null && findings.isNotEmpty()) {
                                 appendLine("**Найдено проблем:** ${findings.size}")
-                                
+
                                 val criticalCount = output["critical_count"] as? Int ?: 0
                                 val highCount = output["high_count"] as? Int ?: 0
                                 val mediumCount = output["medium_count"] as? Int ?: 0
                                 val lowCount = output["low_count"] as? Int ?: 0
-                                
+
                                 if (criticalCount + highCount + mediumCount + lowCount > 0) {
                                     appendLine("- Критичных: $criticalCount")
                                     appendLine("- Высокий приоритет: $highCount")
@@ -366,7 +370,7 @@ class ReportGeneratorToolAgent(
                                     appendLine("- Низкий приоритет: $lowCount")
                                 }
                                 appendLine()
-                                
+
                                 appendLine("**Детали:**")
                                 findings.take(10).forEach { finding ->
                                     if (finding is Map<*, *>) {
@@ -375,7 +379,7 @@ class ReportGeneratorToolAgent(
                                         val file = finding["file"]
                                         val line = finding["line"]
                                         val suggestion = finding["suggestion"]
-                                        
+
                                         appendLine("- **$message** (Уровень: $severity)")
                                         if (file != null) {
                                             appendLine("  - Файл: `$file${if (line != null) ":$line" else ""}`")
@@ -389,7 +393,7 @@ class ReportGeneratorToolAgent(
                                     appendLine("- ... и еще ${findings.size - 10} проблем(ы)")
                                 }
                             }
-                            
+
                             // Files
                             val totalFiles = output["total_files"] as? Int
                             val totalDirs = output["total_directories"] as? Int
@@ -399,27 +403,28 @@ class ReportGeneratorToolAgent(
                                     appendLine("**Директорий:** $totalDirs")
                                 }
                             }
-                            
+
                             // Architecture
                             val modules = output["modules"] as? List<*>
                             if (modules != null) {
                                 appendLine("**Обнаружено модулей:** ${modules.size}")
                             }
-                            
+
                             val layers = output["layers"] as? List<*>
                             if (layers != null) {
                                 appendLine("**Обнаружено слоев:** ${layers.size}")
                             }
                         }
                     }
+
                     is String -> {
                         appendLine(result)
                     }
                 }
-                
+
                 appendLine()
             }
-            
+
             appendLine()
             appendLine("# Инструкция")
             appendLine("Создай подробный, структурированный отчет на русском языке в формате Markdown.")
@@ -440,7 +445,7 @@ class ReportGeneratorToolAgent(
             appendLine("- НЕ включай информацию о планировании")
         }
     }
-    
+
     /**
      * Создает упрощенный отчет при ошибке LLM
      */
@@ -450,19 +455,19 @@ class ReportGeneratorToolAgent(
             appendLine()
             appendLine("**Дата генерации:** ${Clock.System.now()}")
             appendLine()
-            
+
             appendLine("## Краткое резюме")
             appendLine()
             appendLine("Выполнен анализ кода. Завершено ${previousResults.size} этапов.")
             appendLine()
-            
+
             appendLine("## Детальные результаты")
             appendLine()
-            
+
             previousResults.forEach { (stepId, result) ->
                 appendLine("### $stepId")
                 appendLine()
-                
+
                 when (result) {
                     is Map<*, *> -> {
                         val output = result["output"] as? Map<*, *>
@@ -471,7 +476,7 @@ class ReportGeneratorToolAgent(
                             if (findings != null && findings.isNotEmpty()) {
                                 appendLine("**Найдено проблем:** ${findings.size}")
                                 appendLine()
-                                
+
                                 findings.take(5).forEach { finding ->
                                     if (finding is Map<*, *>) {
                                         val message = finding["message"] ?: finding["description"]
@@ -487,20 +492,21 @@ class ReportGeneratorToolAgent(
                             }
                         }
                     }
+
                     is String -> {
                         appendLine(result)
                     }
                 }
-                
+
                 appendLine()
             }
-            
+
             appendLine("## Заключение")
             appendLine()
             appendLine("Анализ кода завершен. Детальные результаты представлены выше.")
         }
     }
-    
+
     companion object {
         private const val LLM_REPORT_SYSTEM_PROMPT = """
 Ты - эксперт по анализу кода и генерации технических отчетов.

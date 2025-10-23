@@ -25,7 +25,7 @@ class AnalyzeCodeAction : AnAction("Analyze Code", "Запустить анал�
 
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
-        
+
         // Отладочная информация о проекте
         println("=== Project Info ===")
         println("Project name: ${project.name}")
@@ -34,7 +34,7 @@ class AnalyzeCodeAction : AnAction("Analyze Code", "Запустить анал�
         println("Project dir: ${project.projectFilePath}")
         println("Is open: ${project.isOpen}")
         println("Is initialized: ${project.isInitialized}")
-        
+
         // Проверяем модули
         val moduleManager = ModuleManager.getInstance(project)
         println("\n=== Modules (${moduleManager.modules.size}) ===")
@@ -64,7 +64,7 @@ class AnalyzeCodeAction : AnAction("Analyze Code", "Запустить анал�
 
                 try {
                     val agent = AgentFactory.createCodeAnalysisAgent(project)
-                    
+
                     val request = CodeAnalysisRequest(
                         projectPath = project.basePath ?: "",
                         analysisTypes = analysisTypes
@@ -113,8 +113,8 @@ class AnalyzeCodeAction : AnAction("Analyze Code", "Запустить анал�
                         Messages.showInfoMessage(
                             project,
                             "Анализ завершен!\n\n" +
-                            "Найдено проблем: ${analysisResult!!.findings.size}\n" +
-                            "Отчет сохранен: ${reportFile!!.absolutePath}",
+                                    "Найдено проблем: ${analysisResult!!.findings.size}\n" +
+                                    "Отчет сохранен: ${reportFile!!.absolutePath}",
                             "Анализ кода"
                         )
                     }

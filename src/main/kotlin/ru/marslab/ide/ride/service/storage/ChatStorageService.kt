@@ -12,9 +12,9 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import ru.marslab.ide.ride.model.agent.FormattedOutput
+import ru.marslab.ide.ride.model.chat.ChatSession
 import ru.marslab.ide.ride.model.chat.Message
 import ru.marslab.ide.ride.model.chat.MessageRole
-import ru.marslab.ide.ride.model.chat.ChatSession
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
@@ -49,54 +49,57 @@ class ChatStorageService {
         }
     }
 
-    suspend fun loadAllSessions(project: Project): Pair<List<ChatSession>, Map<String, List<Message>>> = mutex.withLock {
-        return@withLock try {
-            val baseDirPath = getBaseDir(project)
-            val indexPath = baseDirPath.resolve("index.json")
-            if (!indexPath.exists()) return@withLock Pair(emptyList(), emptyMap())
+    suspend fun loadAllSessions(project: Project): Pair<List<ChatSession>, Map<String, List<Message>>> =
+        mutex.withLock {
+            return@withLock try {
+                val baseDirPath = getBaseDir(project)
+                val indexPath = baseDirPath.resolve("index.json")
+                if (!indexPath.exists()) return@withLock Pair(emptyList(), emptyMap())
 
-            val index = json.decodeFromString(ChatIndex.serializer(), indexPath.readText())
-            val sessions = mutableListOf<ChatSession>()
-            val histories = mutableMapOf<String, List<Message>>()
+                val index = json.decodeFromString(ChatIndex.serializer(), indexPath.readText())
+                val sessions = mutableListOf<ChatSession>()
+                val histories = mutableMapOf<String, List<Message>>()
 
-            for (id in index.sessions) {
-                val dir = baseDirPath.resolve("sessions").resolve(id)
-                val metadataPath = dir.resolve("metadata.json")
-                val messagesPath = dir.resolve("messages.json")
-                if (!metadataPath.exists() || !messagesPath.exists()) continue
+                for (id in index.sessions) {
+                    val dir = baseDirPath.resolve("sessions").resolve(id)
+                    val metadataPath = dir.resolve("metadata.json")
+                    val messagesPath = dir.resolve("messages.json")
+                    if (!metadataPath.exists() || !messagesPath.exists()) continue
 
-                val sessionStored = json.decodeFromString(PersistentChatSession.serializer(), metadataPath.readText())
-                val messagesStored = json.decodeFromString(ListSerializer(PersistentMessage.serializer()), messagesPath.readText())
+                    val sessionStored =
+                        json.decodeFromString(PersistentChatSession.serializer(), metadataPath.readText())
+                    val messagesStored =
+                        json.decodeFromString(ListSerializer(PersistentMessage.serializer()), messagesPath.readText())
 
-                val session = ChatSession(
-                    id = sessionStored.id,
-                    title = sessionStored.title,
-                    createdAt = Instant.ofEpochMilli(sessionStored.createdAtEpochMs),
-                    updatedAt = Instant.ofEpochMilli(sessionStored.updatedAtEpochMs)
-                )
-                val messages = messagesStored.map { pm ->
-                    Message(
-                        id = pm.id,
-                        content = pm.content,
-                        role = when (pm.role) {
-                            PersistentRole.USER -> MessageRole.USER
-                            PersistentRole.ASSISTANT -> MessageRole.ASSISTANT
-                            PersistentRole.SYSTEM -> MessageRole.SYSTEM
-                        },
-                        timestamp = pm.timestamp,
-                        metadata = parseMetadataFromJson(pm.metadataJson)
+                    val session = ChatSession(
+                        id = sessionStored.id,
+                        title = sessionStored.title,
+                        createdAt = Instant.ofEpochMilli(sessionStored.createdAtEpochMs),
+                        updatedAt = Instant.ofEpochMilli(sessionStored.updatedAtEpochMs)
                     )
-                }
+                    val messages = messagesStored.map { pm ->
+                        Message(
+                            id = pm.id,
+                            content = pm.content,
+                            role = when (pm.role) {
+                                PersistentRole.USER -> MessageRole.USER
+                                PersistentRole.ASSISTANT -> MessageRole.ASSISTANT
+                                PersistentRole.SYSTEM -> MessageRole.SYSTEM
+                            },
+                            timestamp = pm.timestamp,
+                            metadata = parseMetadataFromJson(pm.metadataJson)
+                        )
+                    }
 
-                sessions += session
-                histories[session.id] = messages
+                    sessions += session
+                    histories[session.id] = messages
+                }
+                Pair(sessions, histories)
+            } catch (e: Exception) {
+                logger.warn("Failed to load sessions: ${e.message}", e)
+                Pair(emptyList(), emptyMap())
             }
-            Pair(sessions, histories)
-        } catch (e: Exception) {
-            logger.warn("Failed to load sessions: ${e.message}", e)
-            Pair(emptyList(), emptyMap())
         }
-    }
 
     suspend fun saveSession(project: Project, session: ChatSession, messages: List<Message>) = mutex.withLock {
         try {
@@ -132,7 +135,10 @@ class ChatStorageService {
 
             // обновляем индекс
             val indexPath = baseDirPath.resolve("index.json")
-            val idx = if (indexPath.exists()) json.decodeFromString(ChatIndex.serializer(), indexPath.readText()) else ChatIndex()
+            val idx = if (indexPath.exists()) json.decodeFromString(
+                ChatIndex.serializer(),
+                indexPath.readText()
+            ) else ChatIndex()
             val updated = idx.copy(sessions = (idx.sessions + session.id).toSet().toList())
             indexPath.parent?.createDirectoriesIfNeeded()
             indexPath.writeText(json.encodeToString(updated))
@@ -219,7 +225,7 @@ class ChatStorageService {
             if (metadataJson.isBlank() || metadataJson == "{}") {
                 return emptyMap()
             }
-            
+
             val jsonObject = json.decodeFromString(JsonObject.serializer(), metadataJson)
             jsonObject.mapValues { (key, jsonElement) ->
                 when (val primitive = jsonElement as? JsonPrimitive) {
@@ -239,6 +245,7 @@ class ChatStorageService {
                                 content
                             }
                         }
+
                         primitive.content == "true" -> true
                         primitive.content == "false" -> false
                         primitive.content.toLongOrNull() != null -> primitive.content.toLong()

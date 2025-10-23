@@ -1,6 +1,9 @@
 package ru.marslab.ide.ride.service.mcp
 
-import com.intellij.openapi.components.*
+import com.intellij.openapi.components.PersistentStateComponent
+import com.intellij.openapi.components.Service
+import com.intellij.openapi.components.State
+import com.intellij.openapi.components.Storage
 import com.intellij.openapi.project.Project
 import ru.marslab.ide.ride.model.mcp.MCPMethod
 import ru.marslab.ide.ride.model.mcp.MCPServerStatus
@@ -33,7 +36,7 @@ data class ServerStatusData(
             lastError = lastError
         )
     }
-    
+
     companion object {
         fun fromMCPServerStatus(status: MCPServerStatus): ServerStatusData {
             return ServerStatusData(
@@ -61,7 +64,7 @@ data class MethodData(
             description = description
         )
     }
-    
+
     companion object {
         fun fromMCPMethod(method: MCPMethod): MethodData {
             return MethodData(
@@ -81,52 +84,52 @@ data class MethodData(
     storages = [Storage("mcp-server-statuses.xml")]
 )
 class MCPStatusPersistenceService : PersistentStateComponent<MCPStatusState> {
-    
+
     private var state = MCPStatusState()
-    
+
     override fun getState(): MCPStatusState {
         return state
     }
-    
+
     override fun loadState(state: MCPStatusState) {
         this.state = state
     }
-    
+
     /**
      * Сохраняет статус сервера
      */
     fun saveStatus(status: MCPServerStatus) {
         state.servers[status.name] = ServerStatusData.fromMCPServerStatus(status)
     }
-    
+
     /**
      * Получает статус сервера
      */
     fun getStatus(serverName: String): MCPServerStatus? {
         return state.servers[serverName]?.toMCPServerStatus()
     }
-    
+
     /**
      * Получает все статусы серверов
      */
     fun getAllStatuses(): List<MCPServerStatus> {
         return state.servers.values.map { it.toMCPServerStatus() }
     }
-    
+
     /**
      * Удаляет статус сервера
      */
     fun removeStatus(serverName: String) {
         state.servers.remove(serverName)
     }
-    
+
     /**
      * Очищает все статусы
      */
     fun clearAll() {
         state.servers.clear()
     }
-    
+
     companion object {
         fun getInstance(project: Project): MCPStatusPersistenceService {
             return project.getService(MCPStatusPersistenceService::class.java)

@@ -74,8 +74,8 @@ class InMemoryPlanStorage : PlanStorage {
         return mutex.withLock {
             plans.values.filter { plan ->
                 plan.currentState != PlanState.COMPLETED &&
-                plan.currentState != PlanState.CANCELLED &&
-                plan.currentState != PlanState.FAILED
+                        plan.currentState != PlanState.CANCELLED &&
+                        plan.currentState != PlanState.FAILED
             }.sortedByDescending { it.createdAt }
         }
     }
@@ -116,7 +116,7 @@ class InMemoryPlanStorage : PlanStorage {
             val searchTextLower = searchText.lowercase()
             plans.values.filter { plan ->
                 plan.originalRequest.lowercase().contains(searchTextLower) ||
-                plan.analysis.reasoning.lowercase().contains(searchTextLower)
+                        plan.analysis.reasoning.lowercase().contains(searchTextLower)
             }.sortedByDescending { it.createdAt }
         }
     }
@@ -155,8 +155,8 @@ class InMemoryPlanStorage : PlanStorage {
             val totalPlans = plans.size
             val activePlans = plans.values.count { plan ->
                 plan.currentState != PlanState.COMPLETED &&
-                plan.currentState != PlanState.CANCELLED &&
-                plan.currentState != PlanState.FAILED
+                        plan.currentState != PlanState.CANCELLED &&
+                        plan.currentState != PlanState.FAILED
             }
             val completedPlans = plans.values.count { it.currentState == PlanState.COMPLETED }
             val failedPlans = plans.values.count { it.currentState == PlanState.FAILED }

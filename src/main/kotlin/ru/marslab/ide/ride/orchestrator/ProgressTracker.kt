@@ -3,11 +3,10 @@ package ru.marslab.ide.ride.orchestrator
 import com.intellij.openapi.diagnostic.Logger
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.datetime.*
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import ru.marslab.ide.ride.model.orchestrator.ExecutionPlan
-import ru.marslab.ide.ride.model.orchestrator.PlanStep
 import ru.marslab.ide.ride.model.orchestrator.StepStatus
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Трекер прогресса выполнения планов
@@ -422,7 +421,8 @@ interface ProgressListener {
         overallProgress: Double,
         eta: Long,
         message: String?
-    ) {}
+    ) {
+    }
 
     fun onStepCompleted(
         planId: String,
@@ -430,7 +430,8 @@ interface ProgressListener {
         result: Any?,
         overallProgress: Double,
         eta: Long
-    ) {}
+    ) {
+    }
 
     fun onStepFailed(planId: String, stepId: String, error: String, overallProgress: Double) {}
     fun onProgressFinished(planId: String, progress: PlanProgress) {}

@@ -8,10 +8,10 @@ import kotlinx.serialization.json.JsonElement
 sealed class ParsedResponse {
     abstract val rawContent: String
     abstract val format: ResponseFormat
-    
+
     /**
      * JSON ответ с распарсенной структурой
-     * 
+     *
      * @property rawContent Исходный текст ответа
      * @property jsonElement Распарсенный JSON элемент
      */
@@ -20,16 +20,16 @@ sealed class ParsedResponse {
         val jsonElement: JsonElement
     ) : ParsedResponse() {
         override val format: ResponseFormat = ResponseFormat.JSON
-        
+
         /**
          * Получает JSON как строку с форматированием
          */
         fun toFormattedString(): String = jsonElement.toString()
     }
-    
+
     /**
      * XML ответ с распарсенной структурой
-     * 
+     *
      * @property rawContent Исходный текст ответа
      * @property xmlContent Распарсенный XML (пока как строка, можно расширить)
      */
@@ -39,10 +39,10 @@ sealed class ParsedResponse {
     ) : ParsedResponse() {
         override val format: ResponseFormat = ResponseFormat.XML
     }
-    
+
     /**
      * Текстовый ответ без структуры
-     * 
+     *
      * @property rawContent Текст ответа
      */
     data class TextResponse(
@@ -50,10 +50,10 @@ sealed class ParsedResponse {
     ) : ParsedResponse() {
         override val format: ResponseFormat = ResponseFormat.TEXT
     }
-    
+
     /**
      * Ответ с ошибкой парсинга
-     * 
+     *
      * @property rawContent Исходный текст ответа
      * @property error Описание ошибки
      * @property expectedFormat Ожидаемый формат

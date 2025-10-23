@@ -8,7 +8,7 @@ import ru.marslab.ide.ride.model.llm.Tool
  * Реестр MCP Tools для интеграции с Yandex GPT
  */
 object MCPToolsRegistry {
-    
+
     /**
      * Получить все доступные tools в формате Yandex GPT
      */
@@ -24,16 +24,16 @@ object MCPToolsRegistry {
             listDirectoryTool()
         )
     }
-    
+
     /**
      * Получить tool по имени
      */
     fun getToolByName(name: String): Tool? {
         return getAllTools().find { it.function.name == name }
     }
-    
+
     // Tool definitions
-    
+
     private fun createFileTool() = Tool(
         function = FunctionTool(
             name = "create_file",
@@ -58,7 +58,7 @@ object MCPToolsRegistry {
             strict = true
         )
     )
-    
+
     private fun readFileTool() = Tool(
         function = FunctionTool(
             name = "read_file",
@@ -78,7 +78,7 @@ object MCPToolsRegistry {
             strict = true
         )
     )
-    
+
     private fun updateFileTool() = Tool(
         function = FunctionTool(
             name = "update_file",
@@ -103,7 +103,7 @@ object MCPToolsRegistry {
             strict = true
         )
     )
-    
+
     private fun deleteFileTool() = Tool(
         function = FunctionTool(
             name = "delete_file",
@@ -123,7 +123,7 @@ object MCPToolsRegistry {
             strict = true
         )
     )
-    
+
     private fun listFilesTool() = Tool(
         function = FunctionTool(
             name = "list_files",
@@ -140,7 +140,7 @@ object MCPToolsRegistry {
             strict = false
         )
     )
-    
+
     private fun createDirectoryTool() = Tool(
         function = FunctionTool(
             name = "create_directory",
@@ -150,7 +150,10 @@ object MCPToolsRegistry {
                 putJsonObject("properties") {
                     putJsonObject("path") {
                         put("type", "string")
-                        put("description", "Path for the new directory (parent directories will be created automatically)")
+                        put(
+                            "description",
+                            "Path for the new directory (parent directories will be created automatically)"
+                        )
                     }
                 }
                 putJsonArray("required") {
@@ -160,7 +163,7 @@ object MCPToolsRegistry {
             strict = true
         )
     )
-    
+
     private fun deleteDirectoryTool() = Tool(
         function = FunctionTool(
             name = "delete_directory",
@@ -180,7 +183,7 @@ object MCPToolsRegistry {
             strict = true
         )
     )
-    
+
     private fun listDirectoryTool() = Tool(
         function = FunctionTool(
             name = "list_directory",

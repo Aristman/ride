@@ -7,14 +7,10 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import ru.marslab.ide.ride.agent.Agent
-import ru.marslab.ide.ride.model.agent.AgentCapabilities
-import ru.marslab.ide.ride.model.agent.AgentEvent
-import ru.marslab.ide.ride.model.agent.AgentRequest
-import ru.marslab.ide.ride.model.agent.AgentResponse
-import ru.marslab.ide.ride.model.agent.AgentSettings
+import ru.marslab.ide.ride.formatter.TerminalOutputFormatter
+import ru.marslab.ide.ride.model.agent.*
 import ru.marslab.ide.ride.model.terminal.TerminalCommand
 import ru.marslab.ide.ride.model.terminal.TerminalCommandResult
-import ru.marslab.ide.ride.formatter.TerminalOutputFormatter
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
@@ -64,7 +60,8 @@ class TerminalAgent : Agent {
                 )
 
                 // Создаем базовый текстовый контент для fallback
-                val content = "Command: ${command.command}\nExit Code: ${result.exitCode}\nExecution Time: ${result.executionTime}ms\n\n${result.stdout}${if (result.stderr.isNotEmpty()) "\n\nErrors:\n${result.stderr}" else ""}"
+                val content =
+                    "Command: ${command.command}\nExit Code: ${result.exitCode}\nExecution Time: ${result.executionTime}ms\n\n${result.stdout}${if (result.stderr.isNotEmpty()) "\n\nErrors:\n${result.stderr}" else ""}"
 
                 val metadata = mapOf(
                     "command" to command.command,
@@ -116,7 +113,8 @@ class TerminalAgent : Agent {
                 )
 
                 // Создаем базовый текстовый контент для fallback
-                val content = "Command: ${command.command}\nExit Code: ${result.exitCode}\nExecution Time: ${result.executionTime}ms\n\n${result.stdout}${if (result.stderr.isNotEmpty()) "\n\nErrors:\n${result.stderr}" else ""}"
+                val content =
+                    "Command: ${command.command}\nExit Code: ${result.exitCode}\nExecution Time: ${result.executionTime}ms\n\n${result.stdout}${if (result.stderr.isNotEmpty()) "\n\nErrors:\n${result.stderr}" else ""}"
 
                 val metadata = mapOf(
                     "command" to command.command,

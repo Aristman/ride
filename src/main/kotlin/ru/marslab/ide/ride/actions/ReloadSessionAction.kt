@@ -2,15 +2,13 @@ package ru.marslab.ide.ride.actions
 
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
-import com.intellij.openapi.project.Project
 import ru.marslab.ide.ride.ui.ChatPanel
-import ru.marslab.ide.ride.service.ChatService
-import com.intellij.openapi.components.service
 
 /**
  * Перезагрузка текущей сессии чата (обновление сообщений).
  */
-class ReloadSessionAction : AnAction("Reload", "Reload current chat session", com.intellij.icons.AllIcons.Actions.Refresh) {
+class ReloadSessionAction :
+    AnAction("Reload", "Reload current chat session", com.intellij.icons.AllIcons.Actions.Refresh) {
     override fun actionPerformed(e: AnActionEvent) {
         val component = e.getData(com.intellij.openapi.actionSystem.PlatformDataKeys.CONTEXT_COMPONENT)
         val panel = component?.let { findChatPanel(it) }

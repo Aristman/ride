@@ -11,7 +11,7 @@ import ru.marslab.ide.ride.model.agent.AgentSettings
 
 /**
  * Агент для выполнения задач из плана
- * 
+ *
  * Получает отдельную задачу с промптом и выполняет её.
  * НЕ видит другие задачи и результаты предыдущих задач.
  *
@@ -23,7 +23,7 @@ class ExecutorAgent(
 
     private val logger = Logger.getInstance(ExecutorAgent::class.java)
     private val chatOutputFormatter = ChatOutputFormatter()
-    
+
     override val capabilities: AgentCapabilities = AgentCapabilities(
         stateful = false,
         streaming = false,

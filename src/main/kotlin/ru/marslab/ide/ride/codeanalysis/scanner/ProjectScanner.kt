@@ -4,7 +4,6 @@ import com.intellij.openapi.module.ModuleManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ModuleRootManager
 import com.intellij.openapi.roots.ProjectFileIndex
-import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
 import java.io.File
 import java.nio.file.FileSystems
@@ -12,7 +11,7 @@ import java.nio.file.PathMatcher
 
 /**
  * Сканер файлов проекта
- * 
+ *
  * Обходит файлы проекта с учетом паттернов включения и исключения
  */
 class ProjectScanner(
@@ -20,7 +19,7 @@ class ProjectScanner(
 ) {
     /**
      * Сканирует проект и возвращает список файлов
-     * 
+     *
      * @param filePatterns Glob паттерны для включения файлов
      * @param excludePatterns Glob паттерны для исключения файлов
      * @return Список найденных файлов
@@ -37,22 +36,22 @@ class ProjectScanner(
         println("    Is initialized: ${project.isInitialized}")
         println("    Include patterns: $filePatterns")
         println("    Exclude patterns: $excludePatterns")
-        
+
         val includeMatchers = filePatterns.map { createGlobMatcher(it) }
         val excludeMatchers = excludePatterns.map { createGlobMatcher(it) }
-        
+
         println("    Created ${includeMatchers.size} include matchers and ${excludeMatchers.size} exclude matchers")
 
         // Пытаемся получить файлы через ProjectFileIndex
         val projectFileIndex = ProjectFileIndex.getInstance(project)
         println("    ProjectFileIndex initialized: $projectFileIndex")
-        
+
         // Получаем корневые директории проекта через ModuleManager
         val moduleManager = ModuleManager.getInstance(project)
         val projectRoots = moduleManager.modules.flatMap { module ->
             ModuleRootManager.getInstance(module).contentRoots.toList()
         }
-        
+
         println("    Found ${projectRoots.size} project roots:")
         projectRoots.forEachIndexed { index, root ->
             println("      Root $index: ${root.path}")
@@ -63,7 +62,7 @@ class ProjectScanner(
 
         // Собираем все файлы из корневых директорий
         val allFiles = mutableListOf<VirtualFile>()
-        
+
         // Если есть корневые директории, используем их
         if (projectRoots.isNotEmpty()) {
             projectRoots.forEach { root ->
@@ -78,7 +77,7 @@ class ProjectScanner(
                 collectFiles(baseDir, allFiles, includeMatchers, excludeMatchers)
             }
         }
-        
+
         println("    Found ${allFiles.size} files matching the patterns")
         if (allFiles.size <= 10) {
             allFiles.take(10).forEachIndexed { index, file ->
@@ -90,10 +89,10 @@ class ProjectScanner(
             }
             println("      ... and ${allFiles.size - 5} more files")
         }
-        
+
         return allFiles
     }
-    
+
     /**
      * Рекурсивно собирает файлы из директории, соответствующие паттернам
      */
@@ -110,12 +109,12 @@ class ProjectScanner(
                 }
                 return
             }
-            
+
             // Пропускаем скрытые директории (начинающиеся с .)
             if (dir.name.startsWith(".")) {
                 return
             }
-            
+
             // Рекурсивно обходим дочерние элементы
             dir.children?.forEach { child ->
                 if (child.isDirectory) {
@@ -132,7 +131,7 @@ class ProjectScanner(
             println("      Error scanning ${dir.path}: ${e.message}")
         }
     }
-    
+
     /**
      * Проверяет, должен ли файл быть включен в анализ
      */
@@ -143,12 +142,12 @@ class ProjectScanner(
     ): Boolean {
         val path = file.path
         val pathObj = java.nio.file.Paths.get(path)
-        
+
         // Проверяем исключения
         if (excludeMatchers.any { it.matches(pathObj) }) {
             return false
         }
-        
+
         // Проверяем включения
         return includeMatchers.any { it.matches(pathObj) }
     }

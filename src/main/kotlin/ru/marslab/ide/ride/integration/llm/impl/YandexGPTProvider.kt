@@ -10,11 +10,11 @@ import ru.marslab.ide.ride.integration.llm.model.CompletionOptions
 import ru.marslab.ide.ride.integration.llm.model.YandexGPTRequest
 import ru.marslab.ide.ride.integration.llm.model.YandexGPTResponse
 import ru.marslab.ide.ride.integration.llm.model.YandexMessage
+import ru.marslab.ide.ride.model.chat.ConversationMessage
+import ru.marslab.ide.ride.model.chat.ConversationRole
 import ru.marslab.ide.ride.model.llm.LLMParameters
 import ru.marslab.ide.ride.model.llm.LLMResponse
 import ru.marslab.ide.ride.model.llm.TokenUsage
-import ru.marslab.ide.ride.model.chat.ConversationMessage
-import ru.marslab.ide.ride.model.chat.ConversationRole
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -65,19 +65,19 @@ class YandexGPTProvider(
     private val config: YandexGPTConfig,
     private val tokenCounter: TokenCounter = TiktokenCounter.forGPT()
 ) : LLMProvider {
-    
+
     private val logger = Logger.getInstance(YandexGPTProvider::class.java)
-    
+
     private val httpClient = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(10))
         .build()
-    
+
     private val json = Json {
         ignoreUnknownKeys = true
         prettyPrint = false
         isLenient = true
     }
-    
+
     override suspend fun sendRequest(
         systemPrompt: String,
         userMessage: String,
@@ -98,11 +98,11 @@ class YandexGPTProvider(
             LLMResponse.error("Ошибка при обращении к Yandex GPT: ${e.message}")
         }
     }
-    
+
     override fun isAvailable(): Boolean {
         return config.apiKey.isNotBlank() && config.folderId.isNotBlank()
     }
-    
+
     override fun getProviderName(): String = "Yandex"
 
     /**
@@ -116,7 +116,7 @@ class YandexGPTProvider(
      * Возвращает счётчик токенов для этого провайдера
      */
     fun getTokenCounter(): TokenCounter = tokenCounter
-    
+
     /**
      * Строит запрос к Yandex GPT API
      */
@@ -156,7 +156,7 @@ class YandexGPTProvider(
             messages = messages
         )
     }
-    
+
     /**
      * Отправляет запрос с retry логикой
      */
@@ -166,12 +166,12 @@ class YandexGPTProvider(
     ): LLMResponse {
         var lastException: Exception? = null
         var currentDelay = 1000L
-        
+
         repeat(maxRetries) { attempt ->
             try {
                 // Сериализуем запрос в JSON
                 val requestBody = json.encodeToString(request)
-                
+
                 // Создаем HTTP запрос
                 val httpRequest = HttpRequest.newBuilder()
                     .uri(URI.create(API_ENDPOINT))
@@ -180,18 +180,20 @@ class YandexGPTProvider(
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                     .build()
-                
+
                 // Отправляем запрос
                 val httpResponse = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString())
-                
+
                 return when (httpResponse.statusCode()) {
                     200 -> {
                         val yandexResponse = json.decodeFromString<YandexGPTResponse>(httpResponse.body())
                         parseSuccessResponse(yandexResponse)
                     }
+
                     401 -> {
                         LLMResponse.error("Неверный API ключ. Проверьте настройки.")
                     }
+
                     429 -> {
                         if (attempt < maxRetries - 1) {
                             logger.warn("Rate limit exceeded, retrying after delay...")
@@ -202,12 +204,13 @@ class YandexGPTProvider(
                             LLMResponse.error("Превышен лимит запросов. Попробуйте позже.")
                         }
                     }
+
                     else -> {
                         logger.error("Yandex GPT API error: ${httpResponse.statusCode()}, body: ${httpResponse.body()}")
                         LLMResponse.error("Ошибка API: ${httpResponse.statusCode()}")
                     }
                 }
-                
+
             } catch (e: Exception) {
                 lastException = e
                 if (attempt < maxRetries - 1 && shouldRetry(e)) {
@@ -219,26 +222,26 @@ class YandexGPTProvider(
                 }
             }
         }
-        
+
         throw lastException ?: Exception("Unknown error")
     }
-    
+
     /**
      * Парсит успешный ответ от Yandex GPT
      */
     private fun parseSuccessResponse(response: YandexGPTResponse): LLMResponse {
         val alternative = response.result.alternatives.firstOrNull()
             ?: return LLMResponse.error("Пустой ответ от Yandex GPT")
-        
+
         val content = alternative.message.text
         val usage = response.result.usage
-        
+
         val tokenUsage = TokenUsage(
             inputTokens = usage.inputTextTokens.toIntOrNull() ?: 0,
             outputTokens = usage.completionTokens.toIntOrNull() ?: 0,
             totalTokens = usage.totalTokens.toIntOrNull() ?: 0
         )
-        
+
         return LLMResponse.success(
             content = content,
             tokenUsage = tokenUsage,
@@ -248,7 +251,7 @@ class YandexGPTProvider(
             )
         )
     }
-    
+
     /**
      * Определяет, нужно ли повторить запрос при данной ошибке
      */
@@ -260,7 +263,7 @@ class YandexGPTProvider(
             else -> exception.message?.contains("Rate limit") == true
         }
     }
-    
+
     companion object {
         private const val API_ENDPOINT = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
     }

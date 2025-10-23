@@ -11,7 +11,7 @@ import ru.marslab.ide.ride.service.ChatService
 
 /**
  * Отправляет сообщение через систему двух агентов (PlannerAgent + ExecutorAgent)
- * 
+ *
  * Использование: добавьте префикс "/plan " к вашему сообщению
  * Например: "/plan создай простое веб-приложение"
  */
@@ -23,13 +23,13 @@ fun sendMessageWithOrchestratorMode(
     onComplete: () -> Unit
 ) {
     val chatService = service<ChatService>()
-    
+
     chatService.sendMessageWithOrchestrator(
         userMessage = text,
         project = project,
         onStepComplete = { message ->
             onStepComplete(message)
-            
+
             // Проверяем, завершены ли все шаги
             val metadata = message.metadata
             if (metadata.containsKey("totalTasks")) {

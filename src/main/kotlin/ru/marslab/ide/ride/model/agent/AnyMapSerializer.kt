@@ -6,14 +6,15 @@ import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
-import kotlinx.serialization.json.*
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * Сериализатор для Map<String, Any>, который сохраняет только примитивные типы
  */
 object AnyMapSerializer : KSerializer<Map<String, Any>> {
     private val delegateSerializer = MapSerializer(String.serializer(), JsonElement.serializer())
-    
+
     override val descriptor: SerialDescriptor = delegateSerializer.descriptor
 
     override fun serialize(encoder: Encoder, value: Map<String, Any>) {
@@ -25,7 +26,7 @@ object AnyMapSerializer : KSerializer<Map<String, Any>> {
                 else -> null // Игнорируем сложные объекты
             }
         }.toMap()
-        
+
         encoder.encodeSerializableValue(delegateSerializer, jsonMap)
     }
 

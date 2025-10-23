@@ -5,7 +5,7 @@ import ru.marslab.ide.ride.model.codeanalysis.CodeChunk
 
 /**
  * Разбивает большие файлы на чанки для обработки
- * 
+ *
  * @property tokenCounter Счетчик токенов
  * @property maxTokensPerChunk Максимальное количество токенов в одном чанке
  */
@@ -15,7 +15,7 @@ class CodeChunker(
 ) {
     /**
      * Разбивает содержимое файла на чанки
-     * 
+     *
      * @param content Содержимое файла
      * @return Список чанков
      */
@@ -66,7 +66,7 @@ class CodeChunker(
 
     /**
      * Проверяет, нужно ли разбивать файл на чанки
-     * 
+     *
      * @param content Содержимое файла
      * @return true если файл нужно разбить
      */

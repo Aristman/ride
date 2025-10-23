@@ -6,16 +6,10 @@ import com.intellij.openapi.ui.Messages
 import com.intellij.ui.components.JBLabel
 import com.intellij.util.ui.JBUI
 import kotlinx.coroutines.*
-import ru.marslab.ide.ride.model.mcp.MCPMethod
 import ru.marslab.ide.ride.model.mcp.MCPServerConfig
 import ru.marslab.ide.ride.model.mcp.MCPServerStatus
 import ru.marslab.ide.ride.service.mcp.MCPConnectionManager
-import java.awt.BorderLayout
-import java.awt.CardLayout
-import java.awt.Cursor
-import java.awt.Dimension
-import java.awt.GridBagConstraints
-import java.awt.GridBagLayout
+import java.awt.*
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import javax.swing.*
@@ -297,6 +291,7 @@ class MCPServerListItem(
                 isExpanded = false
                 typeLabel.text = "[${server.type.name}]"
             }
+
             currentStatus!!.connected -> {
                 println("[MCPServerListItem] Status is connected for ${server.name}, methods: ${currentStatus!!.methods.size}")
                 statusIcon.icon = AllIcons.General.InspectionsOK
@@ -314,6 +309,7 @@ class MCPServerListItem(
                 nameLabel.text = "${server.name} - $count tools"
 //                typeLabel.text = "(${count}) [${server.type.name}]"
             }
+
             currentStatus!!.hasError() -> {
                 println("[MCPServerListItem] Status has error for ${server.name}: ${currentStatus!!.error}")
                 statusIcon.icon = AllIcons.General.Error
@@ -323,6 +319,7 @@ class MCPServerListItem(
                 isExpanded = false
                 typeLabel.text = "[${server.type.name}]"
             }
+
             else -> {
                 println("[MCPServerListItem] Status is disconnected for ${server.name}")
                 statusIcon.icon = AllIcons.General.Warning
@@ -394,7 +391,7 @@ class MCPServerListItem(
         println("[MCPServerListItem] toggleMethodsList called for ${server.name}")
         println("[MCPServerListItem] currentStatus: $currentStatus")
         println("[MCPServerListItem] connected: ${currentStatus?.connected}, hasMethods: ${currentStatus?.hasMethods()}")
-        
+
         if (!enableToggle.isSelected) {
             println("[MCPServerListItem] Cannot toggle - server is disabled")
             return
@@ -427,12 +424,12 @@ class MCPServerListItem(
     private fun showMethods() {
         println("[MCPServerListItem] showMethods called for ${server.name}")
         println("[MCPServerListItem] methods count: ${currentStatus?.methods?.size}")
-        
+
         methodsListPanel.removeAll()
 
         currentStatus?.methods?.forEachIndexed { index, method ->
             println("[MCPServerListItem] Adding method #$index: ${method.name}")
-            
+
             val methodPanel = JPanel(BorderLayout())
             methodPanel.border = JBUI.Borders.empty(2, 4)
             methodPanel.background = null // Прозрачный фон
@@ -442,7 +439,7 @@ class MCPServerListItem(
             nameLabel.font = nameLabel.font.deriveFont(11f)
             nameLabel.foreground = JBUI.CurrentTheme.Label.foreground()
             methodPanel.add(nameLabel, BorderLayout.WEST)
-            
+
             // Устанавливаем размеры после добавления компонентов
             val preferredHeight = nameLabel.preferredSize.height + 4
             methodPanel.preferredSize = Dimension(Int.MAX_VALUE, preferredHeight)
@@ -454,12 +451,12 @@ class MCPServerListItem(
 
         println("[MCPServerListItem] methodsListPanel component count: ${methodsListPanel.componentCount}")
         println("[MCPServerListItem] Showing methods panel...")
-        
+
         methodsLayout.show(methodsPanel, "methods")
         methodsPanel.isVisible = true
-        
+
         println("[MCPServerListItem] methodsPanel visible: ${methodsPanel.isVisible}")
-        
+
         // Обновляем размеры и перерисовываем
         methodsListPanel.revalidate()
         methodsListPanel.repaint()
@@ -467,7 +464,7 @@ class MCPServerListItem(
         methodsPanel.repaint()
         revalidate()
         repaint()
-        
+
         // Обновляем родительскую панель
         parent?.revalidate()
         parent?.repaint()

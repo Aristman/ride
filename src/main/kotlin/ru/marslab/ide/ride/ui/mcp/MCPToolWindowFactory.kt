@@ -10,7 +10,7 @@ import com.intellij.ui.content.ContentFactory
  * Фабрика для создания Tool Window с MCP методами
  */
 class MCPToolWindowFactory : ToolWindowFactory, DumbAware {
-    
+
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
         val mcpMethodsPanel = MCPMethodsPanel(project)
         val contentFactory = ContentFactory.getInstance()

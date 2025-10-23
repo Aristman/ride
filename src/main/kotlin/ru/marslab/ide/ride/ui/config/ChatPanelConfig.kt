@@ -81,7 +81,8 @@ object ChatPanelConfig {
 • `/exec <команда>` - альтернативный синтаксис для термінала
 • `/file <команда>` - выполнить запрос с работой в файловой системе
 """
-        const val CONFIGURATION_WARNING = "⚠️ Плагин не настроен. Перейдите в Settings → Tools → ride для настройки API ключа."
+        const val CONFIGURATION_WARNING =
+            "⚠️ Плагин не настроен. Перейдите в Settings → Tools → ride для настройки API ключа."
         const val HISTORY_CLEARED = "История чата очищена."
         const val PROCESSING_REQUEST = "⏳ Обработка запроса..."
         const val CONFIRM_CLEAR_CHAT = "Вы уверены, что хотите очистить историю чата?"

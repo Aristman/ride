@@ -151,10 +151,16 @@ data class XmlResponseData(
     companion object {
         fun fromXml(xmlString: String): XmlResponseData {
             // Извлекаем данные из XML с использованием регулярных выражений
-            val isFinal = Regex("""<isFinal[^>]*>(true|false)</isFinal>""").find(xmlString)?.groupValues?.get(1) == "true"
-            val uncertainty = Regex("""<uncertainty[^>]*>([\d.]+)</uncertainty>""").find(xmlString)?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0
-            val message = Regex("""<message[^>]*>(.*?)</message>""", RegexOption.DOT_MATCHES_ALL).find(xmlString)?.groupValues?.get(1)?.trim() ?: ""
-            val reasoning = Regex("""<reasoning[^>]*>([^<]+)</reasoning>""").find(xmlString)?.groupValues?.get(1)?.trim()
+            val isFinal =
+                Regex("""<isFinal[^>]*>(true|false)</isFinal>""").find(xmlString)?.groupValues?.get(1) == "true"
+            val uncertainty = Regex("""<uncertainty[^>]*>([\d.]+)</uncertainty>""").find(xmlString)?.groupValues?.get(1)
+                ?.toDoubleOrNull() ?: 0.0
+            val message = Regex(
+                """<message[^>]*>(.*?)</message>""",
+                RegexOption.DOT_MATCHES_ALL
+            ).find(xmlString)?.groupValues?.get(1)?.trim() ?: ""
+            val reasoning =
+                Regex("""<reasoning[^>]*>([^<]+)</reasoning>""").find(xmlString)?.groupValues?.get(1)?.trim()
 
             // Извлекаем уточняющие вопросы
             val clarifyingQuestions = mutableListOf<String>()

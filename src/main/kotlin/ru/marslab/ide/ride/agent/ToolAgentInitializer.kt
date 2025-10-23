@@ -1,11 +1,7 @@
 package ru.marslab.ide.ride.agent
 
 import com.intellij.openapi.diagnostic.Logger
-import ru.marslab.ide.ride.agent.tools.ArchitectureToolAgent
-import ru.marslab.ide.ride.agent.tools.CodeChunkerToolAgent
-import ru.marslab.ide.ride.agent.tools.CodeQualityToolAgent
-import ru.marslab.ide.ride.agent.tools.ProjectScannerToolAgent
-import ru.marslab.ide.ride.agent.tools.UserInteractionAgent
+import ru.marslab.ide.ride.agent.tools.*
 
 /**
  * Инициализатор для регистрации всех Tool Agents
@@ -54,7 +50,7 @@ object ToolAgentInitializer {
             throw e
         }
     }
-    
+
     /**
      * Регистрирует базовые агенты (минимальный набор)
      */

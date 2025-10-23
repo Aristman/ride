@@ -15,16 +15,16 @@ import ru.marslab.ide.ride.mcp.MCPServerManager
  */
 class RideStartupActivity : ProjectActivity {
     private val logger = Logger.getInstance(RideStartupActivity::class.java)
-    
+
     override suspend fun execute(project: Project) {
         logger.info("Ride plugin starting up...")
-        
+
         // Запустить MCP сервер в фоне
         ApplicationManager.getApplication().executeOnPooledThread {
             try {
                 val serverManager = MCPServerManager.getInstance()
                 val started = serverManager.ensureServerRunning()
-                
+
                 if (started) {
                     logger.info("MCP Server started successfully")
                     showNotification(
@@ -50,7 +50,7 @@ class RideStartupActivity : ProjectActivity {
             }
         }
     }
-    
+
     private fun showNotification(title: String, content: String, type: NotificationType) {
         val notification = Notification(
             "Ride",

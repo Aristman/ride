@@ -30,7 +30,11 @@ data class ToolAgentResult(
     val executionTimeMs: Long? = null
 ) {
     val isCompleted: Boolean
-        get() = status in setOf(ToolAgentExecutionStatus.COMPLETED, ToolAgentExecutionStatus.FAILED, ToolAgentExecutionStatus.CANCELLED)
+        get() = status in setOf(
+            ToolAgentExecutionStatus.COMPLETED,
+            ToolAgentExecutionStatus.FAILED,
+            ToolAgentExecutionStatus.CANCELLED
+        )
 
     val hasOutput: Boolean
         get() = !output.isNullOrEmpty()
@@ -127,26 +131,26 @@ data class ToolAgentStatusMessage(
             .replace("</h1></p>", "</h1>")
             .replace("<p><hr></p>", "<hr>")
     }
-    
+
     private fun formatOutputForDisplay(output: Map<String, Any>): String {
         // Извлекаем findings из output
         val findings = output["findings"] as? List<*> ?: return "Нет результатов"
-        
+
         if (findings.isEmpty()) {
             return "Проблем не обнаружено"
         }
-        
+
         // Форматируем findings как markdown
         return buildString {
             findings.forEachIndexed { index, finding ->
                 when (finding) {
                     is Map<*, *> -> {
                         val findingMap = finding as Map<String, Any>
-                        
+
                         // Заголовок с номером
                         appendLine("### ${index + 1}. ${findingMap["message"] ?: findingMap["description"] ?: "Проблема"}")
                         appendLine()
-                        
+
                         // Severity
                         findingMap["severity"]?.let { severity ->
                             val severityEmoji = when (severity.toString().uppercase()) {
@@ -158,7 +162,7 @@ data class ToolAgentStatusMessage(
                             }
                             appendLine("**Уровень:** $severityEmoji $severity")
                         }
-                        
+
                         // File and line
                         findingMap["file"]?.let { file ->
                             val line = findingMap["line"]
@@ -168,7 +172,7 @@ data class ToolAgentStatusMessage(
                                 appendLine("**Файл:** `$file`")
                             }
                         }
-                        
+
                         // Rule/Type
                         findingMap["rule"]?.let { rule ->
                             appendLine("**Правило:** `$rule`")
@@ -176,13 +180,13 @@ data class ToolAgentStatusMessage(
                         findingMap["type"]?.let { type ->
                             appendLine("**Тип:** `$type`")
                         }
-                        
+
                         // Suggestion
                         findingMap["suggestion"]?.let { suggestion ->
                             appendLine()
                             appendLine("**Рекомендация:** $suggestion")
                         }
-                        
+
                         // Description (для архитектурных проблем)
                         findingMap["description"]?.let { description ->
                             if (findingMap["message"] == null) {
@@ -190,17 +194,18 @@ data class ToolAgentStatusMessage(
                                 appendLine("$description")
                             }
                         }
-                        
+
                         // Modules (для циклических зависимостей)
                         findingMap["modules"]?.let { modules ->
                             appendLine()
                             appendLine("**Модули:** ${modules}")
                         }
-                        
+
                         appendLine()
                         appendLine("---")
                         appendLine()
                     }
+
                     else -> {
                         appendLine("- $finding")
                         appendLine()

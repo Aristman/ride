@@ -1,6 +1,5 @@
 package ru.marslab.ide.ride.service.storage
 
-import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable

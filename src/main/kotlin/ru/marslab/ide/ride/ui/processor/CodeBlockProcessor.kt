@@ -183,14 +183,17 @@ class CodeBlockProcessor {
                     sb.append(ch)
                     escape = false
                 }
+
                 ch == '\\' && inString -> {
                     sb.append(ch)
                     escape = true
                 }
+
                 ch == '"' -> {
                     inString = !inString
                     sb.append(ch)
                 }
+
                 inString -> sb.append(ch)
                 ch == '{' || ch == '[' -> {
                     sb.append(ch)
@@ -198,17 +201,20 @@ class CodeBlockProcessor {
                     indent++
                     sb.append("  ".repeat(indent))
                 }
+
                 ch == '}' || ch == ']' -> {
                     sb.append('\n')
                     indent = (indent - 1).coerceAtLeast(0)
                     sb.append("  ".repeat(indent))
                     sb.append(ch)
                 }
+
                 ch == ',' -> {
                     sb.append(ch)
                     sb.append('\n')
                     sb.append("  ".repeat(indent))
                 }
+
                 ch == ':' -> sb.append(": ")
                 ch.isWhitespace() -> {}
                 else -> sb.append(ch)
@@ -222,13 +228,13 @@ class CodeBlockProcessor {
      */
     private fun isCodeBlock(code: String): Boolean {
         return code.contains(';') ||
-               code.contains('{') ||
-               code.contains('}') ||
-               code.contains("fun ") ||
-               code.contains("function ") ||
-               code.contains("return ") ||
-               code.contains("class ") ||
-               code.contains("import ")
+                code.contains('{') ||
+                code.contains('}') ||
+                code.contains("fun ") ||
+                code.contains("function ") ||
+                code.contains("return ") ||
+                code.contains("class ") ||
+                code.contains("import ")
     }
 
     /**

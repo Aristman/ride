@@ -1,7 +1,6 @@
 package ru.marslab.ide.ride.orchestrator
 
 import ru.marslab.ide.ride.model.chat.ToolAgentStatusMessage
-import ru.marslab.ide.ride.model.chat.ToolAgentExecutionStatus
 
 /**
  * Слушатель для отслеживания прогресса выполнения tool agents

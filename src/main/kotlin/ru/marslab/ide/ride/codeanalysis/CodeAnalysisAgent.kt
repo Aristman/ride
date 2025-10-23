@@ -5,7 +5,7 @@ import ru.marslab.ide.ride.model.codeanalysis.*
 
 /**
  * Агент для анализа кода проекта
- * 
+ *
  * Специализированный агент для:
  * - Поиска багов и потенциальных проблем
  * - Анализа архитектуры проекта
@@ -16,7 +16,7 @@ import ru.marslab.ide.ride.model.codeanalysis.*
 interface CodeAnalysisAgent : Agent {
     /**
      * Анализирует проект по указанному пути
-     * 
+     *
      * @param request Запрос на анализ с параметрами
      * @return Результат анализа
      */
@@ -24,7 +24,7 @@ interface CodeAnalysisAgent : Agent {
 
     /**
      * Анализирует конкретный файл
-     * 
+     *
      * @param filePath Путь к файлу
      * @param analysisTypes Типы анализа для выполнения
      * @return Список найденных проблем
@@ -33,7 +33,7 @@ interface CodeAnalysisAgent : Agent {
 
     /**
      * Строит структуру проекта
-     * 
+     *
      * @param projectPath Путь к проекту
      * @return Структура проекта
      */
@@ -41,7 +41,7 @@ interface CodeAnalysisAgent : Agent {
 
     /**
      * Генерирует отчет в указанном формате
-     * 
+     *
      * @param result Результат анализа
      * @param format Формат отчета
      * @return Отчет в виде строки

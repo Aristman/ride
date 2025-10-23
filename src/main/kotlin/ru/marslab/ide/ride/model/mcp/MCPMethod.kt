@@ -20,17 +20,17 @@ data class MCPMethod(
      * Проверяет, есть ли описание
      */
     fun hasDescription(): Boolean = !description.isNullOrBlank()
-    
+
     /**
      * Проверяет, есть ли схема параметров
      */
     fun hasInputSchema(): Boolean = inputSchema != null
-    
+
     /**
      * Получает отображаемое имя метода
      */
     fun getDisplayName(): String = name
-    
+
     /**
      * Получает отображаемое описание метода
      */
@@ -55,12 +55,12 @@ data class MCPMethodResult(
      * Проверяет, есть ли результат
      */
     fun hasResult(): Boolean = result != null
-    
+
     /**
      * Проверяет, есть ли ошибка
      */
     fun hasError(): Boolean = error != null
-    
+
     companion object {
         /**
          * Создает успешный результат
@@ -72,7 +72,7 @@ data class MCPMethodResult(
                 executionTime = executionTime
             )
         }
-        
+
         /**
          * Создает результат с ошибкой
          */

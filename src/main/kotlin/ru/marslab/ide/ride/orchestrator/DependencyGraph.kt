@@ -5,7 +5,7 @@ import ru.marslab.ide.ride.model.orchestrator.PlanStep
 
 /**
  * Граф зависимостей для планов выполнения (DAG - Directed Acyclic Graph)
- * 
+ *
  * Используется для:
  * - Определения порядка выполнения шагов
  * - Выявления независимых шагов для параллельного выполнения
@@ -13,17 +13,17 @@ import ru.marslab.ide.ride.model.orchestrator.PlanStep
  */
 class DependencyGraph(private val steps: List<PlanStep>) {
     private val logger = Logger.getInstance(DependencyGraph::class.java)
-    
+
     /**
      * Граф зависимостей: stepId -> Set<dependencyIds>
      */
     private val graph: Map<String, Set<String>> = buildGraph()
-    
+
     /**
      * Обратный граф: stepId -> Set<dependentIds> (кто зависит от этого шага)
      */
     private val reverseGraph: Map<String, Set<String>> = buildReverseGraph()
-    
+
     /**
      * Строит граф зависимостей из списка шагов
      */
@@ -32,47 +32,47 @@ class DependencyGraph(private val steps: List<PlanStep>) {
             step.id to step.dependencies
         }
     }
-    
+
     /**
      * Строит обратный граф (кто зависит от каждого шага)
      */
     private fun buildReverseGraph(): Map<String, Set<String>> {
         val reverse = mutableMapOf<String, MutableSet<String>>()
-        
+
         graph.forEach { (stepId, dependencies) ->
             dependencies.forEach { depId ->
                 reverse.getOrPut(depId) { mutableSetOf() }.add(stepId)
             }
         }
-        
+
         return reverse
     }
-    
+
     /**
      * Выполняет топологическую сортировку и возвращает батчи для параллельного выполнения
-     * 
+     *
      * Каждый батч содержит шаги, которые можно выполнять параллельно
      * (т.е. шаги без зависимостей или с уже выполненными зависимостями)
-     * 
+     *
      * @return Список батчей, где каждый батч - список ID шагов для параллельного выполнения
      * @throws CircularDependencyException если обнаружена циклическая зависимость
      */
     fun topologicalSort(): List<List<String>> {
         logger.info("Starting topological sort for ${steps.size} steps")
-        
+
         val result = mutableListOf<List<String>>()
         val visited = mutableSetOf<String>()
         val inDegree = calculateInDegree()
-        
+
         var iteration = 0
         while (visited.size < graph.size) {
             iteration++
-            
+
             // Находим все узлы с нулевой входящей степенью (готовые к выполнению)
             val batch = graph.keys.filter { key ->
                 key !in visited && (inDegree[key] ?: 0) == 0
             }
-            
+
             if (batch.isEmpty()) {
                 // Если нет узлов с нулевой степенью, но еще есть непосещенные - циклическая зависимость
                 val remaining = graph.keys.filter { it !in visited }
@@ -82,11 +82,11 @@ class DependencyGraph(private val steps: List<PlanStep>) {
                     "Circular dependency detected among steps: $remaining"
                 )
             }
-            
+
             logger.info("Batch $iteration: ${batch.size} steps - $batch")
             result.add(batch)
             visited.addAll(batch)
-            
+
             // Уменьшаем входящую степень для зависимых узлов
             batch.forEach { node ->
                 reverseGraph[node]?.forEach { dependent ->
@@ -94,11 +94,11 @@ class DependencyGraph(private val steps: List<PlanStep>) {
                 }
             }
         }
-        
+
         logger.info("Topological sort completed: ${result.size} batches")
         return result
     }
-    
+
     /**
      * Вычисляет входящую степень для каждого узла
      * (количество зависимостей, которые должны быть выполнены перед этим шагом)
@@ -108,7 +108,7 @@ class DependencyGraph(private val steps: List<PlanStep>) {
             graph[key]?.size ?: 0
         }.toMutableMap()
     }
-    
+
     /**
      * Проверяет, есть ли циклические зависимости в графе
      */
@@ -120,28 +120,28 @@ class DependencyGraph(private val steps: List<PlanStep>) {
             true
         }
     }
-    
+
     /**
      * Возвращает все шаги, от которых зависит данный шаг (прямые зависимости)
      */
     fun getDependencies(stepId: String): Set<String> {
         return graph[stepId] ?: emptySet()
     }
-    
+
     /**
      * Возвращает все шаги, которые зависят от данного шага
      */
     fun getDependents(stepId: String): Set<String> {
         return reverseGraph[stepId] ?: emptySet()
     }
-    
+
     /**
      * Возвращает все транзитивные зависимости (включая зависимости зависимостей)
      */
     fun getTransitiveDependencies(stepId: String): Set<String> {
         val result = mutableSetOf<String>()
         val queue = ArrayDeque(getDependencies(stepId))
-        
+
         while (queue.isNotEmpty()) {
             val current = queue.removeFirst()
             if (current !in result) {
@@ -149,10 +149,10 @@ class DependencyGraph(private val steps: List<PlanStep>) {
                 queue.addAll(getDependencies(current))
             }
         }
-        
+
         return result
     }
-    
+
     /**
      * Проверяет, можно ли выполнить шаг (все его зависимости выполнены)
      */
