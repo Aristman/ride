@@ -25,6 +25,11 @@ import ru.marslab.ide.ride.model.schema.ResponseFormat
 import ru.marslab.ide.ride.model.schema.ResponseSchema
 import ru.marslab.ide.ride.orchestrator.EnhancedAgentOrchestrator
 import ru.marslab.ide.ride.orchestrator.ToolAgentProgressListener
+import ru.marslab.ide.ride.agent.tools.ProjectScannerToolAgent
+import ru.marslab.ide.ride.model.orchestrator.ExecutionContext
+import ru.marslab.ide.ride.model.tool.StepInput
+import ru.marslab.ide.ride.model.tool.ToolPlanStep
+import ru.marslab.ide.ride.model.orchestrator.AgentType
 import ru.marslab.ide.ride.service.storage.ChatStorageService
 import ru.marslab.ide.ride.settings.PluginSettings
 import ru.marslab.ide.ride.ui.chat.JcefChatView
@@ -72,15 +77,12 @@ class ChatService {
         override fun onToolAgentStarted(message: ToolAgentStatusMessage) {
             displayToolAgentStatus(message)
         }
-
         override fun onToolAgentStatusUpdated(message: ToolAgentStatusMessage) {
             displayToolAgentStatus(message)
         }
-
         override fun onToolAgentCompleted(message: ToolAgentStatusMessage) {
             displayToolAgentStatus(message)
         }
-
         override fun onToolAgentFailed(message: ToolAgentStatusMessage, error: String) {
             displayToolAgentStatus(message)
         }
@@ -88,6 +90,98 @@ class ChatService {
 
     // Список активных progress сообщений для обновления
     private val activeProgressMessages = mutableMapOf<String, Message>()
+
+    /**
+     * Запускает ProjectScannerToolAgent по команде "/files".
+     * Поддерживаемые параметры: page, batch_size, since_ts (напр.: "page=2 batch_size=200 since_ts=1698000000000").
+     */
+    fun sendFilesCommand(
+        userMessage: String,
+        project: Project,
+        onResponse: (Message) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        scope.launch {
+            try {
+                val params = parseKeyValueArgs(userMessage)
+                val page = params["page"]?.toIntOrNull()
+                val batchSize = params["batch_size"]?.toIntOrNull()
+                val sinceTs = params["since_ts"]?.toLongOrNull()
+                val forceRescan = params["force_rescan"]?.equals("true", ignoreCase = true) ?: false
+                val projectPathOverride = params["project_path"]
+
+                val agent = ProjectScannerToolAgent()
+                val inputMap = buildMap<String, Any> {
+                    page?.let { put("page", it) }
+                    batchSize?.let { put("batch_size", it) }
+                    sinceTs?.let { put("since_ts", it) }
+                    if (forceRescan) put("force_rescan", true)
+                }
+
+                val step = ToolPlanStep(
+                    description = "List project files (JSON batch)",
+                    agentType = AgentType.PROJECT_SCANNER,
+                    input = StepInput(
+                        if (projectPathOverride != null) inputMap + mapOf("project_path" to projectPathOverride) else inputMap
+                    )
+                )
+                val ctx = ExecutionContext(projectPath = projectPathOverride ?: (project.basePath ?: "."))
+
+                val result = agent.executeStep(step, ctx)
+
+                withContext(Dispatchers.EDT) {
+                    if (result.success) {
+                        val output = result.output.data
+                        val jsonPart = (output["json"]) ?: output
+                        val content = buildString {
+                            append("```json\n")
+                            append(simpleJsonString(jsonPart))
+                            append("\n```")
+                        }
+                        onResponse(
+                            Message(
+                                content = content,
+                                role = MessageRole.ASSISTANT,
+                                metadata = mapOf(
+                                    "command" to "/files",
+                                    "format" to (output["format"] ?: "JSON"),
+                                    "page" to (output["json"]?.let { (it as? Map<*, *>)?.get("batch") } ?: inputMap)
+                                )
+                            )
+                        )
+                    } else {
+                        onError(result.error ?: "Ошибка выполнения ProjectScannerToolAgent")
+                    }
+                }
+            } catch (e: Exception) {
+                logger.error("Error executing /files command", e)
+                withContext(Dispatchers.EDT) { onError(e.message ?: "Неизвестная ошибка") }
+            }
+        }
+    }
+
+    private fun parseKeyValueArgs(text: String): Map<String, String> {
+        if (text.isBlank()) return emptyMap()
+        return text.split(" ", "\n", "\t").mapNotNull { token ->
+            val idx = token.indexOf('=')
+            if (idx > 0 && idx < token.length - 1) token.substring(0, idx) to token.substring(idx + 1) else null
+        }.toMap()
+    }
+
+    private fun simpleJsonString(any: Any?): String {
+        return when (any) {
+            null -> "null"
+            is String -> "\"" + any.replace("\"", "\\\"") + "\""
+            is Number, is Boolean -> any.toString()
+            is Map<*, *> -> any.entries.joinToString(prefix = "{", postfix = "}") { (k, v) ->
+                val key = k?.toString() ?: "null"
+                "\"$key\": ${simpleJsonString(v)}"
+            }
+            is Iterable<*> -> any.joinToString(prefix = "[", postfix = "]") { v -> simpleJsonString(v) }
+            is Array<*> -> any.joinToString(prefix = "[", postfix = "]") { v -> simpleJsonString(v) }
+            else -> "\"" + any.toString().replace("\"", "\\\"") + "\""
+        }
+    }
 
     /**
      * Инициализирует сервис с проектом (синхронно)

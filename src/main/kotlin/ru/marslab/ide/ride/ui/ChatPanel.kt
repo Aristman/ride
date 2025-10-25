@@ -192,6 +192,26 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
                 )
             }
 
+            text.startsWith("/files") -> {
+                // Команда запуска сканера файлов через ProjectScannerToolAgent
+                val actualMessage = text.removePrefix("/files ").trim()
+                chatService.sendFilesCommand(
+                    userMessage = actualMessage,
+                    project = project,
+                    onResponse = { message ->
+                        messageDisplayManager.removeLastSystemMessage()
+                        messageDisplayManager.displayMessage(message)
+                        updateContextSize()
+                        setUIEnabled(true)
+                    },
+                    onError = { error ->
+                        messageDisplayManager.removeLastSystemMessage()
+                        messageDisplayManager.displaySystemMessage("Ошибка: $error")
+                        setUIEnabled(true)
+                    }
+                )
+            }
+
             text.startsWith("/file ") -> {
                 // Команда с поддержкой файлов (используем MCPFileSystemAgent)
                 val actualMessage = text.removePrefix("/file ").trim()

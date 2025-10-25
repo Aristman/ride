@@ -319,6 +319,42 @@ fun `should parse JSON response correctly`() {
 }
 ```
 
+## 🗂️ Project Scanner: JSON ответ
+
+Агента `ProjectScannerToolAgent` возвращает стандартизированный JSON-объект в поле `json` и указывает `format = "JSON"` в `StepOutput`.
+
+Структура:
+
+```json
+{
+  "project": {
+    "path": "string",
+    "type": "string"
+  },
+  "batch": {
+    "page": 1,
+    "batch_size": 500,
+    "total": 1234,
+    "has_more": true
+  },
+  "files": ["path/to/file1.kt", "path/to/file2.kt"],
+  "stats": { "total_files": 1234, "language_distribution": {"kt": 800} },
+  "directories_total": 150,
+  "tree_included": true,
+  "directory_tree": { "path": "/...", "children": [] }
+}
+```
+
+Параметры пакетной выдачи:
+
+- `page`: номер страницы (по умолчанию 1)
+- `batch_size`: размер пачки (по умолчанию 500)
+
+Замечания:
+
+- На страницах `page > 1` поле `directory_tree` пустое (`{}`), а `tree_included = false`.
+- Для обратной совместимости дублируются поля верхнего уровня: `files`, `directory_tree`, `project_type`, `file_statistics`, `total_files`, `total_directories`, `from_cache`, `scan_time_ms`.
+
 ## 📊 Ограничения и рекомендации
 
 ### Ограничения
