@@ -28,28 +28,23 @@ class ProjectScannerToolAgentTest {
     fun `should have correct agent type and capabilities`() {
         assertEquals(AgentType.PROJECT_SCANNER, agent.agentType)
         assertTrue(agent.toolCapabilities.contains("file_discovery"))
-        assertTrue(agent.toolCapabilities.contains("pattern_matching"))
-        assertTrue(agent.toolCapabilities.contains("exclusion_filtering"))
+        assertTrue(agent.toolCapabilities.contains("directory_tree"))
+        assertTrue(agent.toolCapabilities.contains("cache_management"))
+        assertTrue(agent.toolCapabilities.contains("file_monitoring"))
+        assertTrue(agent.toolCapabilities.contains("project_type_detection"))
+        assertTrue(agent.toolCapabilities.contains("adaptive_filtering"))
+        assertTrue(agent.toolCapabilities.contains("file_analysis"))
+        assertTrue(agent.toolCapabilities.contains("multi_agent_integration"))
     }
 
     @Test
-    fun `should validate input with patterns`() {
-        val input = StepInput.of("patterns" to listOf("**/*.kt"))
+    fun `should always validate input successfully`() {
+        val input = StepInput.empty()
 
         val result = agent.validateInput(input)
 
         assertTrue(result.isValid)
         assertTrue(result.errors.isEmpty())
-    }
-
-    @Test
-    fun `should fail validation without patterns`() {
-        val input = StepInput.empty()
-
-        val result = agent.validateInput(input)
-
-        assertFalse(result.isValid)
-        assertTrue(result.errors.isNotEmpty())
     }
 
     @Test
@@ -62,14 +57,16 @@ class ProjectScannerToolAgentTest {
         val step = ToolPlanStep(
             description = "Scan for Kotlin files",
             agentType = AgentType.PROJECT_SCANNER,
-            input = StepInput.of("patterns" to listOf("*.kt"))
+            input = StepInput.empty()
+                .set("project_path", tempDir.toString())
+                .set("include_patterns", listOf("*.kt"))
         )
 
         val context = ExecutionContext(projectPath = tempDir.toString())
 
         val result = agent.executeStep(step, context)
 
-        assertTrue(result.success, "Scan should succeed")
+        assertTrue(result.success, "Scan should succeed: ${result.error}")
         val files = result.output.get<List<String>>("files")
         assertNotNull(files, "Files list should not be null")
         assertTrue(files!!.isNotEmpty(), "Should find at least one file")
@@ -85,17 +82,17 @@ class ProjectScannerToolAgentTest {
         val step = ToolPlanStep(
             description = "Scan excluding build directory",
             agentType = AgentType.PROJECT_SCANNER,
-            input = StepInput.of(
-                "patterns" to listOf("*.kt"),
-                "exclude_patterns" to listOf("build/*.kt")
-            )
+            input = StepInput.empty()
+                .set("project_path", tempDir.toString())
+                .set("include_patterns", listOf("*.kt"))
+                .set("exclude_patterns", listOf("build/**"))
         )
 
         val context = ExecutionContext(projectPath = tempDir.toString())
 
         val result = agent.executeStep(step, context)
 
-        assertTrue(result.success, "Scan should succeed")
+        assertTrue(result.success, "Scan should succeed: ${result.error}")
         val files = result.output.get<List<String>>("files")
         assertNotNull(files, "Files list should not be null")
         assertTrue(files!!.none { it.contains("build") }, "No files should be from build directory")
@@ -108,17 +105,20 @@ class ProjectScannerToolAgentTest {
         val step = ToolPlanStep(
             description = "Scan project",
             agentType = AgentType.PROJECT_SCANNER,
-            input = StepInput.of("patterns" to listOf("**/*.kt"))
+            input = StepInput.empty()
+                .set("project_path", tempDir.toString())
+                .set("include_patterns", listOf("**/*.kt"))
         )
 
         val context = ExecutionContext(projectPath = tempDir.toString())
 
         val result = agent.executeStep(step, context)
 
-        assertTrue(result.success)
-        assertNotNull(result.output.get<Int>("total_count"))
-        assertNotNull(result.output.get<Long>("scan_time"))
-        assertTrue(result.output.get<Long>("scan_time")!! >= 0)
+        assertTrue(result.success, "Scan should succeed: ${result.error}")
+        val stats = result.output.get<Map<String, Any>>("stats")
+        assertNotNull(stats, "Stats should not be null")
+        assertTrue(stats!!.containsKey("total_files"))
+        assertTrue(stats.containsKey("scan_time_ms"))
     }
 
     @Test
@@ -126,15 +126,17 @@ class ProjectScannerToolAgentTest {
         val step = ToolPlanStep(
             description = "Scan non-existent path",
             agentType = AgentType.PROJECT_SCANNER,
-            input = StepInput.of("patterns" to listOf("**/*.kt"))
+            input = StepInput.empty()
+                .set("project_path", "/non/existent/path")
+                .set("include_patterns", listOf("**/*.kt"))
         )
 
         val context = ExecutionContext(projectPath = "/non/existent/path")
 
         val result = agent.executeStep(step, context)
 
-        assertFalse(result.success)
-        assertNotNull(result.error)
+        assertFalse(result.success, "Scan should fail for non-existent path")
+        assertNotNull(result.error, "Error should not be null")
     }
 
     @Test
@@ -142,15 +144,16 @@ class ProjectScannerToolAgentTest {
         val step = ToolPlanStep(
             description = "Scan without project path",
             agentType = AgentType.PROJECT_SCANNER,
-            input = StepInput.of("patterns" to listOf("**/*.kt"))
+            input = StepInput.empty()
+                .set("include_patterns", listOf("**/*.kt"))
         )
 
         val context = ExecutionContext(projectPath = null)
 
         val result = agent.executeStep(step, context)
 
-        assertFalse(result.success)
-        assertNotNull(result.error)
+        assertFalse(result.success, "Scan should fail without project path")
+        assertNotNull(result.error, "Error should not be null")
     }
 
     @Test
@@ -163,21 +166,21 @@ class ProjectScannerToolAgentTest {
         val step = ToolPlanStep(
             description = "Scan with max depth",
             agentType = AgentType.PROJECT_SCANNER,
-            input = StepInput.of(
-                "patterns" to listOf("**/*.kt"),
-                "max_depth" to 2
-            )
+            input = StepInput.empty()
+                .set("project_path", tempDir.toString())
+                .set("include_patterns", listOf("**/*.kt"))
+                .set("max_directory_depth", 2)
         )
 
         val context = ExecutionContext(projectPath = tempDir.toString())
 
         val result = agent.executeStep(step, context)
 
-        assertTrue(result.success)
+        assertTrue(result.success, "Scan should succeed: ${result.error}")
         val files = result.output.get<List<String>>("files")
-        assertNotNull(files)
+        assertNotNull(files, "Files should not be null")
         // С max_depth=2 должны найти только файлы на уровнях 1 и 2
-        assertTrue(files != null && files.size <= 2)
+        assertTrue(files!!.size <= 2, "Should find at most 2 files with depth limit")
     }
 
     // Helper methods

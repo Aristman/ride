@@ -25,6 +25,7 @@ import java.nio.file.Path
 import java.nio.file.PathMatcher
 import java.nio.file.attribute.BasicFileAttributes
 import java.security.MessageDigest
+import java.util.*
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
@@ -77,6 +78,9 @@ class ProjectScannerToolAgent : BaseToolAgent(
 
     // Project будет получен из ExecutionContext при первом вызове
     private var project: Project? = null
+
+    // Система подписок на дельты (для поддержки запросов от других агентов)
+    private val deltaSubscriptions = ConcurrentHashMap<String, DeltaSubscription>()
 
     init {
         // File listener будет инициализирован при первом получении project
@@ -313,16 +317,28 @@ class ProjectScannerToolAgent : BaseToolAgent(
                             }
                         }.toSet()
 
-                        // Инвалидируем кэш для затронутых проектов
+                        // Обрабатываем изменения для каждого проекта
                         affectedProjects.forEach { projectPath ->
                             logger.info("File system changed in $projectPath, invalidating cache")
+
+                            // Собираем измененные файлы
+                            val changedFiles = events.mapNotNull { event ->
+                                event.file?.path?.takeIf { it.startsWith(projectPath) }
+                            }
+
+                            // Инвалидируем кэш
                             cache[projectPath]?.invalidate()
+
+                            // Уведомляем подписчиков о дельтах
+                            if (changedFiles.isNotEmpty()) {
+                                notifyDeltaSubscribers(projectPath, changedFiles)
+                            }
                         }
                     }
                 }
             )
             fileListenerInitialized = true
-            logger.info("File listener initialized")
+            logger.info("File listener initialized with delta subscription support")
         } catch (e: Exception) {
             logger.error("Failed to initialize file listener", e)
         }
@@ -1029,6 +1045,59 @@ class ProjectScannerToolAgent : BaseToolAgent(
         }.take(10) // Ограничиваем количество ключевых файлов
     }
 
+    /**
+     * Создает подписку на дельты для других агентов
+     */
+    fun createDeltaSubscription(
+        agentId: String,
+        projectPath: String,
+        callback: (DeltaUpdate) -> Unit
+    ): String {
+        val subscriptionId = UUID.randomUUID().toString()
+        val subscription = DeltaSubscription(
+            id = subscriptionId,
+            agentId = agentId,
+            projectPath = projectPath,
+            callback = callback,
+            lastTimestamp = System.currentTimeMillis()
+        )
+        deltaSubscriptions[subscriptionId] = subscription
+        logger.info("Created delta subscription $subscriptionId for agent $agentId on project $projectPath")
+        return subscriptionId
+    }
+
+    /**
+     * Отменяет подписку на дельты
+     */
+    fun cancelDeltaSubscription(subscriptionId: String): Boolean {
+        val removed = deltaSubscriptions.remove(subscriptionId) != null
+        if (removed) {
+            logger.info("Cancelled delta subscription $subscriptionId")
+        }
+        return removed
+    }
+
+    /**
+     * Уведомляет подписчиков об изменениях
+     */
+    private fun notifyDeltaSubscribers(projectPath: String, changedFiles: List<String>) {
+        val relevantSubscriptions = deltaSubscriptions.values.filter { it.projectPath == projectPath }
+
+        relevantSubscriptions.forEach { subscription ->
+            try {
+                val deltaUpdate = DeltaUpdate(
+                    subscriptionId = subscription.id,
+                    projectPath = projectPath,
+                    timestamp = System.currentTimeMillis(),
+                    changedFiles = changedFiles
+                )
+                subscription.callback(deltaUpdate)
+            } catch (e: Exception) {
+                logger.warn("Error notifying delta subscription ${subscription.id}: ${e.message}")
+            }
+        }
+    }
+
     companion object {
         private val DEFAULT_EXCLUDE_PATTERNS = listOf(
             "**/node_modules/**",
@@ -1119,3 +1188,24 @@ private data class ProjectScanCache(
         private const val CACHE_TTL_MS = 5 * 60 * 1000L // 5 минут
     }
 }
+
+/**
+ * Подписка на дельты изменений файлов
+ */
+private data class DeltaSubscription(
+    val id: String,
+    val agentId: String,
+    val projectPath: String,
+    val callback: (DeltaUpdate) -> Unit,
+    var lastTimestamp: Long
+)
+
+/**
+ * Обновление с дельтой изменений
+ */
+data class DeltaUpdate(
+    val subscriptionId: String,
+    val projectPath: String,
+    val timestamp: Long,
+    val changedFiles: List<String>
+)

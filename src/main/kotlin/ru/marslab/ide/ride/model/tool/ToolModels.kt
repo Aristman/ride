@@ -43,6 +43,10 @@ data class StepInput(
     fun getBoolean(key: String): Boolean? = get(key)
 
     fun <T> getList(key: String): List<T>? = get(key)
+
+    fun set(key: String, value: Any): StepInput {
+        return copy(data = data + (key to value))
+    }
 }
 
 /**

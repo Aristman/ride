@@ -36,7 +36,8 @@ class EnhancedAgentOrchestrator(
     private val stateMachine: PlanStateMachine = PlanStateMachine(),
     private val progressTracker: ProgressTracker = ProgressTracker(),
     private val toolAgentRegistry: ToolAgentRegistry = ToolAgentRegistry(),
-    private val retryLoopExecutor: RetryLoopExecutor = RetryLoopExecutor()
+    private val retryLoopExecutor: RetryLoopExecutor = RetryLoopExecutor(),
+    private val projectScannerIntegration: ProjectScannerOrchestratorIntegration = ProjectScannerOrchestratorIntegration()
 ) : StateChangeListener, ProgressListener {
 
     private val logger = Logger.getInstance(EnhancedAgentOrchestrator::class.java)
@@ -233,6 +234,10 @@ class EnhancedAgentOrchestrator(
                 activePlans[planId] = updatedPlan
                 planStorage.update(updatedPlan)
                 progressTracker.finishTracking(planId, false)
+
+                // Очищаем ресурсы ProjectScanner при отмене
+                projectScannerIntegration.cleanupForPlan(updatedPlan)
+
                 true
             } else {
                 false
@@ -241,6 +246,13 @@ class EnhancedAgentOrchestrator(
             logger.error("Failed to cancel plan $planId", e)
             false
         }
+    }
+
+    /**
+     * Получает доступ к интеграции с ProjectScanner для других компонентов
+     */
+    fun getProjectScannerIntegration(): ProjectScannerOrchestratorIntegration {
+        return projectScannerIntegration
     }
 
     /**
@@ -453,6 +465,39 @@ class EnhancedAgentOrchestrator(
             activePlans[plan.id] = executingPlan
             planStorage.update(executingPlan)
 
+            // Подготавливаем сканирование проекта если требуется
+            val projectPath = executingPlan.analysis.context.projectPath
+            if (projectPath != null && executingPlan.steps.any { it.agentType.toString().contains("project_scanner") }) {
+                logger.info("Preparing project scan for plan ${executingPlan.id}")
+
+                val scanPreparation = projectScannerIntegration.prepareProjectScan(
+                    plan = executingPlan,
+                    projectPath = projectPath,
+                    forceRescan = false
+                )
+
+                when (scanPreparation) {
+                    is ScanPreparationResult.Success -> {
+                        logger.info("Project scan prepared: ${scanPreparation.files.size} files, from cache: ${scanPreparation.fromCache}")
+
+                        // Создаем подписку на дельты для long-running планов
+                        if (executingPlan.steps.size > 3) { // Если в плане больше 3 шагов
+                            projectScannerIntegration.createDeltaSubscriptionForPlan(
+                                plan = executingPlan,
+                                projectPath = projectPath
+                            ) { deltaUpdate ->
+                                logger.info("Files changed during plan execution: ${deltaUpdate.changedFiles.size}")
+                                // Можно добавить логику перезапуска анализа при изменениях
+                            }
+                        }
+                    }
+                    is ScanPreparationResult.Error -> {
+                        logger.warn("Project scan preparation failed: ${scanPreparation.message}")
+                        // Продолжаем выполнение без сканирования
+                    }
+                }
+            }
+
             // Последовательно выполняем шаги (для Phase 1)
             val completedSteps = mutableListOf<String>()
             val stepResults = mutableMapOf<String, Any>() // Результаты шагов для передачи
@@ -536,7 +581,10 @@ class EnhancedAgentOrchestrator(
                     "plan_id" to plan.id,
                     "completed_steps" to completedSteps.size
                 )
-            )
+            ).also {
+                // Очищаем ресурсы ProjectScanner после успешного выполнения
+                projectScannerIntegration.cleanupForPlan(executingPlan)
+            }
 
         } catch (e: Exception) {
             logger.error("Error executing plan", e)
@@ -544,6 +592,9 @@ class EnhancedAgentOrchestrator(
             val failedPlan = stateMachine.transition(plan, PlanEvent.Error(e.message ?: "Ошибка выполнения"))
             activePlans[plan.id] = failedPlan
             planStorage.update(failedPlan)
+
+            // Очищаем ресурсы ProjectScanner при ошибке
+            projectScannerIntegration.cleanupForPlan(failedPlan)
 
             AgentResponse.error(
                 error = e.message ?: "Ошибка выполнения плана",
