@@ -82,6 +82,18 @@ class ProjectScannerToolAgent : BaseToolAgent(
     // Система подписок на дельты (для поддержки запросов от других агентов)
     private val deltaSubscriptions = ConcurrentHashMap<String, DeltaSubscription>()
 
+    // Улучшенная система индексации для быстрого поиска
+    private val fileIndex = ConcurrentHashMap<String, MutableSet<String>>()
+    private val extensionIndex = ConcurrentHashMap<String, MutableSet<String>>()
+    private val languageIndex = ConcurrentHashMap<String, MutableSet<String>>()
+    private val sizeIndex = ConcurrentHashMap<String, MutableSet<String>>()
+
+    // Метрики производительности
+    private var totalScanTime = 0L
+    private var totalFilesScanned = 0L
+    private var cacheHits = 0L
+    private var cacheMisses = 0L
+
     init {
         // File listener будет инициализирован при первом получении project
     }
@@ -93,6 +105,204 @@ class ProjectScannerToolAgent : BaseToolAgent(
     override fun validateInput(input: StepInput): ValidationResult {
         // Валидация не требуется - агент работает с дефолтными значениями
         return ValidationResult.success()
+    }
+
+    // ==================== МЕТОДЫ ДЛЯ ИНДЕКСАЦИИ И ПРОИЗВОДИТЕЛЬНОСТИ ====================
+
+    /**
+     * Построение индексов для быстрого поиска файлов
+     */
+    private fun buildFileIndexes(fileInfos: List<EnhancedFileInfo>) {
+        val startTime = System.currentTimeMillis()
+
+        // Очищаем старые индексы
+        fileIndex.clear()
+        extensionIndex.clear()
+        languageIndex.clear()
+        sizeIndex.clear()
+
+        // Строим новые индексы
+        fileInfos.forEach { fileInfo ->
+            val path = fileInfo.path
+
+            // Индекс по расширению
+            val extension = fileInfo.extension
+            val extSet = extensionIndex.computeIfAbsent(extension) { mutableSetOf() }
+            (extSet as MutableSet<String>).add(path)
+
+            // Индекс по языку программирования
+            val language = detectLanguageFromPath(path)
+            val langSet = languageIndex.computeIfAbsent(language) { mutableSetOf() }
+            (langSet as MutableSet<String>).add(path)
+
+            // Индекс по размеру (категории)
+            val sizeCategory = categorizeFileSize(fileInfo.size)
+            val sizeSet = sizeIndex.computeIfAbsent(sizeCategory) { mutableSetOf() }
+            (sizeSet as MutableSet<String>).add(path)
+
+            // Главный индекс файлов
+            fileIndex[path] = mutableSetOf(
+                "ext:$extension",
+                "lang:$language",
+                "size:$sizeCategory",
+                "dir:${File(path).parent}"
+            )
+        }
+
+        val indexTime = System.currentTimeMillis() - startTime
+        logger.info("Built file indexes: ${fileInfos.size} files indexed in ${indexTime}ms")
+
+        // Обновляем метрики
+        totalFilesScanned += fileInfos.size
+    }
+
+    /**
+     * Определение языка программирования по пути файла
+     */
+    private fun detectLanguageFromPath(path: String): String {
+        val extension = File(path).extension.lowercase()
+        return when (extension) {
+            "kt", "kts" -> "kotlin"
+            "java" -> "java"
+            "js", "jsx" -> "javascript"
+            "ts", "tsx" -> "typescript"
+            "py" -> "python"
+            "cpp", "cc", "cxx" -> "cpp"
+            "c" -> "c"
+            "cs" -> "csharp"
+            "go" -> "go"
+            "rs" -> "rust"
+            "php" -> "php"
+            "rb" -> "ruby"
+            "swift" -> "swift"
+            "scala" -> "scala"
+            "groovy" -> "groovy"
+            "xml" -> "xml"
+            "json" -> "json"
+            "yaml", "yml" -> "yaml"
+            "html" -> "html"
+            "css" -> "css"
+            "scss", "sass" -> "scss"
+            "md" -> "markdown"
+            "gradle" -> "gradle"
+            "properties" -> "properties"
+            "sql" -> "sql"
+            "sh", "bash", "zsh" -> "shell"
+            else -> "unknown"
+        }
+    }
+
+    /**
+     * Категоризация размера файла
+     */
+    private fun categorizeFileSize(size: Long): String = when {
+        size < 1024 -> "tiny"
+        size < 10_240 -> "small"
+        size < 102_400 -> "medium"
+        size < 1_048_576 -> "large"
+        else -> "huge"
+    }
+
+    /**
+     * Поиск файлов по множественным критериям
+     */
+    private fun searchFilesByCriteria(
+        extensions: Set<String>? = null,
+        languages: Set<String>? = null,
+        sizeCategories: Set<String>? = null,
+        directories: Set<String>? = null
+    ): Set<String> {
+        var result = fileIndex.keys.toSet()
+
+        // Фильтрация по расширениям
+        extensions?.let { exts ->
+            val filtered = exts.flatMap { ext ->
+                extensionIndex[ext]?.toList() ?: emptyList()
+            }.toSet()
+            result = result.intersect(filtered)
+        }
+
+        // Фильтрация по языкам
+        languages?.let { langs ->
+            val filtered = langs.flatMap { lang ->
+                languageIndex[lang]?.toList() ?: emptyList()
+            }.toSet()
+            result = result.intersect(filtered)
+        }
+
+        // Фильтрация по размеру
+        sizeCategories?.let { sizes ->
+            val filtered = sizes.flatMap { size ->
+                sizeIndex[size]?.toList() ?: emptyList()
+            }.toSet()
+            result = result.intersect(filtered)
+        }
+
+        // Фильтрация по директориям
+        directories?.let { dirs ->
+            result = result.filter { path ->
+                dirs.any { dir -> path.startsWith(dir) }
+            }.toSet()
+        }
+
+        return result
+    }
+
+    /**
+     * Получение статистики производительности
+     */
+    private fun getPerformanceMetrics(): Map<String, Any> {
+        val avgScanTime = if (totalFilesScanned > 0) totalScanTime / totalFilesScanned else 0L
+        val cacheHitRate = if (cacheHits + cacheMisses > 0) {
+            (cacheHits.toDouble() / (cacheHits + cacheMisses) * 100).toInt()
+        } else 0
+
+        return mapOf(
+            "total_files_scanned" to totalFilesScanned,
+            "total_scan_time_ms" to totalScanTime,
+            "average_scan_time_per_file_ms" to avgScanTime,
+            "cache_hits" to cacheHits,
+            "cache_misses" to cacheMisses,
+            "cache_hit_rate_percent" to cacheHitRate,
+            "indexed_files" to fileIndex.size,
+            "extension_index_size" to extensionIndex.size,
+            "language_index_size" to languageIndex.size,
+            "memory_optimization_enabled" to true,
+            "index_memory_usage_mb" to estimateIndexMemoryUsage()
+        )
+    }
+
+    /**
+     * Оценка использования памяти индексами
+     */
+    private fun estimateIndexMemoryUsage(): Double {
+        val indexSize = fileIndex.size + extensionIndex.size + languageIndex.size + sizeIndex.size
+        // Приблизительная оценка: 100 байт на одну запись индекса
+        return (indexSize * 100) / (1024.0 * 1024.0) // MB
+    }
+
+    /**
+     * Оптимизация памяти: очистка старых записей кэша и индексов
+     */
+    private fun optimizeMemory() {
+        val maxSize = 100 // Максимальное количество записей в кэше
+
+        if (cache.size > maxSize) {
+            // Сортируем по времени последнего доступа и удаляем самые старые
+            val sortedEntries = cache.entries.sortedBy { it.value.timestamp }
+            val toRemove = sortedEntries.take(cache.size - maxSize)
+
+            toRemove.forEach { entry ->
+                cache.remove(entry.key)
+                logger.info("Removed old cache entry for project: ${entry.value.projectPath}")
+            }
+        }
+
+        // Принудительная сборка мусора для освобождения памяти
+        if (estimateIndexMemoryUsage() > 50.0) { // Если индексы занимают > 50MB
+            logger.info("High memory usage detected, triggering garbage collection")
+            System.gc()
+        }
     }
 
     override suspend fun doExecuteStep(step: ToolPlanStep, context: ExecutionContext): StepResult {
@@ -130,6 +340,8 @@ class ProjectScannerToolAgent : BaseToolAgent(
         val cachedData = cache[cacheKey]
 
         if (!scanSettings.forceRescan && cachedData != null && cachedData.isValid()) {
+            // Обновляем метрики производительности для кэша
+            cacheHits++
             logger.info("Using cached data for $projectPath (age: ${cachedData.getAgeSeconds()}s)")
 
             // Batching params
@@ -146,6 +358,9 @@ class ProjectScannerToolAgent : BaseToolAgent(
             val changedFiles: List<String> = sinceTs?.let { ts ->
                 cachedData.fileIndex.entries.filter { it.value.lastModified > ts }.map { it.key }
             } ?: emptyList()
+
+            // Добавляем метрики производительности даже для кэшированного результата
+            val performanceMetrics = getPerformanceMetrics()
 
             val jsonResult = mapOf(
                 "project" to mapOf(
@@ -166,7 +381,8 @@ class ProjectScannerToolAgent : BaseToolAgent(
                 "delta" to mapOf(
                     "since_ts" to (sinceTs ?: 0L),
                     "changed_files" to changedFiles
-                )
+                ),
+                "performance_metrics" to performanceMetrics
             )
 
             return StepResult.success(
@@ -181,7 +397,8 @@ class ProjectScannerToolAgent : BaseToolAgent(
                     "total_directories" to cachedData.directories.size,
                     "from_cache" to true,
                     "cache_age_seconds" to cachedData.getAgeSeconds(),
-                    "scan_statistics" to cachedData.statistics
+                    "scan_statistics" to cachedData.statistics,
+                    "performance_metrics" to performanceMetrics
                 ),
                 metadata = mapOf(
                     "project_path" to projectPath,
@@ -204,6 +421,12 @@ class ProjectScannerToolAgent : BaseToolAgent(
             projectType
         )
 
+        // Строим индексы для быстрого поиска (улучшение производительности)
+        buildFileIndexes(scanResult.fileInfos)
+
+        // Оптимизация памяти
+        optimizeMemory()
+
         // Сохраняем в кэш
         val scanCache = ProjectScanCache(
             projectPath = projectPath,
@@ -222,6 +445,10 @@ class ProjectScannerToolAgent : BaseToolAgent(
         cache[cacheKey] = scanCache
 
         val scanTime = System.currentTimeMillis() - startTime
+
+        // Обновляем метрики производительности
+        totalScanTime += scanTime
+        cacheMisses++
 
         logger.info("Enhanced scan completed: ${scanResult.files.size} files, ${scanResult.directories.size} directories in ${scanTime}ms")
 
@@ -261,10 +488,14 @@ class ProjectScannerToolAgent : BaseToolAgent(
             )
         )
 
+        // Добавляем метрики производительности в результат
+        val performanceMetrics = getPerformanceMetrics()
+        val enhancedJsonResult = jsonResult + ("performance_metrics" to performanceMetrics)
+
         return StepResult.success(
             output = StepOutput.of(
                 "format" to "JSON",
-                "json" to jsonResult,
+                "json" to enhancedJsonResult,
                 // Backward-compatible fields
                 "files" to filesPage,
                 "directory_tree" to (if (page == 1) scanResult.directoryTree else emptyMap<String, Any>()),
@@ -274,7 +505,8 @@ class ProjectScannerToolAgent : BaseToolAgent(
                 "total_files" to total,
                 "total_directories" to scanResult.directories.size,
                 "from_cache" to false,
-                "scan_time_ms" to scanTime
+                "scan_time_ms" to scanTime,
+                "performance_metrics" to performanceMetrics
             ),
             metadata = mapOf(
                 "project_path" to projectPath,
