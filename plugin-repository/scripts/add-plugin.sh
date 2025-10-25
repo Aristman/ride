@@ -26,6 +26,21 @@ print_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 print_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
 print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
+# Гарантируем наличие нужных директорий и базового XML
+ensure_layout() {
+    mkdir -p "$ARCHIVES_DIR" "$BACKUP_DIR"
+    if [[ ! -f "$UPDATE_XML" ]]; then
+        print_warning "Файл $UPDATE_XML не найден — создаю базовую структуру"
+        cat > "$UPDATE_XML" << 'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<plugins>
+</plugins>
+EOF
+        chown www-data:www-data "$UPDATE_XML" || true
+        chmod 644 "$UPDATE_XML" || true
+    fi
+}
+
 # Проверка аргументов
 check_args() {
     if [[ $# -ne 5 ]]; then
@@ -95,8 +110,12 @@ extract_version() {
 # Создание резервной копии
 backup_xml() {
     local backup_file="$BACKUP_DIR/updatePlugins-$(date +%Y%m%d-%H%M%S).xml"
-    cp "$UPDATE_XML" "$backup_file"
-    print_info "Создана резервная копия: $backup_file"
+    if [[ -f "$UPDATE_XML" ]]; then
+        cp "$UPDATE_XML" "$backup_file"
+        print_info "Создана резервная копия: $backup_file"
+    else
+        print_warning "Пропускаю резервное копирование: $UPDATE_XML не найден"
+    fi
 }
 
 # Добавление плагина в XML
@@ -107,6 +126,7 @@ add_plugin_to_xml() {
     local vendor="$4"
     local zip_name="$5"
     local domain="$6"
+    local version="$7"
 
     # Экранируем специальные символы для XML
     local escaped_name="${plugin_name//&/&amp;}"
@@ -114,14 +134,7 @@ add_plugin_to_xml() {
     local escaped_vendor="${vendor//&/&amp;}"
 
     # Создаем XML-элемент плагина
-    local plugin_entry="  <plugin id=\"$plugin_id\"
-          url=\"http://$domain/archives/$zip_name\"
-          version=\"$version\">
-    <name>$escaped_name</name>
-    <description>$escaped_description</description>
-    <vendor>$escaped_vendor</vendor>
-    <idea-version since-build=\"211.0\" until-build=\"241.*\"/>
-  </plugin>"
+    local plugin_entry="  <plugin id=\"$plugin_id\"\n          url=\"http://$domain/archives/$zip_name\"\n          version=\"$version\">\n    <name>$escaped_name</name>\n    <description>$escaped_description</description>\n    <vendor>$escaped_vendor</vendor>\n    <idea-version since-build=\"211.0\" until-build=\"241.*\"/>\n  </plugin>"
 
     # Вставляем перед закрывающим тегом </plugins>
     sed -i "s|</plugins>|$plugin_entry\n</plugins>|" "$UPDATE_XML"
@@ -150,11 +163,16 @@ main() {
         exit 1
     fi
 
+    # Гарантируем наличие директорий и базового XML
+    ensure_layout
+
     # Определяем домен
-    local domain
-    domain=$(grep -oP '(?<=url="http://)[^"]+(?=/archives/)' "$UPDATE_XML" | head -1)
+    local domain=""
+    if [[ -f "$UPDATE_XML" ]]; then
+        domain=$(grep -oP '(?<=url="http://)[^"]+(?=/archives/)' "$UPDATE_XML" | head -1 || true)
+    fi
     if [[ -z "$domain" ]]; then
-        domain=$(ip route get 1.1.1.1 | awk '{print $7}' | head -1)
+        domain=${DOMAIN_NAME:-$(ip route get 1.1.1.1 | awk '{print $7}' | head -1)}
         print_warning "Не удалось определить домен из XML, используется: $domain"
     fi
 
@@ -176,7 +194,7 @@ main() {
     backup_xml
 
     # Добавляем плагин в XML
-    add_plugin_to_xml "$plugin_id" "$plugin_name" "$description" "$vendor" "$zip_name" "$domain"
+    add_plugin_to_xml "$plugin_id" "$plugin_name" "$description" "$vendor" "$zip_name" "$domain" "$version"
 
     # Устанавливаем правильные права для XML
     chown www-data:www-data "$UPDATE_XML"

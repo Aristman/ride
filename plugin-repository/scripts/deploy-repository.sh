@@ -15,7 +15,7 @@ set -euo pipefail
 
 # IP адрес или доменное имя сервера
 # Если не установлено, пытаемся определить автоматически
-DOMAIN_NAME="${DOMAIN_NAME:-$(ip route get 1.1.1.1 | awk '{print $7}' | head -1)}"
+DOMAIN_NAME="158.160.107.227"
 
 # Базовый путь репозитория
 REPO_BASE_PATH="/var/www/plugins"
@@ -67,7 +67,7 @@ update_system() {
 
 install_packages() {
     print_info "Установка необходимых пакетов..."
-    apt install -y nginx curl unzip -qq
+    apt install -y nginx curl unzip zip -qq
     print_success "Пакеты установлены"
 }
 
@@ -140,6 +140,7 @@ create_demo_plugin() {
     mkdir -p "$plugin_temp"
 
     # Создаем структуру плагина
+    mkdir -p "$plugin_temp/META-INF"
     cat > "$plugin_temp/META-INF/plugin.xml" << 'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <idea-plugin>
@@ -147,7 +148,7 @@ create_demo_plugin() {
     <name>Demo Plugin</name>
     <description>Пример плагина для учебного репозитория</description>
     <vendor>Example Company</vendor>
-    <idea-version since-build="211.0" until-build="241.*"/>
+    <idea-version since-build="211.0" until-build="999.*"/>
     <depends>com.intellij.modules.platform</depends>
 </idea-plugin>
 EOF
@@ -188,7 +189,7 @@ create_update_plugins_xml() {
     <name>Demo Plugin</name>
     <description>Пример плагина для учебного репозитория</description>
     <vendor>Example Company</vendor>
-    <idea-version since-build="211.0" until-build="241.*"/>
+    <idea-version since-build="211.0" until-build="999.*"/>
   </plugin>
 </plugins>
 EOF
@@ -300,7 +301,5 @@ main() {
     print_success "Развертывание завершено успешно!"
 }
 
-# Запуск
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    main "$@"
-fi
+# Запуск скрипта
+main "$@"
