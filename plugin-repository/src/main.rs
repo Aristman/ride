@@ -81,9 +81,7 @@ async fn main() -> Result<()> {
             Ok(())
         }
         Commands::Ai(cmd) => {
-            println!("🤖 AI команда: {:?}", cmd);
-            // TODO: Реализация AI команд
-            Ok(())
+            commands::ai::handle_ai_command(cmd, &args.config).await
         }
         Commands::Validate(cmd) => {
             println!("✅ Команда валидации: {:?}", cmd);
