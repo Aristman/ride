@@ -48,3 +48,4 @@ bin/
 /.claude/settings.local.json
 /local.properties
 /plugin-repository/.env
+/.ride/mcp.json

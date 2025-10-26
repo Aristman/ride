@@ -9,11 +9,11 @@ output_dir = "build/distributions"
 
 [repository]
 url = "${REPOSITORY_URL}"
-ssh_host = "158.160.107.227"
-ssh_user = "bender"
-ssh_private_key_path = "/home/aristman/.ssh/ssh-key-1755521373100"
-deploy_path = "/var/www/plugins/archives"
-xml_path = "/var/www/plugins/updatePlugins.xml"
+ssh_host = "${SSH_HOST}"
+ssh_user = "${SSH_USER}"
+ssh_private_key_path = "${SSH_PRIVATE_KEY_PATH}"
+deploy_path = "${DEPLOY_PATH}"
+xml_path = "${XML_PATH}"
 
 [llm]
 provider = "yandexgpt"

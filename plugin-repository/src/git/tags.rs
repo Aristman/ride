@@ -91,10 +91,11 @@ impl GitTags {
     pub async fn get_tag_info(&self, tag_name: &str) -> Result<GitTag> {
         debug!("Получение информации о теге: {}", tag_name);
 
+        // Используем короткий формат одной строки, без diff и аннотаций
         let output = Command::new("git")
             .current_dir(&self.repository_path)
             .args(&[
-                "show", "--format=%H|%s|%an|%ai", tag_name
+                "show", "-s", "--no-patch", "--pretty=%H|%s|%an|%cI", tag_name
             ])
             .output()
             .context("Ошибка получения информации о теге")?;
@@ -108,15 +109,23 @@ impl GitTags {
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
-        let lines: Vec<&str> = stdout.trim().split('\n').collect();
+        let line_opt = stdout
+            .lines()
+            .map(|l| l.trim())
+            .find(|l| !l.is_empty() && l.matches('|').count() >= 3);
 
-        if lines.is_empty() {
-            return Err(anyhow::anyhow!("Пустой ответ от git show"));
-        }
+        let line = line_opt
+            .ok_or_else(|| anyhow::anyhow!(
+                "Пустой или некорректный ответ от git show для тега {}: {}",
+                tag_name, stdout.trim()
+            ))?;
 
-        let parts: Vec<&str> = lines[0].split('|').collect();
+        let parts: Vec<&str> = line.split('|').collect();
         if parts.len() < 4 {
-            return Err(anyhow::anyhow!("Некорректный формат вывода git show"));
+            return Err(anyhow::anyhow!(
+                "Некорректный формат вывода git show для тега {}: {}",
+                tag_name, line
+            ));
         }
 
         let commit_hash = parts[0].to_string();
@@ -124,9 +133,10 @@ impl GitTags {
         let author = parts[2].to_string();
         let date_str = parts[3];
 
+        // %cI выдаёт ISO 8601 (RFC3339), разбираем строго; при сбое — используем текущее время
         let date = DateTime::parse_from_rfc3339(date_str)
-            .unwrap_or_else(|_| DateTime::parse_from_str(date_str, "%Y-%m-%d %H:%M:%S %z").unwrap_or_else(|_| Utc::now().into()))
-            .with_timezone(&Utc);
+            .map(|d| d.with_timezone(&Utc))
+            .unwrap_or_else(|_| Utc::now());
 
         // Проверяем, является ли тег аннотированным
         let is_annotated = self.is_annotated_tag(tag_name).await?;

@@ -51,15 +51,6 @@ impl Deployer {
         let res: Result<()> = (|| {
             #[cfg(feature = "ssh")]
             {
-                // Логируем эффективные значения перед подключением
-                info!(
-                    host = %self.config.repository.ssh_host,
-                    user = %self.config.repository.ssh_user,
-                    deploy_path = %deploy_dir.display(),
-                    xml_path = %xml_remote.display(),
-                    "SSH параметры деплоя"
-                );
-
                 let session = self.ssh_connect()?;
                 let sftp = session.sftp().context("Не удалось открыть SFTP сессию")?;
 
