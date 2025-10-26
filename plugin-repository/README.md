@@ -103,6 +103,16 @@ echo "DEPLOY_PLUGIN_YANDEX_FOLDER_ID=your_folder_id" >> .env
 ./deploy-pugin ai release-notes --template corporate
 ```
 
+### Указание версии при сборке
+
+По умолчанию версия берётся из имени ZIP-артефакта. Вы можете явно задать версию при сборке — она будет применена к имени файла (артефакт будет переименован) и использована далее при деплое:
+
+```bash
+cargo run -- build --version 1.2.3 --profile release
+```
+
+После сборки артефакт будет иметь имя вида `your-plugin-1.2.3.zip`, и деплой возьмёт версию из этого имени.
+
 ## ⚙️ Конфигурация
 
 ### config.toml
