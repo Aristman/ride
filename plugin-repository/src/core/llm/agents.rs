@@ -642,9 +642,9 @@ pub struct PluginInfo {
 
 /// Менеджер LLM агентов
 pub struct LLMAgentManager {
-    changelog_agent: ChangelogAgent,
-    version_agent: VersionAgent,
-    release_agent: ReleaseAgent,
+    pub(crate) changelog_agent: ChangelogAgent,
+    pub(crate) version_agent: VersionAgent,
+    pub(crate) release_agent: ReleaseAgent,
 }
 
 impl LLMAgentManager {
