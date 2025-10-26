@@ -107,6 +107,14 @@ impl Default for YandexGPTConfig {
 }
 
 impl YandexGPTClient {
+    /// Безопасно обрезает строку для логов по количеству символов, не байт
+    fn preview(s: &str, max_chars: usize) -> String {
+        let mut out = String::new();
+        for c in s.chars().take(max_chars) {
+            out.push(c);
+        }
+        out
+    }
     /// Создает новый экземпляр клиента
     pub fn new(config: YandexGPTConfig) -> Self {
         let client = Client::builder()
@@ -190,7 +198,10 @@ impl YandexGPTClient {
         debug!("Ответ статуса от YandexGPT: {}", status);
         let response_text = response.text().await
             .context("Не удалось прочитать ответ от YandexGPT")?;
-        debug!("Сырый ответ YandexGPT (обрезан до 500 символов): {}", &response_text[..response_text.len().min(500)]);
+        debug!(
+            "Сырый ответ YandexGPT (обрезан до 500 символов): {}",
+            Self::preview(&response_text, 500)
+        );
 
         if !status.is_success() {
             let error_msg = format!("YandexGPT API вернул ошибку {}: {}", status, response_text);
@@ -228,7 +239,10 @@ impl YandexGPTClient {
                 let alt_status = alt_resp.status();
                 debug!("Fallback ответ статуса от YandexGPT: {}", alt_status);
                 let alt_text = alt_resp.text().await.context("Не удалось прочитать ответ fallback от YandexGPT")?;
-                debug!("Fallback сырой ответ YandexGPT (обрезан до 500 символов): {}", &alt_text[..alt_text.len().min(500)]);
+                debug!(
+                    "Fallback сырой ответ YandexGPT (обрезан до 500 символов): {}",
+                    Self::preview(&alt_text, 500)
+                );
 
                 if !alt_status.is_success() {
                     let fb_err = format!("Fallback YandexGPT вернул ошибку {}: {}", alt_status, alt_text);
