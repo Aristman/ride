@@ -1,0 +1,34 @@
+[project]
+name = "ride"
+id = "ru.marslab.ide.ride"
+type = "intellij"
+
+[build]
+gradle_task = "buildPlugin"
+output_dir = "build/distributions"
+
+[repository]
+url = "${REPOSITORY_URL}"
+ssh_host = "${SSH_HOST}"
+ssh_user = "${SSH_USER}"
+deploy_path = "${DEPLOY_PATH}"
+xml_path = "${XML_PATH}"
+
+[llm]
+provider = "yandexgpt"
+temperature = 0.3
+max_tokens = 2000
+
+[yandexgpt]
+api_key = "${DEPLOY_PLUGIN_YANDEX_API_KEY}"
+folder_id = "${DEPLOY_PLUGIN_YANDEX_FOLDER_ID}"
+model = "yandexgpt"
+
+[llm_agents]
+changelog_agent = { model = "yandexgpt", temperature = 0.3 }
+version_agent = { model = "yandexgpt-lite", temperature = 0.1 }
+release_agent = { model = "yandexgpt", temperature = 0.4 }
+
+[git]
+main_branch = "main"
+tag_prefix = "v"
