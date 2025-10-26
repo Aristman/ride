@@ -84,14 +84,10 @@ async fn main() -> Result<()> {
             commands::ai::handle_ai_command(cmd, &args.config).await
         }
         Commands::Validate(cmd) => {
-            println!("✅ Команда валидации: {:?}", cmd);
-            // TODO: Реализация валидации
-            Ok(())
+            commands::validate::handle_validate_command(cmd, &args.config).await
         }
         Commands::Status(cmd) => {
-            println!("📊 Команда статуса: {:?}", cmd);
-            // TODO: Реализация статуса
-            Ok(())
+            commands::status::handle_status_command(cmd, &args.config).await
         }
     }
 }
