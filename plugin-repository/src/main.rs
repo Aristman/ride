@@ -37,6 +37,8 @@ enum Commands {
     Build(cli::build::BuildCommand),
     /// Полный пайплайн релиза
     Release(cli::release::ReleaseCommand),
+    /// Полный цикл публикации (build -> release -> deploy)
+    Publish(cli::publish::PublishCommand),
     /// Развертывание в репозиторий
     Deploy(cli::deploy::DeployCommand),
     /// LLM команды
@@ -76,6 +78,9 @@ async fn main() -> Result<()> {
         }
         Commands::Release(cmd) => {
             commands::release::handle_release_command(cmd, &args.config).await
+        }
+        Commands::Publish(cmd) => {
+            commands::publish::handle_publish_command(cmd, &args.config).await
         }
         Commands::Deploy(cmd) => {
             commands::deploy::handle_deploy_command(cmd, &args.config).await

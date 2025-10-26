@@ -465,28 +465,42 @@ impl PluginBuilder {
         Ok(())
     }
 
-    /// Валидирует наличие plugin.xml в архиве
+    /// Валидирует наличие plugin.xml в архиве (включая проверку внутри JAR файлов)
     async fn validate_plugin_xml(&self, zip_path: &Path) -> Result<()> {
         let file = std::fs::File::open(zip_path)?;
         let mut archive = zip::ZipArchive::new(file)?;
 
-        let mut plugin_xml_found = false;
+        // 1) Проверяем верхний уровень архива
         for i in 0..archive.len() {
             let file = archive.by_index(i)?;
-            if file.name().ends_with("plugin.xml") {
-                plugin_xml_found = true;
-                debug!("✅ Найден plugin.xml в архиве");
-                break;
+            if file.name().ends_with("plugin.xml") || file.name().ends_with("META-INF/plugin.xml") {
+                debug!("✅ Найден plugin.xml в корне архива");
+                return Ok(());
             }
         }
 
-        if !plugin_xml_found {
-            return Err(anyhow::anyhow!(
-                "plugin.xml не найден в архиве плагина"
-            ));
+        // 2) Проверяем JAR-файлы внутри архива (обычно в lib/)
+        for i in 0..archive.len() {
+            let mut entry = archive.by_index(i)?;
+            let name = entry.name().to_string();
+            if name.ends_with(".jar") {
+                // Читаем jar в память и открываем как zip
+                let mut buf = Vec::with_capacity(entry.size() as usize);
+                std::io::copy(&mut entry, &mut buf)?;
+                let cursor = std::io::Cursor::new(buf);
+                if let Ok(mut jar) = zip::ZipArchive::new(cursor) {
+                    for j in 0..jar.len() {
+                        let inner = jar.by_index(j)?;
+                        if inner.name().ends_with("META-INF/plugin.xml") {
+                            debug!("✅ Найден plugin.xml внутри JAR: {}", name);
+                            return Ok(());
+                        }
+                    }
+                }
+            }
         }
 
-        Ok(())
+        Err(anyhow::anyhow!("plugin.xml не найден в архиве плагина (ни в корне, ни внутри JAR файлов)"))
     }
 }
 
