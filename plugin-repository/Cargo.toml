@@ -51,6 +51,9 @@ regex = "1.10"
 # Date/time handling
 chrono = { version = "0.4", features = ["serde"] }
 
+# Git2 для расширенных git операций
+git2 = "0.18"
+
 # Semantic versioning
 semver = "1.0"
 
@@ -60,8 +63,6 @@ zip = "0.6"
 # Cryptographic hashes
 sha2 = "0.10"
 
-# Git Operations
-git2 = "0.18"
 
 [dev-dependencies]
 tempfile = "3.8"

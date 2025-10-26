@@ -68,9 +68,12 @@ struct ResponseMessage {
 /// Статистика использования токенов
 #[derive(Debug, Deserialize)]
 struct Usage {
-    input_text_tokens: u32,
-    completion_tokens: u32,
-    total_tokens: u32,
+    #[serde(rename = "inputTextTokens")]
+    input_text_tokens: String,
+    #[serde(rename = "completionTokens")]
+    completion_tokens: String,
+    #[serde(rename = "totalTokens")]
+    total_tokens: String,
 }
 
 /// Конфигурация YandexGPT
@@ -119,8 +122,9 @@ impl YandexGPTClient {
     pub async fn chat_completion(&self, prompt: &str) -> Result<String> {
         info!("🤖 Запрос к YandexGPT API");
 
+        let model_name = "yandexgpt"; // TODO: брать из конфигурации
         let request_body = YandexGPTRequest {
-            model_uri: format!("gpt://{}", self.folder_id),
+            model_uri: format!("gpt://{}/{}", self.folder_id, model_name),
             completion_options: CompletionOptions {
                 stream: false,
                 temperature: 0.3,
@@ -153,19 +157,23 @@ impl YandexGPTClient {
         .context("Таймаут запроса к YandexGPT API")?
         .context("Ошибка выполнения запроса к YandexGPT API")?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|_| "Не удалось прочитать ответ".to_string());
-            let error_msg = format!("YandexGPT API вернул ошибку {}: {}", status, error_text);
+        let status = response.status();
+        let response_text = response.text().await
+            .context("Не удалось прочитать ответ от YandexGPT")?;
+
+        if !status.is_success() {
+            let error_msg = format!("YandexGPT API вернул ошибку {}: {}", status, response_text);
             error!("{}", error_msg);
             return Err(anyhow::anyhow!(error_msg));
         }
 
-        let api_response: YandexGPTResponse = response.json().await
-            .context("Ошибка парсинга JSON ответа от YandexGPT")?;
+        debug!("Ответ от YandexGPT API: {}", response_text);
+
+        let api_response: YandexGPTResponse = serde_json::from_str(&response_text)
+            .with_context(|| format!("Ошибка парсинга JSON ответа от YandexGPT. Ответ: {}", response_text))?;
 
         if let Some(alternative) = api_response.result.alternatives.first() {
-            if alternative.status == "ALTERNATIVE_STATUS_SUCCESS" {
+            if alternative.status == "ALTERNATIVE_STATUS_FINAL" || alternative.status == "ALTERNATIVE_STATUS_SUCCESS" {
                 info!("✅ Получен ответ от YandexGPT ({} токенов)", api_response.result.usage.total_tokens);
                 debug!("Использование токенов: {:?}", api_response.result.usage);
                 Ok(alternative.message.text.clone())
