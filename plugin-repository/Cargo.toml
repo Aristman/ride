@@ -54,6 +54,12 @@ chrono = { version = "0.4", features = ["serde"] }
 # Semantic versioning
 semver = "1.0"
 
+# ZIP archive handling
+zip = "0.6"
+
+# Cryptographic hashes
+sha2 = "0.10"
+
 # Git Operations
 git2 = "0.18"
 

@@ -68,9 +68,7 @@ async fn main() -> Result<()> {
     // Обработка команд
     match args.command {
         Commands::Build(cmd) => {
-            println!("🔨 Команда сборки: {:?}", cmd);
-            // TODO: Реализация команды сборки
-            Ok(())
+            commands::build::handle_build_command(cmd, &args.config).await
         }
         Commands::Release(cmd) => {
             println!("🚀 Команда релиза: {:?}", cmd);
