@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 use sha2::{Sha256, Digest};
 use std::time::Duration;
+use xmltree::{Element, XMLNode};
 
 use crate::config::parser::Config;
 
@@ -35,8 +36,7 @@ impl Deployer {
             return Err(anyhow::anyhow!("Не найдены артефакты для деплоя"));
         }
 
-        // 2) Подготовка XML (упростим: генерируем базовый список)
-        let xml_content = self.build_repository_xml(&artifacts)?;
+        // 2) Подготовка XML будет сделана позже, после чтения существующего файла (merge)
 
         // 3) Загрузка артефактов и XML
         let mut uploaded: Vec<String> = Vec::new();
@@ -50,6 +50,15 @@ impl Deployer {
         let res: Result<()> = (|| {
             #[cfg(feature = "ssh")]
             {
+                // Логируем эффективные значения перед подключением
+                info!(
+                    host = %self.config.repository.ssh_host,
+                    user = %self.config.repository.ssh_user,
+                    deploy_path = %deploy_dir.display(),
+                    xml_path = %xml_remote.display(),
+                    "SSH параметры деплоя"
+                );
+
                 let session = self.ssh_connect()?;
                 let sftp = session.sftp().context("Не удалось открыть SFTP сессию")?;
 
@@ -60,29 +69,55 @@ impl Deployer {
 
                 // Бэкап XML, если существует
                 if sftp.stat(&xml_remote).is_ok() {
+                    use ssh2::RenameFlags;
                     let bak_path = PathBuf::from(format!("{}.bak", xml_remote.display()));
-                    sftp.rename(&xml_remote, &bak_path, None)
-                        .with_context(|| format!("Не удалось создать бэкап XML {}", xml_remote.display()))?;
-                    xml_backup_done = true;
-                }
+                    // Сначала пробуем переименовать с OVERWRITE (если .bak существует)
+                    match sftp.rename(&xml_remote, &bak_path, Some(RenameFlags::OVERWRITE)) {
+                        Ok(_) => {
+                            xml_backup_done = true;
+                        }
+                        Err(e) => {
+                            // Фоллбек: если .bak существует/мешает — удалим и попробуем снова
+                            let _ = sftp.unlink(&bak_path);
+                            sftp.rename(&xml_remote, &bak_path, Some(RenameFlags::OVERWRITE))
+                                .with_context(|| format!("Не удалось создать бэкап XML {}: {}", xml_remote.display(), e))?;
+                            xml_backup_done = true;
+                        }
+                    }
 
+                }
                 // Загрузка артефактов
                 for art in &artifacts {
                     let file_name = art.file_name().unwrap().to_string_lossy().to_string();
                     let remote_path = deploy_dir.join(&file_name);
-                    self.scp_upload(&session, art, &remote_path)?;
+                    // Сначала пробуем SCP
+                    match self.scp_upload(&session, art, &remote_path) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            warn!("SCP не удался для {}: {} — пробуем SFTP", remote_path.display(), e);
+                            // Фоллбек на SFTP
+                            match self.sftp_upload(&sftp, art, &remote_path) {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    warn!("SFTP не удался для {}: {}", remote_path.display(), e);
+                                    return Err(anyhow::anyhow!("Загрузка артефакта {} не удалась: {}", remote_path.display(), e));
+                                }
+                            }
+                        }
+                    }
                     // Проверка размера
                     let local_size = fs::metadata(art)?.len();
                     let remote_md = sftp.stat(&remote_path)
-                        .with_context(|| format!("Не удалось получить stat удаленного файла {}", remote_path.display()))?;
-                    if remote_md.size.unwrap_or(0) != local_size {
-                        anyhow::bail!("Несовпадение размера для {}", file_name);
+                        .with_context(|| format!("Не удалось получить метаданные удаленного файла {}", remote_path.display()))?;
+                    if remote_md.size.unwrap_or(0) != local_size as u64 {
+                        anyhow::bail!("Размер загруженного файла не совпадает для {}", remote_path.display());
                     }
-                    uploaded.push(remote_path.display().to_string());
                 }
 
+                // Сборка итогового XML: читаем существующий, мёрджим новые плагины по id, оставляя только последнюю версию на id
+                let merged_xml = self.build_merged_repository_xml_ssh(&sftp, &xml_remote, &artifacts)?;
                 // Атомарное обновление XML на удаленной стороне через временный файл и rename
-                self.remote_atomic_update_xml(&sftp, &xml_remote, &xml_content)?;
+                self.remote_atomic_update_xml(&sftp, &xml_remote, &merged_xml)?;
             }
             #[cfg(not(feature = "ssh"))]
             {
@@ -90,7 +125,8 @@ impl Deployer {
                 // Локальная проверка: создадим локальный XML рядом с указанный путем (для отладки)
                 let local_xml = Path::new("./target/mock").join(xml_remote.file_name().unwrap_or_default());
                 std::fs::create_dir_all(local_xml.parent().unwrap()).ok();
-                self.atomic_update_xml(&local_xml, &xml_content)?;
+                let merged_xml = self.build_repository_xml(&artifacts)?;
+                self.atomic_update_xml(&local_xml, &merged_xml)?;
             }
             Ok(())
         })();
@@ -209,6 +245,27 @@ impl Deployer {
         Ok(())
     }
 
+    /// Загрузка файла по SFTP (требует feature "ssh")
+    #[cfg(feature = "ssh")]
+    fn sftp_upload(&self, sftp: &ssh2::Sftp, local: &Path, remote: &Path) -> Result<()> {
+        use std::io::{Read, Write};
+        // Открываем локальный файл
+        let mut src = std::fs::File::open(local)
+            .with_context(|| format!("Не удалось открыть локальный файл: {}", local.display()))?;
+        // Создаём/перезаписываем удалённый
+        let mut dst = sftp.create(remote)
+            .with_context(|| format!("Не удалось создать удалённый файл по SFTP: {}", remote.display()))?;
+        // Передача содержимого
+        let mut buf = [0u8; 64 * 1024];
+        loop {
+            let n = src.read(&mut buf)?;
+            if n == 0 { break; }
+            dst.write_all(&buf[..n])?;
+        }
+        dst.flush().ok();
+        Ok(())
+    }
+
     /// Загрузка артефакта на сервер (feature "ssh"), безопасный no-op без фичи
     pub fn upload_artifact<P: AsRef<Path>>(&self, local: P, remote: P) -> Result<()> {
         #[cfg(feature = "ssh")]
@@ -243,6 +300,116 @@ impl Deployer {
         sftp.rename(&tmp_remote, xml_remote, None)
             .with_context(|| format!("Не удалось атомарно заменить удаленный XML {}", xml_remote.display()))?;
         Ok(())
+    }
+
+    /// Читает существующий updatePlugins.xml по SFTP если есть, возвращает содержимое как String
+    #[cfg(feature = "ssh")]
+    fn read_remote_xml(&self, sftp: &ssh2::Sftp, xml_remote: &Path) -> Option<String> {
+        use std::io::Read;
+        if let Ok(mut f) = sftp.open(xml_remote) {
+            let mut buf = String::new();
+            if f.read_to_string(&mut buf).is_ok() {
+                return Some(buf);
+            }
+        }
+        None
+    }
+
+    /// Собирает финальный updatePlugins.xml: мёрджит текущий XML с новыми артефактами.
+    /// Правила: по id оставляем только одну (последнюю) версию; остальные id сохраняем.
+    #[cfg(feature = "ssh")]
+    fn build_merged_repository_xml_ssh(
+        &self,
+        sftp: &ssh2::Sftp,
+        xml_remote: &Path,
+        artifacts: &[PathBuf],
+    ) -> Result<String> {
+        // Базовый URL
+        let base = self.config.repository.url.trim_end_matches('/');
+
+        // Парсим существующий XML
+        let mut root: Element = if let Some(existing) = self.read_remote_xml(sftp, xml_remote) {
+            Element::parse(existing.as_bytes()).unwrap_or_else(|_| Element::new("plugins"))
+        } else {
+            Element::new("plugins")
+        };
+
+        // Собираем карту id -> существующий элемент (оставляем только другие id)
+        let current_id = &self.config.project.id;
+        let mut new_children: Vec<XMLNode> = Vec::new();
+        for ch in &root.children {
+            if let XMLNode::Element(el) = ch {
+                if el.name == "plugin" {
+                    let id_attr = el.attributes.get("id").cloned();
+                    if let Some(id) = id_attr {
+                        if id == *current_id {
+                            // пропускаем старые записи текущего плагина — будет заменена новой
+                            continue;
+                        }
+                    }
+                }
+            }
+            new_children.push(ch.clone());
+        }
+
+        // Формируем новую запись для текущего плагина по первому артефакту (ожидается один артефакт)
+        // Берем самый свежий
+        let mut arts = artifacts.to_vec();
+        arts.sort();
+        let art = arts.last().unwrap();
+        let file_name = art.file_name().unwrap().to_string_lossy().to_string();
+        let url = format!("{}/archives/{}", base, file_name);
+        let version = self.extract_version_from_filename(&file_name).unwrap_or_else(|| "0.0.0".to_string());
+
+        let mut plugin_el = Element::new("plugin");
+        plugin_el.attributes.insert("id".to_string(), current_id.clone());
+        plugin_el.attributes.insert("url".to_string(), url);
+        plugin_el.attributes.insert("version".to_string(), version);
+
+        // name — из project.name
+        let mut name_el = Element::new("name");
+        name_el.children.push(XMLNode::Text(self.config.project.name.clone()));
+        plugin_el.children.push(XMLNode::Element(name_el));
+
+        // Сохраняем vendor/idea-version/description из старой записи этого id если она была
+        if let Some(existing) = self.find_existing_plugin_by_id(&root, current_id) {
+            for child in existing.children {
+                if let XMLNode::Element(mut cel) = child {
+                    if cel.name == "vendor" || cel.name == "idea-version" || cel.name == "description" {
+                        plugin_el.children.push(XMLNode::Element(cel));
+                    }
+                }
+            }
+        }
+
+        new_children.push(XMLNode::Element(plugin_el));
+        root.children = new_children;
+
+        // Сериализуем корень
+        let mut buf = Vec::new();
+        root.write(&mut buf).with_context(|| "Сериализация updatePlugins.xml не удалась")?;
+        Ok(String::from_utf8(buf).unwrap_or_else(|v| String::from_utf8_lossy(&v.into_bytes()).to_string()))
+    }
+
+    /// Поиск существующего элемента plugin по id
+    #[cfg(feature = "ssh")]
+    fn find_existing_plugin_by_id<'a>(&self, root: &'a Element, id: &str) -> Option<Element> {
+        for ch in &root.children {
+            if let XMLNode::Element(el) = ch {
+                if el.name == "plugin" {
+                    if let Some(existing_id) = el.attributes.get("id") {
+                        if existing_id == id { return Some(el.clone()); }
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// Извлекает версию из имени файла zip вида name-1.2.3.zip
+    fn extract_version_from_filename(&self, filename: &str) -> Option<String> {
+        let re = regex::Regex::new(r"-(\d+\.\d+\.\d+(?:-[A-Za-z0-9.]+)*)\.zip$").ok()?;
+        if let Some(caps) = re.captures(filename) { Some(caps.get(1).unwrap().as_str().to_string()) } else { None }
     }
 
     /// Атомарное обновление XML файла репозитория: запись во временный файл и замена

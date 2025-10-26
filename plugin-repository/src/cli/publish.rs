@@ -33,4 +33,8 @@ pub struct PublishCommand {
     /// Пробный запуск (release с --dry-run, без деплоя)
     #[arg(long)]
     pub dry_run: bool,
+
+    /// Отключить AI-обогащение (по умолчанию включено)
+    #[arg(long = "no-ai")]
+    pub no_ai: bool,
 }
