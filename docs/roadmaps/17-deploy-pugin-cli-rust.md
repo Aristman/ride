@@ -174,9 +174,9 @@ plugin-repository/
 - [ ] Atomic updates XML репозитория
 - [ ] Проверка целостности после деплоя
 - [ ] Механизм отката при failures
-- [ ] Команда `deploy-pugin deploy` с опциями (--force, --rollback-on-failure)
+- [x] Команда `deploy-pugin deploy` с опциями (--force, --rollback-on-failure)
 - [ ] Интеграция с репозиторием по указанному URL
-- [ ] Тесты системы деплоя
+- [x] Тесты системы деплоя
 
 ### Фаза 8: Вспомогательные команды и утилиты
 **Срок**: 1-2 дня

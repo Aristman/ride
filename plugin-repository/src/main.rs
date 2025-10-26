@@ -78,9 +78,7 @@ async fn main() -> Result<()> {
             commands::release::handle_release_command(cmd, &args.config).await
         }
         Commands::Deploy(cmd) => {
-            println!("📦 Команда деплоя: {:?}", cmd);
-            // TODO: Реализация команды деплоя
-            Ok(())
+            commands::deploy::handle_deploy_command(cmd, &args.config).await
         }
         Commands::Ai(cmd) => {
             commands::ai::handle_ai_command(cmd, &args.config).await
