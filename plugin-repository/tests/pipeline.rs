@@ -28,7 +28,7 @@ max_tokens = 2000
 [yandexgpt]
 api_key = "${DEPLOY_PLUGIN_YANDEX_API_KEY}"
 folder_id = "${DEPLOY_PLUGIN_YANDEX_FOLDER_ID}"
-model = "yandexgpt/latest"
+model = "yandexgpt"
 
 [llm_agents]
 changelog_agent = { model = "yandexgpt", temperature = 0.3 }
@@ -48,7 +48,6 @@ fn pipeline_status_validate_smoke() {
     let dir = tmp.path();
 
     // init git repo
-    assert_cmd::cargo::CommandCargoExt::cargo_bin("deploy-pugin").ok();
     // Create minimal git repo structure
     Command::new("git").current_dir(dir).args(["init"]).assert().success();
     fs::write(dir.join("README.md"), "test").unwrap();
