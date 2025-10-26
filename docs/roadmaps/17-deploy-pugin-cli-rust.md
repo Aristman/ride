@@ -171,7 +171,7 @@ plugin-repository/
 
 - [ ] Реализация `deployer.rs` - движка деплоя
 - [ ] Поддержка SSH/SCP для загрузки на сервер
-- [ ] Atomic updates XML репозитория
+- [x] Atomic updates XML репозитория
 - [ ] Проверка целостности после деплоя
 - [ ] Механизм отката при failures
 - [x] Команда `deploy-pugin deploy` с опциями (--force, --rollback-on-failure)

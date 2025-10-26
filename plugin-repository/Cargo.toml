@@ -63,6 +63,15 @@ zip = "0.6"
 # Cryptographic hashes
 sha2 = "0.10"
 
+[features]
+default = []
+# Включает SSH/SCP деплой через crate ssh2 (требуются системные библиотеки libssh2/openssl)
+ssh = ["ssh2"]
+
+[dependencies.ssh2]
+version = "0.9"
+optional = true
+
 
 [dev-dependencies]
 tempfile = "3.8"
