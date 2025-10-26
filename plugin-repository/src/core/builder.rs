@@ -25,7 +25,7 @@ impl PluginBuilder {
     }
 
     /// Собирает плагин с указанной версией
-    pub async fn build(&self, _version: Option<String>, profile: &str) -> Result<BuildResult> {
+    pub async fn build(&self, version: Option<String>, profile: &str) -> Result<BuildResult> {
         info!("🔨 Начало сборки плагина");
 
         let start_time = std::time::Instant::now();
@@ -52,7 +52,7 @@ impl PluginBuilder {
         }
 
         // 3. Сборка
-        let artifact = match self.build_plugin(&project_type, profile, &mut logs, &mut errors).await {
+        let mut artifact = match self.build_plugin(&project_type, profile, &mut logs, &mut errors).await {
             Ok(artifact) => {
                 logs.push("✅ Сборка завершена успешно".to_string());
                 Some(artifact)
@@ -64,6 +64,25 @@ impl PluginBuilder {
                 None
             }
         };
+
+        // 3.1. Применяем версию из параметра: переименуем артефакт и обновим метаданные
+        if let (Some(ref mut art), Some(ref ver)) = (&mut artifact, &version) {
+            if let Some(path) = art.file_path.parent() {
+                let old_name = art.file_name.clone();
+                let new_name = Self::apply_version_to_filename(&old_name, ver);
+                let new_path = path.join(&new_name);
+                // Переименуем файл на диске
+                if let Err(e) = std::fs::rename(&art.file_path, &new_path) {
+                    warn!("Не удалось переименовать артефакт под версию {}: {}", ver, e);
+                } else {
+                    info!("Артефакт переименован: {} -> {}", old_name, new_name);
+                    art.file_name = new_name;
+                    art.file_path = new_path;
+                    art.version = ver.clone();
+                    // Размер/чексумма не меняются при rename
+                }
+            }
+        }
 
         // 4. Валидация артефакта
         if let Some(ref artifact) = artifact {
@@ -386,6 +405,22 @@ impl PluginBuilder {
         } else {
             None
         }
+    }
+
+    /// Формирует имя файла с заданной версией. Если версия в имени найдена — заменяет, иначе вставляет перед .zip
+    fn apply_version_to_filename(filename: &str, version: &str) -> String {
+        let re = regex::Regex::new(r"-(\d+\.\d+\.\d+(?:-[a-zA-Z0-9]+)*)\.zip$").ok();
+        if let Some(re) = re {
+            if re.is_match(filename) {
+                return re.replace(filename, format!("-{}.zip", version)).to_string();
+            }
+        }
+        // Если шаблон не совпал, пытаемся вставить перед .zip
+        if let Some(stripped) = filename.strip_suffix(".zip") {
+            return format!("{}-{}.zip", stripped, version);
+        }
+        // fallback: просто добавить суффикс
+        format!("{}-{}.zip", filename, version)
     }
 
     /// Валидирует артефакт
