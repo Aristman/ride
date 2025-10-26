@@ -37,7 +37,7 @@ model = "gpt-4"
 api_key = "${ANTHROPIC_API_KEY}"
 model = "claude-3-sonnet"
 
-[llm.agents]
+[llm_agents]
 changelog_agent = { model = "yandexgpt", temperature = 0.3 }
 version_agent = { model = "yandexgpt-lite", temperature = 0.1 }
 release_agent = { model = "yandexgpt", temperature = 0.4 }
