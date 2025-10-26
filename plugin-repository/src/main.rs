@@ -71,9 +71,7 @@ async fn main() -> Result<()> {
             commands::build::handle_build_command(cmd, &args.config).await
         }
         Commands::Release(cmd) => {
-            println!("🚀 Команда релиза: {:?}", cmd);
-            // TODO: Реализация команды релиза
-            Ok(())
+            commands::release::handle_release_command(cmd, &args.config).await
         }
         Commands::Deploy(cmd) => {
             println!("📦 Команда деплоя: {:?}", cmd);

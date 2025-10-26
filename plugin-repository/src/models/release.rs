@@ -6,13 +6,11 @@ use crate::models::plugin::PluginArtifact;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReleaseInfo {
     pub version: String,
-    pub plugin_version: String,
-    pub changelog: String,
-    pub release_notes: Option<String>,
-    pub artifact: PluginArtifact,
-    pub publish_time: DateTime<Utc>,
-    pub git_tag: Option<String>,
-    pub git_commit: Option<String>,
+    pub tag: String,
+    pub commit: String,
+    pub date: DateTime<Utc>,
+    pub message: Option<String>,
+    pub changes_count: usize,
 }
 
 /// Запрос на создание релиза
