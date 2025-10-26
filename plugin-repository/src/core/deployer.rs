@@ -307,7 +307,16 @@ impl Deployer {
     #[cfg(feature = "ssh")]
     fn read_remote_xml(&self, sftp: &ssh2::Sftp, xml_remote: &Path) -> Option<String> {
         use std::io::Read;
+        // 1) Пробуем основной файл
         if let Ok(mut f) = sftp.open(xml_remote) {
+            let mut buf = String::new();
+            if f.read_to_string(&mut buf).is_ok() {
+                return Some(buf);
+            }
+        }
+        // 2) Если основной отсутствует (например, уже переименован в .bak), пробуем .bak
+        let bak = PathBuf::from(format!("{}.bak", xml_remote.display()));
+        if let Ok(mut f) = sftp.open(&bak) {
             let mut buf = String::new();
             if f.read_to_string(&mut buf).is_ok() {
                 return Some(buf);
@@ -325,8 +334,11 @@ impl Deployer {
         xml_remote: &Path,
         artifacts: &[PathBuf],
     ) -> Result<String> {
-        // Базовый URL и вычисление относительного URL-пути до артефактов
-        let base = self.config.repository.url.trim_end_matches('/');
+        // Базовый URL каталога (если в repository.url указан файл XML — отрезаем его)
+        let mut base_dir_url = self.config.repository.url.trim_end_matches('/').to_string();
+        if base_dir_url.ends_with(".xml") {
+            if let Some(pos) = base_dir_url.rfind('/') { base_dir_url.truncate(pos); }
+        }
         let repo_root_fs = Path::new(&self.config.repository.xml_path)
             .parent()
             .unwrap_or_else(|| Path::new("/"));
@@ -369,8 +381,8 @@ impl Deployer {
                 let art = arts.last().unwrap();
                 let file_name = art.file_name().unwrap().to_string_lossy().to_string();
                 let url = match rel_path {
-                    Some(rel) => format!("{}/{}/{}", base, rel, file_name),
-                    None => format!("{}/{}", base, file_name),
+                    Some(rel) => format!("{}/{}/{}", base_dir_url, rel, file_name),
+                    None => format!("{}/{}", base_dir_url, file_name),
                 };
                 let version = self.extract_version_from_filename(&file_name).unwrap_or_else(|| "0.0.0".to_string());
 
@@ -446,8 +458,8 @@ impl Deployer {
         let art = arts.last().unwrap();
         let file_name = art.file_name().unwrap().to_string_lossy().to_string();
         let url = match rel_path {
-            Some(rel) => format!("{}/{}/{}", base, rel, file_name),
-            None => format!("{}/{}", base, file_name),
+            Some(rel) => format!("{}/{}/{}", base_dir_url, rel, file_name),
+            None => format!("{}/{}", base_dir_url, file_name),
         };
         let version = self.extract_version_from_filename(&file_name).unwrap_or_else(|| "0.0.0".to_string());
 
@@ -458,7 +470,11 @@ impl Deployer {
 
         if let Some(mut existing_raw) = existing_raw_opt {
             // Если уже есть запись для текущего id — заменим её через regex, иначе вставим перед </plugins>
-            let re = regex::RegexBuilder::new(&format!(r"<plugin\b[^>]*\bid=\"{}\"[^>]*>.*?</plugin>", regex::escape(current_id)))
+            let pattern = format!(
+                "<plugin\\b[^>]*\\bid=\\\"{}\\\"[^>]*>.*?</plugin>",
+                regex::escape(current_id)
+            );
+            let re = regex::RegexBuilder::new(&pattern)
                 .dot_matches_new_line(true)
                 .build()
                 .ok();
@@ -478,65 +494,6 @@ impl Deployer {
             let content = format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?><plugins>{}</plugins>", plugin_snippet);
             return Ok(content);
         }
-
-        // Собираем карту id -> существующий элемент (оставляем только другие id)
-        let current_id = &self.config.project.id;
-        let mut new_children: Vec<XMLNode> = Vec::new();
-        for ch in &root.children {
-            if let XMLNode::Element(el) = ch {
-                if el.name == "plugin" {
-                    let id_attr = el.attributes.get("id").cloned();
-                    if let Some(id) = id_attr {
-                        if id == *current_id {
-                            // пропускаем старые записи текущего плагина — будет заменена новой
-                            continue;
-                        }
-                    }
-                }
-            }
-            new_children.push(ch.clone());
-        }
-
-        // Формируем новую запись для текущего плагина по первому артефакту (ожидается один артефакт)
-        // Берем самый свежий
-        let mut arts = artifacts.to_vec();
-        arts.sort();
-        let art = arts.last().unwrap();
-        let file_name = art.file_name().unwrap().to_string_lossy().to_string();
-        let url = match rel_path {
-            Some(rel) => format!("{}/{}/{}", base, rel, file_name),
-            None => format!("{}/{}", base, file_name),
-        };
-        let version = self.extract_version_from_filename(&file_name).unwrap_or_else(|| "0.0.0".to_string());
-
-        let mut plugin_el = Element::new("plugin");
-        plugin_el.attributes.insert("id".to_string(), current_id.clone());
-        plugin_el.attributes.insert("url".to_string(), url);
-        plugin_el.attributes.insert("version".to_string(), version);
-
-        // name — из project.name
-        let mut name_el = Element::new("name");
-        name_el.children.push(XMLNode::Text(self.config.project.name.clone()));
-        plugin_el.children.push(XMLNode::Element(name_el));
-
-        // Сохраняем vendor/idea-version/description из старой записи этого id если она была
-        if let Some(existing) = self.find_existing_plugin_by_id(&root, current_id) {
-            for child in existing.children {
-                if let XMLNode::Element(mut cel) = child {
-                    if cel.name == "vendor" || cel.name == "idea-version" || cel.name == "description" {
-                        plugin_el.children.push(XMLNode::Element(cel));
-                    }
-                }
-            }
-        }
-
-        new_children.push(XMLNode::Element(plugin_el));
-        root.children = new_children;
-
-        // Сериализуем корень
-        let mut buf = Vec::new();
-        root.write(&mut buf).with_context(|| "Сериализация updatePlugins.xml не удалась")?;
-        Ok(String::from_utf8(buf).unwrap_or_else(|v| String::from_utf8_lossy(&v.into_bytes()).to_string()))
     }
 
     /// Поиск существующего элемента plugin по id
