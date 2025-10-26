@@ -1,0 +1,27 @@
+# Переменные окружения с секретами
+.env
+.env.local
+.env.production
+
+# Временные файлы
+*.tmp
+*.log
+
+# Артефакты сборки
+target/
+dist/
+
+# IDE файлы
+.vscode/
+.idea/
+
+# OS файлы
+.DS_Store
+Thumbs.db
+
+# Rust
+Cargo.lock
+**/*.rs.bk
+
+# Файлы конфигурации с реальными данными
+config.toml

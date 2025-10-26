@@ -47,3 +47,4 @@ bin/
 /.intellijPlatform/
 /.claude/settings.local.json
 /local.properties
+/plugin-repository/.env
