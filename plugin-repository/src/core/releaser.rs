@@ -407,3 +407,32 @@ pub struct CurrentRelease {
     pub updated_at: DateTime<Utc>,
     pub notes: Option<String>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_version_increment_major() {
+        let v = VersionType::Major.increment("1.2.3").unwrap();
+        assert_eq!(v, "2.0.0");
+    }
+
+    #[test]
+    fn test_version_increment_minor() {
+        let v = VersionType::Minor.increment("1.2.3").unwrap();
+        assert_eq!(v, "1.3.0");
+    }
+
+    #[test]
+    fn test_version_increment_patch() {
+        let v = VersionType::Patch.increment("1.2.3").unwrap();
+        assert_eq!(v, "1.2.4");
+    }
+
+    #[test]
+    fn test_version_increment_prerelease() {
+        let v = VersionType::PreRelease.increment("1.2.3").unwrap();
+        assert!(v.starts_with("1.2.3-"));
+    }
+}

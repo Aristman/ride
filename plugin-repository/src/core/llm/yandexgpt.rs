@@ -13,6 +13,9 @@ pub struct YandexGPTClient {
     api_key: String,
     folder_id: String,
     base_url: String,
+    model: String,
+    temperature: f32,
+    max_tokens: u32,
 }
 
 /// Запрос к YandexGPT API
@@ -94,7 +97,8 @@ impl Default for YandexGPTConfig {
                 .unwrap_or_else(|_| "default_key".to_string()),
             folder_id: std::env::var("DEPLOY_PLUGIN_YANDEX_FOLDER_ID")
                 .unwrap_or_else(|_| "default_folder".to_string()),
-            model: "yandexgpt".to_string(),
+            // Рекомендуемый формат модели с версией
+            model: "yandexgpt/latest".to_string(),
             temperature: 0.3,
             max_tokens: 2000,
             timeout: Duration::from_secs(30),
@@ -115,6 +119,18 @@ impl YandexGPTClient {
             api_key: config.api_key,
             folder_id: config.folder_id,
             base_url: "https://llm.api.cloud.yandex.net/foundationModels/v1/completion".to_string(),
+            model: config.model,
+            temperature: config.temperature,
+            max_tokens: config.max_tokens,
+        }
+    }
+
+    /// Формирует model_uri на основе текущей конфигурации
+    fn build_model_uri(&self) -> String {
+        if self.model.starts_with("gpt://") {
+            self.model.clone()
+        } else {
+            format!("gpt://{}/{}", self.folder_id, self.model)
         }
     }
 
@@ -122,13 +138,26 @@ impl YandexGPTClient {
     pub async fn chat_completion(&self, prompt: &str) -> Result<String> {
         info!("🤖 Запрос к YandexGPT API");
 
-        let model_name = "yandexgpt"; // TODO: брать из конфигурации
+        // Диагностические логи по конфигурации
+        debug!("YandexGPT raw model from config: {}", self.model);
+        debug!("YandexGPT folder_id from config: {}", self.folder_id);
+        if self.folder_id.contains("${") {
+            warn!("folder_id содержит плейсхолдер переменной окружения. Проверьте DEPLOY_PLUGIN_YANDEX_FOLDER_ID");
+        }
+        if !self.model.contains('/') && !self.model.starts_with("gpt://") {
+            warn!("model без суффикса версии (например, '/latest'). Текущее значение: {}", self.model);
+        }
+
+        // Формируем корректный model_uri
+        let model_uri = self.build_model_uri();
+        info!("Используется модель: {}", model_uri);
+
         let request_body = YandexGPTRequest {
-            model_uri: format!("gpt://{}/{}", self.folder_id, model_name),
+            model_uri,
             completion_options: CompletionOptions {
                 stream: false,
-                temperature: 0.3,
-                max_tokens: 2000,
+                temperature: self.temperature,
+                max_tokens: self.max_tokens,
             },
             messages: vec![
                 Message {
@@ -148,7 +177,7 @@ impl YandexGPTClient {
             Duration::from_secs(30),
             self.client
                 .post(&self.base_url)
-                .header("Authorization", format!("Bearer {}", self.api_key))
+                .header("Authorization", format!("Api-Key {}", self.api_key))
                 .header("Content-Type", "application/json")
                 .header("x-folder-id", &self.folder_id)
                 .json(&request_body)
@@ -158,12 +187,68 @@ impl YandexGPTClient {
         .context("Ошибка выполнения запроса к YandexGPT API")?;
 
         let status = response.status();
+        debug!("Ответ статуса от YandexGPT: {}", status);
         let response_text = response.text().await
             .context("Не удалось прочитать ответ от YandexGPT")?;
+        debug!("Сырый ответ YandexGPT (обрезан до 500 символов): {}", &response_text[..response_text.len().min(500)]);
 
         if !status.is_success() {
             let error_msg = format!("YandexGPT API вернул ошибку {}: {}", status, response_text);
             error!("{}", error_msg);
+
+            // Авто-фолбэк на yandexgpt-lite/latest при invalid model_uri
+            if response_text.contains("invalid model_uri") {
+                // Строим альтернативный URI
+                let alt_model = if self.model.contains("yandexgpt-lite") { self.model.clone() } else { self.model.replace("yandexgpt", "yandexgpt-lite") };
+                let alt_uri = if alt_model.starts_with("gpt://") { alt_model.clone() } else { format!("gpt://{}/{}", self.folder_id, alt_model) };
+                warn!("Пробуем fallback модель: {}", alt_uri);
+
+                let alt_body = YandexGPTRequest {
+                    model_uri: alt_uri,
+                    completion_options: CompletionOptions { stream: false, temperature: self.temperature, max_tokens: self.max_tokens },
+                    messages: vec![
+                        Message { role: "system".to_string(), text: "Ты - полезный AI помощник, который отвечает на русском языке.".to_string() },
+                        Message { role: "user".to_string(), text: prompt.to_string() },
+                    ],
+                };
+
+                let alt_resp = timeout(
+                    Duration::from_secs(30),
+                    self.client
+                        .post(&self.base_url)
+                        .header("Authorization", format!("Api-Key {}", self.api_key))
+                        .header("Content-Type", "application/json")
+                        .header("x-folder-id", &self.folder_id)
+                        .json(&alt_body)
+                        .send()
+                ).await
+                .context("Таймаут запроса к YandexGPT API (fallback)")?
+                .context("Ошибка выполнения запроса к YandexGPT API (fallback)")?;
+
+                let alt_status = alt_resp.status();
+                debug!("Fallback ответ статуса от YandexGPT: {}", alt_status);
+                let alt_text = alt_resp.text().await.context("Не удалось прочитать ответ fallback от YandexGPT")?;
+                debug!("Fallback сырой ответ YandexGPT (обрезан до 500 символов): {}", &alt_text[..alt_text.len().min(500)]);
+
+                if !alt_status.is_success() {
+                    let fb_err = format!("Fallback YandexGPT вернул ошибку {}: {}", alt_status, alt_text);
+                    error!("{}", fb_err);
+                    return Err(anyhow::anyhow!(error_msg));
+                }
+
+                let api_response: YandexGPTResponse = serde_json::from_str(&alt_text)
+                    .with_context(|| format!("Ошибка парсинга JSON ответа от YandexGPT (fallback). Ответ: {}", alt_text))?;
+
+                if let Some(alternative) = api_response.result.alternatives.first() {
+                    if alternative.status == "ALTERNATIVE_STATUS_FINAL" || alternative.status == "ALTERNATIVE_STATUS_SUCCESS" {
+                        info!("✅ Получен ответ от YandexGPT (fallback) ({} токенов)", api_response.result.usage.total_tokens);
+                        return Ok(alternative.message.text.clone());
+                    }
+                }
+
+                return Err(anyhow::anyhow!(error_msg));
+            }
+
             return Err(anyhow::anyhow!(error_msg));
         }
 
@@ -230,7 +315,7 @@ impl YandexGPTClient {
 
     /// Получает информацию о модели
     pub fn get_model_info(&self) -> &str {
-        &self.folder_id
+        &self.model
     }
 }
 
@@ -272,7 +357,7 @@ mod tests {
         let config = YandexGPTConfig {
             api_key: "test_key".to_string(),
             folder_id: "test_folder".to_string(),
-            model: "yandexgpt".to_string(),
+            model: "yandexgpt/latest".to_string(),
             temperature: 0.3,
             max_tokens: 1000,
             timeout: Duration::from_secs(10),
@@ -280,6 +365,7 @@ mod tests {
 
         let client = YandexGPTClient::new(config);
         assert_eq!(client.folder_id, "test_folder");
+        assert_eq!(client.get_model_info(), "yandexgpt/latest");
     }
 
     #[tokio::test]

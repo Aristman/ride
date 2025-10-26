@@ -64,7 +64,9 @@ impl ChangeAnalyzer {
 
         // Паттерны для новых функций
         change_patterns.insert(ChangeType::Feature, vec![
-            r"(?i)^(feat|feature)[\(\[].*[\)\]:]?".to_string(),
+            // Разрешаем как `feat: desc`, так и `feat(scope): desc`
+            r"(?i)^feat(!)?(:|\b)".to_string(),
+            r"(?i)^feature(:|\b)".to_string(),
             r"(?i)добавлен".to_string(),
             r"(?i)новый".to_string(),
             r"(?i)new feature".to_string(),
@@ -74,7 +76,8 @@ impl ChangeAnalyzer {
 
         // Паттерны для исправлений
         change_patterns.insert(ChangeType::Fix, vec![
-            r"(?i)^(fix|bugfix)[\(\[].*[\)\]:]?".to_string(),
+            r"(?i)^fix(:|\b)".to_string(),
+            r"(?i)^bugfix(:|\b)".to_string(),
             r"(?i)исправлен".to_string(),
             r"(?i)фикс".to_string(),
             r"(?i)bug".to_string(),
@@ -200,15 +203,30 @@ impl ChangeAnalyzer {
         })
     }
 
-    /// Определяет тип изменения по сообщению коммита
+    /// Определяет тип изменения по сообщению коммита (c приоритетом breaking)
     fn detect_change_type(&self, message: &str) -> ChangeType {
-        for (change_type, patterns) in &self.change_patterns {
-            for pattern in patterns {
-                if regex::Regex::new(pattern).unwrap().is_match(message) {
-                    return change_type.clone();
+        // Явно проверяем категории в порядке приоритета
+        let order = [
+            ChangeType::Breaking,
+            ChangeType::Feature,
+            ChangeType::Fix,
+            ChangeType::Improvement,
+            ChangeType::Refactoring,
+            ChangeType::Documentation,
+            ChangeType::Testing,
+            ChangeType::Chore,
+        ];
+
+        for ct in &order {
+            if let Some(patterns) = self.change_patterns.get(ct) {
+                for pattern in patterns {
+                    if regex::Regex::new(pattern).unwrap().is_match(message) {
+                        return ct.clone();
+                    }
                 }
             }
         }
+
         ChangeType::Other
     }
 
@@ -376,8 +394,13 @@ impl ChangeAnalyzer {
         }
 
         // Анализируем от самого старого к самому новому
-        let oldest_commit = commits.last().unwrap();
-        self.analyze_changes(Some(&oldest_commit.hash), Some("HEAD")).await
+        if commits.len() == 1 {
+            // Для одного коммита анализируем сам HEAD, чтобы получить 1 коммит
+            self.analyze_changes(None, None).await
+        } else {
+            let oldest_commit = commits.last().unwrap();
+            self.analyze_changes(Some(&oldest_commit.hash), Some("HEAD")).await
+        }
     }
 
     /// Форматирует анализ для вывода в консоль

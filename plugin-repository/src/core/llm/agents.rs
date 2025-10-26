@@ -6,6 +6,11 @@ use super::yandexgpt::{YandexGPTClient, YandexGPTConfig, YandexGPTClientFactory}
 use super::prompts::*;
 use crate::git::{GitRepository, GitCommit, ReleaseAnalysis, ChangeType};
 
+#[inline]
+fn preview(s: &str, n: usize) -> String {
+    s.chars().take(n).collect::<String>()
+}
+
 /// Базовый трейт для LLM агентов
 pub trait LLMAgent {
     async fn generate_response(&self, input: &str) -> Result<String>;
@@ -84,7 +89,7 @@ impl ChangelogAgent {
             .replace("{branch}", &version_info.branch)
             .replace("{git_log}", git_log);
 
-        debug!("Отправка промпта в YandexGPT: {}", &prompt[..prompt.len().min(200)]);
+        debug!("Отправка промпта в YandexGPT: {}", preview(&prompt, 200));
 
         let response = self.client.chat_completion_with_retry(&prompt, 3).await
             .context("Ошибка генерации changelog")?;
@@ -331,7 +336,7 @@ impl VersionAgent {
             .replace("{change_types}", &self.analyze_change_types(git_log))
             .replace("{breaking_changes}", &self.count_breaking_changes(git_log).to_string());
 
-        debug!("Отправка промпта в YandexGPT: {}", &prompt[..prompt.len().min(200)]);
+        debug!("Отправка промпта в YandexGPT: {}", preview(&prompt, 200));
 
         let response = self.client.chat_completion_with_retry(&prompt, 3).await
             .context("Ошибка анализа версий")?;
@@ -574,7 +579,7 @@ impl ReleaseAgent {
             .replace("{version}", version)
             .replace("{changelog}", changelog);
 
-        debug!("Отправка промпта в YandexGPT: {}", &prompt[..prompt.len().min(200)]);
+        debug!("Отправка промпта в YandexGPT: {}", preview(&prompt, 200));
 
         let response = self.client.chat_completion_with_retry(&prompt, 3).await
             .context("Ошибка генерации release notes")?;

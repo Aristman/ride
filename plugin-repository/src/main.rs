@@ -64,6 +64,10 @@ async fn main() -> Result<()> {
 
     // Загрузка переменных окружения из .env файла
     dotenv::dotenv().ok();
+    // Дополнительная попытка: загрузить .env из поддиректории, если запускаем из корня монорепозитория
+    if std::env::var("DEPLOY_PLUGIN_YANDEX_FOLDER_ID").is_err() || std::env::var("DEPLOY_PLUGIN_YANDEX_API_KEY").is_err() {
+        let _ = dotenv::from_filename("plugin-repository/.env");
+    }
 
     // Обработка команд
     match args.command {
