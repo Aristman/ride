@@ -4,6 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 use sha2::{Sha256, Digest};
+use std::time::Duration;
 
 use crate::config::parser::Config;
 
@@ -51,6 +52,11 @@ impl Deployer {
             {
                 let session = self.ssh_connect()?;
                 let sftp = session.sftp().context("Не удалось открыть SFTP сессию")?;
+
+                // Гарантируем существование директорий для артефактов и XML
+                let xml_parent = xml_remote.parent().unwrap_or_else(|| Path::new("/"));
+                self.sftp_mkdirs(&sftp, &deploy_dir)?;
+                self.sftp_mkdirs(&sftp, xml_parent)?;
 
                 // Бэкап XML, если существует
                 if sftp.stat(&xml_remote).is_ok() {
@@ -120,14 +126,27 @@ impl Deployer {
     /// Подключение по SSH (требует feature "ssh")
     #[cfg(feature = "ssh")]
     fn ssh_connect(&self) -> Result<ssh2::Session> {
-        use std::net::TcpStream;
+        use std::net::{TcpStream, ToSocketAddrs};
         use anyhow::bail;
 
         let host = &self.config.repository.ssh_host;
         let user = &self.config.repository.ssh_user;
 
-        let stream = TcpStream::connect(format!("{}:22", host))
-            .with_context(|| format!("Не удалось подключиться к {}:22", host))?;
+        // Таймауты подключения/IO
+        let connect_timeout = Duration::from_secs(15);
+        let io_timeout = Duration::from_secs(30);
+
+        // Разрешаем адрес и подключаемся с таймаутом
+        let addr = format!("{}:22", host)
+            .to_socket_addrs()
+            .with_context(|| format!("Не удалось разрешить адрес {}:22", host))?
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("DNS не вернул адрес для {}:22", host))?;
+
+        let stream = TcpStream::connect_timeout(&addr, connect_timeout)
+            .with_context(|| format!("Таймаут подключения к {}", addr))?;
+        stream.set_read_timeout(Some(io_timeout)).ok();
+        stream.set_write_timeout(Some(io_timeout)).ok();
 
         let mut session = ssh2::Session::new().context("Не удалось создать SSH сессию")?;
         session.set_tcp_stream(stream);
@@ -145,6 +164,30 @@ impl Deployer {
         }
 
         Ok(session)
+    }
+
+    /// Рекурсивное создание удаленных директорий через SFTP (аналог mkdir -p)
+    #[cfg(feature = "ssh")]
+    fn sftp_mkdirs(&self, sftp: &ssh2::Sftp, path: &Path) -> Result<()> {
+        use std::path::Component;
+        let mut cur = PathBuf::new();
+        for comp in path.components() {
+            match comp {
+                Component::RootDir => cur.push(Path::new("/")),
+                Component::Normal(seg) => {
+                    cur.push(seg);
+                    // Пытаемся создать, если уже существует — игнорируем ошибку
+                    if let Err(e) = sftp.mkdir(&cur, 0o775) {
+                        // Если ошибка не о существовании — проверим stat, чтобы отличить права
+                        if sftp.stat(&cur).is_err() {
+                            return Err(anyhow::anyhow!("Не удалось создать/проверить удаленную директорию {}: {}", cur.display(), e));
+                        }
+                    }
+                },
+                _ => {}
+            }
+        }
+        Ok(())
     }
 
     /// Загрузка файла по SCP (требует feature "ssh")
