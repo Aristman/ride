@@ -113,6 +113,24 @@ cargo run -- build --version 1.2.3 --profile release
 
 После сборки артефакт будет иметь имя вида `your-plugin-1.2.3.zip`, и деплой возьмёт версию из этого имени.
 
+### Команда publish (полный цикл)
+
+`publish` выполняет build → release → deploy за один проход.
+
+```bash
+# 1) Первая публикация с фиксированной версией
+cargo run -- publish --version 0.1.0 --profile release --rollback-on-failure
+
+# 2) Обновление с авто-версией (определяется по истории git)
+cargo run -- publish --auto-version --profile release --rollback-on-failure
+
+# 3) Проверка без реальных изменений (dry-run): релиз/деплой пропускаются
+cargo run -- publish --auto-version --dry-run
+
+# Примечание: для реального SSH деплоя нужна фича ssh
+cargo run --features ssh -- publish --version 0.1.1 --profile release --rollback-on-failure
+```
+
 ## ⚙️ Конфигурация
 
 ### config.toml
