@@ -6,6 +6,7 @@ use walkdir::WalkDir;
 use sha2::{Sha256, Digest};
 use std::time::Duration;
 use xmltree::{Element, XMLNode};
+use std::fs::File;
 
 use crate::config::parser::Config;
 
@@ -324,15 +325,159 @@ impl Deployer {
         xml_remote: &Path,
         artifacts: &[PathBuf],
     ) -> Result<String> {
-        // Базовый URL
+        // Базовый URL и вычисление относительного URL-пути до артефактов
         let base = self.config.repository.url.trim_end_matches('/');
+        let repo_root_fs = Path::new(&self.config.repository.xml_path)
+            .parent()
+            .unwrap_or_else(|| Path::new("/"));
+        let deploy_fs = Path::new(&self.config.repository.deploy_path);
+        let rel_path = deploy_fs
+            .strip_prefix(repo_root_fs)
+            .ok()
+            .and_then(|p| {
+                let s = p.components()
+                    .map(|c| c.as_os_str().to_string_lossy())
+                    .collect::<Vec<_>>()
+                    .join("/");
+                if s.is_empty() { None } else { Some(s) }
+            });
 
-        // Парсим существующий XML
-        let mut root: Element = if let Some(existing) = self.read_remote_xml(sftp, xml_remote) {
-            Element::parse(existing.as_bytes()).unwrap_or_else(|_| Element::new("plugins"))
-        } else {
-            Element::new("plugins")
+        // Пробуем прочитать существующий XML
+        let existing_raw_opt = self.read_remote_xml(sftp, xml_remote);
+
+        // Попытка DOM-парсинга
+        if let Some(existing_raw) = existing_raw_opt.clone() {
+            if let Ok(mut root) = Element::parse(existing_raw.as_bytes()) {
+                // Собираем карту id -> существующий элемент (оставляем только другие id)
+                let current_id = &self.config.project.id;
+                let mut new_children: Vec<XMLNode> = Vec::new();
+                for ch in &root.children {
+                    if let XMLNode::Element(el) = ch {
+                        if el.name == "plugin" {
+                            let id_attr = el.attributes.get("id").cloned();
+                            if let Some(id) = id_attr {
+                                if id == *current_id { continue; }
+                            }
+                        }
+                    }
+                    new_children.push(ch.clone());
+                }
+
+                // артефакт и URL
+                let mut arts = artifacts.to_vec();
+                arts.sort();
+                let art = arts.last().unwrap();
+                let file_name = art.file_name().unwrap().to_string_lossy().to_string();
+                let url = match rel_path {
+                    Some(rel) => format!("{}/{}/{}", base, rel, file_name),
+                    None => format!("{}/{}", base, file_name),
+                };
+                let version = self.extract_version_from_filename(&file_name).unwrap_or_else(|| "0.0.0".to_string());
+
+                let mut plugin_el = Element::new("plugin");
+                plugin_el.attributes.insert("id".to_string(), current_id.clone());
+                plugin_el.attributes.insert("url".to_string(), url);
+                plugin_el.attributes.insert("version".to_string(), version);
+
+                // Попытаемся извлечь метаданные из ZIP
+                let zip_meta = self.extract_meta_from_zip(art).ok();
+
+                // name — приоритет: из существующей записи -> из ZIP -> из project.name
+                let mut have_name = false;
+                if let Some(existing_el) = self.find_existing_plugin_by_id(&root, current_id) {
+                    for child in &existing_el.children {
+                        if let XMLNode::Element(cel) = child {
+                            if cel.name == "name" { have_name = true; }
+                        }
+                    }
+                }
+                if !have_name {
+                    if let Some(meta) = &zip_meta {
+                        if let Some(n) = &meta.name { self.push_text_child(&mut plugin_el, "name", n); }
+                        else { self.push_text_child(&mut plugin_el, "name", &self.config.project.name); }
+                    } else {
+                        self.push_text_child(&mut plugin_el, "name", &self.config.project.name);
+                    }
+                }
+
+                // Сохраняем vendor/idea-version/description из старой записи этого id если она была
+                if let Some(existing_el) = self.find_existing_plugin_by_id(&root, current_id) {
+                    for child in existing_el.children {
+                        if let XMLNode::Element(mut cel) = child {
+                            if cel.name == "vendor" || cel.name == "idea-version" || cel.name == "description" {
+                                plugin_el.children.push(XMLNode::Element(cel));
+                            }
+                        }
+                    }
+                }
+
+                // Дополняем отсутствующие поля из ZIP-метаданных (только если их ещё нет)
+                if let Some(meta) = zip_meta {
+                    if plugin_el.get_child("vendor").is_none() {
+                        if let Some(v) = meta.vendor { self.push_text_child(&mut plugin_el, "vendor", &v); }
+                    }
+                    if plugin_el.get_child("idea-version").is_none() {
+                        if meta.since_build.is_some() || meta.until_build.is_some() {
+                            let mut iv = Element::new("idea-version");
+                            if let Some(s) = meta.since_build { iv.attributes.insert("since-build".to_string(), s); }
+                            if let Some(u) = meta.until_build { iv.attributes.insert("until-build".to_string(), u); }
+                            plugin_el.children.push(XMLNode::Element(iv));
+                        }
+                    }
+                    if plugin_el.get_child("description").is_none() {
+                        if let Some(d) = meta.description { self.push_cdata_child(&mut plugin_el, "description", &d); }
+                    }
+                }
+
+                new_children.push(XMLNode::Element(plugin_el));
+                root.children = new_children;
+
+                // Сериализуем корень
+                let mut buf = Vec::new();
+                root.write(&mut buf).with_context(|| "Сериализация updatePlugins.xml не удалась")?;
+                return Ok(String::from_utf8(buf).unwrap_or_else(|v| String::from_utf8_lossy(&v.into_bytes()).to_string()));
+            }
+        }
+
+        // Fallback: DOM-парсинг не удался — выполняем безопасную строковую замену/вставку
+        let current_id = &self.config.project.id;
+        let mut arts = artifacts.to_vec();
+        arts.sort();
+        let art = arts.last().unwrap();
+        let file_name = art.file_name().unwrap().to_string_lossy().to_string();
+        let url = match rel_path {
+            Some(rel) => format!("{}/{}/{}", base, rel, file_name),
+            None => format!("{}/{}", base, file_name),
         };
+        let version = self.extract_version_from_filename(&file_name).unwrap_or_else(|| "0.0.0".to_string());
+
+        let plugin_snippet = format!(
+            "<plugin id=\"{}\" url=\"{}\" version=\"{}\"><name>{}</name></plugin>",
+            current_id, url, version, self.config.project.name
+        );
+
+        if let Some(mut existing_raw) = existing_raw_opt {
+            // Если уже есть запись для текущего id — заменим её через regex, иначе вставим перед </plugins>
+            let re = regex::RegexBuilder::new(&format!(r"<plugin\b[^>]*\bid=\"{}\"[^>]*>.*?</plugin>", regex::escape(current_id)))
+                .dot_matches_new_line(true)
+                .build()
+                .ok();
+            if let Some(re) = re {
+                if re.is_match(&existing_raw) {
+                    existing_raw = re.replace(&existing_raw, plugin_snippet.as_str()).to_string();
+                } else if let Some(pos) = existing_raw.rfind("</plugins>") {
+                    existing_raw.insert_str(pos, &plugin_snippet);
+                } else {
+                    // нет закрывающего тега — просто прибавим
+                    existing_raw.push_str(&plugin_snippet);
+                }
+            }
+            return Ok(existing_raw);
+        } else {
+            // Файла не было — создаем минимальный
+            let content = format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?><plugins>{}</plugins>", plugin_snippet);
+            return Ok(content);
+        }
 
         // Собираем карту id -> существующий элемент (оставляем только другие id)
         let current_id = &self.config.project.id;
@@ -358,7 +503,10 @@ impl Deployer {
         arts.sort();
         let art = arts.last().unwrap();
         let file_name = art.file_name().unwrap().to_string_lossy().to_string();
-        let url = format!("{}/archives/{}", base, file_name);
+        let url = match rel_path {
+            Some(rel) => format!("{}/{}/{}", base, rel, file_name),
+            None => format!("{}/{}", base, file_name),
+        };
         let version = self.extract_version_from_filename(&file_name).unwrap_or_else(|| "0.0.0".to_string());
 
         let mut plugin_el = Element::new("plugin");
@@ -493,6 +641,64 @@ impl Deployer {
             let _ = remote_paths; // no-op
         }
     }
+
+    /// Вспомогательный метод: добавить текстовый дочерний элемент
+    fn push_text_child(&self, parent: &mut Element, name: &str, text: &str) {
+        let mut el = Element::new(name);
+        el.children.push(XMLNode::Text(text.to_string()));
+        parent.children.push(XMLNode::Element(el));
+    }
+
+    /// Вспомогательный: добавить CDATA
+    fn push_cdata_child(&self, parent: &mut Element, name: &str, text: &str) {
+        let mut el = Element::new(name);
+        el.children.push(XMLNode::CData(text.to_string()));
+        parent.children.push(XMLNode::Element(el));
+    }
+
+    /// Извлекает метаданные плагина из META-INF/plugin.xml внутри ZIP
+    fn extract_meta_from_zip(&self, zip_path: &Path) -> Result<PluginMeta> {
+        let file = File::open(zip_path)
+            .with_context(|| format!("Не удалось открыть ZIP {}", zip_path.display()))?;
+        let mut archive = zip::ZipArchive::new(file)
+            .with_context(|| format!("Не удалось прочитать ZIP {}", zip_path.display()))?;
+        let mut entry = archive
+            .by_name("META-INF/plugin.xml")
+            .with_context(|| "В ZIP отсутствует META-INF/plugin.xml")?;
+        use std::io::Read;
+        let mut xml = String::new();
+        entry.read_to_string(&mut xml).with_context(|| "Не удалось прочитать META-INF/plugin.xml из ZIP")?;
+        let root = Element::parse(xml.as_bytes()).with_context(|| "Ошибка парсинга META-INF/plugin.xml из ZIP")?;
+
+        let name = root.get_child("name").and_then(|e| e.get_text()).map(|s| s.to_string());
+        let vendor = root.get_child("vendor").and_then(|e| e.get_text()).map(|s| s.to_string());
+        let description = root.get_child("description").and_then(|e| {
+            // Соберем CDATA/текст в строку
+            let mut acc = String::new();
+            for ch in &e.children {
+                match ch {
+                    XMLNode::Text(t) | XMLNode::CData(t) => { acc.push_str(t); },
+                    _ => {}
+                }
+            }
+            if acc.is_empty() { None } else { Some(acc) }
+        });
+        let idea = root.get_child("idea-version");
+        let since_build = idea.and_then(|e| e.attributes.get("since-build").cloned());
+        let until_build = idea.and_then(|e| e.attributes.get("until-build").cloned());
+
+        Ok(PluginMeta { name, vendor, description, since_build, until_build })
+    }
+
+}
+
+#[derive(Debug, Clone)]
+struct PluginMeta {
+    name: Option<String>,
+    vendor: Option<String>,
+    description: Option<String>,
+    since_build: Option<String>,
+    until_build: Option<String>,
 }
 
 #[cfg(test)]
