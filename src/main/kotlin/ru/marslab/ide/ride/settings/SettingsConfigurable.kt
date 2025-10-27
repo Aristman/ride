@@ -608,7 +608,7 @@ class SettingsConfigurable : Configurable {
                     isIndeterminate = false
                     value = 0
                     isStringPainted = true
-                    isVisible = false
+                    isVisible = true
                 }
                 cell(indexProgressBar)
                     .align(Align.FILL)
@@ -739,7 +739,7 @@ class SettingsConfigurable : Configurable {
                     )
 
                     SwingUtilities.invokeLater {
-                        this@SettingsConfigurable.indexProgressBar.isVisible = false
+                        // Прогрессбар не скрываем – он отображает уровень индексации
                         updateIndexingButtons(false)
 
                         if (result.success) {
@@ -786,7 +786,7 @@ class SettingsConfigurable : Configurable {
                 }
             } catch (e: Exception) {
                 SwingUtilities.invokeLater {
-                    if (this::indexProgressBar.isInitialized) this@SettingsConfigurable.indexProgressBar.isVisible = false
+                    // Прогрессбар не скрываем – он отображает уровень индексации
                     updateIndexingButtons(false)
                     com.intellij.openapi.ui.Messages.showErrorDialog(
                         "Ошибка: ${e.message}",
@@ -806,7 +806,7 @@ class SettingsConfigurable : Configurable {
             task.cancel(true)
         }
         SwingUtilities.invokeLater {
-            if (this::indexProgressBar.isInitialized) this@SettingsConfigurable.indexProgressBar.isVisible = false
+            // Прогрессбар не скрываем – он отображает уровень индексации
             updateIndexingButtons(false)
             com.intellij.openapi.ui.Messages.showInfoMessage(
                 "Индексация остановлена пользователем",
