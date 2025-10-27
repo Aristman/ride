@@ -31,6 +31,14 @@ class EmbeddingDatabaseService(private val dbPath: String) {
             val dbFile = File(dbPath)
             dbFile.parentFile?.mkdirs()
 
+            // Явно загружаем SQLite драйвер
+            try {
+                Class.forName("org.sqlite.JDBC")
+            } catch (e: ClassNotFoundException) {
+                logger.error("SQLite JDBC driver not found", e)
+                throw IllegalStateException("SQLite JDBC driver not found. Make sure sqlite-jdbc is in classpath.", e)
+            }
+
             connection = DriverManager.getConnection("jdbc:sqlite:$dbPath")
             createTables()
             logger.info("Embedding database initialized at: $dbPath")

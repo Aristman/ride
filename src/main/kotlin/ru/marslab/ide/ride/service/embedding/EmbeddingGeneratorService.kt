@@ -27,54 +27,76 @@ class EmbeddingGeneratorService(
             return emptyList()
         }
 
-        val content = try {
-            file.readText()
+        val chunks = mutableListOf<FileChunkData>()
+        var chunkIndex = 0
+        var currentChunkChars = 0
+        val currentChunkLines = mutableListOf<String>()
+        var lineNumber = 0
+        var startLineForChunk = 0
+
+        val overlapLines = if (config.chunkOverlap > 0) (config.chunkOverlap / 50).coerceAtLeast(1) else 0
+
+        try {
+            file.bufferedReader().useLines { sequence ->
+                sequence.forEach { line ->
+                    val addLen = line.length + 1 // +1 for newline
+                    // Если добавление строки превысит размер чанка и текущий чанк не пустой — финализируем чанк
+                    if (currentChunkChars + addLen > config.chunkSize && currentChunkLines.isNotEmpty()) {
+                        chunks.add(
+                            FileChunkData(
+                                fileId = fileId,
+                                chunkIndex = chunkIndex,
+                                content = currentChunkLines.joinToString("\n"),
+                                startLine = startLineForChunk,
+                                endLine = lineNumber - 1
+                            )
+                        )
+                        chunkIndex++
+
+                        // Перекрытие: переносим хвост последних overlapLines строк в начало следующего чанка
+                        if (overlapLines > 0) {
+                            val tail = currentChunkLines.takeLast(overlapLines)
+                            currentChunkLines.clear()
+                            currentChunkLines.addAll(tail)
+                            currentChunkChars = tail.sumOf { it.length + 1 }
+                            startLineForChunk = (lineNumber - overlapLines).coerceAtLeast(0)
+                        } else {
+                            currentChunkLines.clear()
+                            currentChunkChars = 0
+                            startLineForChunk = lineNumber
+                        }
+                    }
+
+                    // Добавляем строку в текущий чанк
+                    currentChunkLines.add(line)
+                    currentChunkChars += addLen
+                    if (currentChunkLines.size == 1) {
+                        startLineForChunk = lineNumber
+                    }
+
+                    lineNumber++
+                }
+            }
         } catch (e: Exception) {
             logger.error("Failed to read file: ${file.absolutePath}", e)
             return emptyList()
         }
 
-        val lines = content.lines()
-        val chunks = mutableListOf<FileChunkData>()
-        var chunkIndex = 0
-        var currentPos = 0
-
-        while (currentPos < lines.size) {
-            val chunkLines = mutableListOf<String>()
-            var chunkSize = 0
-            var startLine = currentPos
-
-            // Собираем строки до достижения размера чанка
-            while (currentPos < lines.size && chunkSize < config.chunkSize) {
-                val line = lines[currentPos]
-                chunkLines.add(line)
-                chunkSize += line.length + 1 // +1 для символа новой строки
-                currentPos++
-            }
-
-            if (chunkLines.isNotEmpty()) {
-                chunks.add(
-                    FileChunkData(
-                        fileId = fileId,
-                        chunkIndex = chunkIndex,
-                        content = chunkLines.joinToString("\n"),
-                        startLine = startLine,
-                        endLine = currentPos - 1
-                    )
+        // Финализируем оставшийся чанк
+        if (currentChunkLines.isNotEmpty()) {
+            chunks.add(
+                FileChunkData(
+                    fileId = fileId,
+                    chunkIndex = chunkIndex,
+                    content = currentChunkLines.joinToString("\n"),
+                    startLine = startLineForChunk,
+                    endLine = (lineNumber - 1).coerceAtLeast(startLineForChunk)
                 )
-                chunkIndex++
-            }
-
-            // Применяем перекрытие
-            if (config.chunkOverlap > 0 && currentPos < lines.size) {
-                val overlapLines = (config.chunkOverlap / 50).coerceAtLeast(1) // Примерно 50 символов на строку
-                currentPos -= overlapLines.coerceAtMost(chunkLines.size)
-            }
+            )
         }
 
         return chunks
     }
-
     /**
      * Генерация эмбеддинга для текста
      * 

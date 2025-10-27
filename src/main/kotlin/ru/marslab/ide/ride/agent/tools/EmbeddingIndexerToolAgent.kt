@@ -98,23 +98,70 @@ class EmbeddingIndexerToolAgent(
                 settings ?: com.intellij.openapi.components.service()
             )
 
-            // Сканирование файлов через ProjectScannerAgentBridge
-            val scanResult = ProjectScannerAgentBridge.scanProject(
-                projectPath = projectPath,
-                forceRescan = forceReindex,
-                includePatterns = indexingConfig.includePatterns,
-                excludePatterns = indexingConfig.excludePatterns
-            )
+            val filesFromScanner: List<String> = try {
+                // Усиленные exclude-паттерны для не-проектных/генерируемых файлов
+                val extraExcludes = listOf(
+                    "**/.git/**",
+                    "**/.idea/**",
+                    "**/.gradle/**",
+                    "**/build/**",
+                    "**/target/**",
+                    "**/node_modules/**",
+                    "**/.dart_tool/**",
+                    "**/.pub-cache/**",
+                    "**/*/ephemeral/**",
+                    "**/android/.gradle/**",
+                    "**/android/build/**",
+                    "**/ios/Pods/**"
+                )
+                val combinedExcludes = (indexingConfig.excludePatterns + extraExcludes).distinct()
 
-            if (!scanResult.success) {
-                return StepResult.error("Failed to scan project: ${scanResult.error}")
+                val scanResult = ProjectScannerAgentBridge.scanProject(
+                    projectPath = projectPath,
+                    forceRescan = forceReindex,
+                    pageSize = 2000,
+                    includePatterns = emptyList(),
+                    excludePatterns = combinedExcludes
+                )
+                if (!scanResult.success) {
+                    val err = scanResult.error ?: "ProjectScannerToolAgent failed without error message"
+                    logger.error("ProjectScannerToolAgent error: ${'$'}err")
+                    return StepResult.error("ProjectScannerToolAgent error: ${'$'}err")
+                }
+                val files = scanResult.output.get<List<String>>("files") ?: emptyList()
+                logger.info("ProjectScannerToolAgent returned ${files.size} files for indexing (after excludes)")
+                if (files.isNotEmpty()) {
+                    val sample = files.take(5).joinToString(separator = ", ")
+                    logger.info("Sample files: $sample")
+                }
+                files
+            } catch (e: Exception) {
+                logger.error("ProjectScannerToolAgent not available", e)
+                return StepResult.error("ProjectScannerToolAgent not available: ${'$'}{e.message}")
             }
 
-            val files = scanResult.output.get<List<String>>("files") ?: emptyList()
+            // Нормализуем пути: сканер может вернуть относительные пути — резолвим относительно projectPath
+            val normalizedFiles = filesFromScanner.map { path ->
+                val f = File(path)
+                if (f.isAbsolute) f else File(projectPath, path)
+            }
+
+            val relativeCount = normalizedFiles.count { !it.isAbsolute }
+
+            // Ограничение максимального размера файла (2 МБ) для снижения памяти
+            val maxFileSizeBytes = 2 * 1024 * 1024
+
+            val files = normalizedFiles
+                .map { file -> runCatching { file.canonicalFile }.getOrElse { File(file.absolutePath) } }
+                .filter { it.exists() && it.isFile && it.length() <= maxFileSizeBytes }
+                .map { it.absolutePath }
+                .distinct()
+
+            logger.info("EmbeddingIndexerToolAgent: ${files.size} files will be sent to indexer after validation (resolved_relative=${relativeCount}, max_file_size=${maxFileSizeBytes}B)")
+
             val result = indexFiles(files, forceReindex)
 
             val duration = System.currentTimeMillis() - startTime
-
             return StepResult.success(
                 output = StepOutput.of(
                     "result" to result.copy(durationMs = duration),
@@ -166,9 +213,7 @@ class EmbeddingIndexerToolAgent(
         for ((index, filePath) in filePaths.withIndex()) {
             try {
                 val file = File(filePath)
-                if (!generator.shouldIndexFile(file)) {
-                    continue
-                }
+                // Доверяем списку файлов от сканера: не применяем повторную фильтрацию include/exclude
 
                 // Проверяем, нужно ли переиндексировать
                 val existingFile = db.getIndexedFile(filePath)
@@ -363,6 +408,55 @@ class EmbeddingIndexerToolAgent(
      */
     fun updateConfig(config: IndexingConfig) {
         this.indexingConfig = config
+    }
+
+    /**
+     * Сканирование файлов проекта напрямую
+     */
+    private fun scanProjectFiles(projectPath: String): List<String> {
+        val projectDir = File(projectPath)
+        if (!projectDir.exists() || !projectDir.isDirectory) {
+            logger.warn("Project directory does not exist: $projectPath")
+            return emptyList()
+        }
+
+        val files = mutableListOf<String>()
+        val generator = generatorService ?: return emptyList()
+
+        fun matchesPattern(path: String, pattern: String): Boolean {
+            val regex = pattern
+                .replace(".", "\\.")
+                .replace("**", ".*")
+                .replace("*", "[^/]*")
+                .toRegex()
+            return regex.matches(path)
+        }
+
+        fun isExcluded(path: String): Boolean =
+            indexingConfig.excludePatterns.any { matchesPattern(path, it) }
+
+        fun scanDirectory(dir: File) {
+            try {
+                val dirPath = dir.absolutePath + File.separator
+                if (isExcluded(dirPath)) return
+
+                dir.listFiles()?.forEach { entry ->
+                    if (entry.isDirectory) {
+                        scanDirectory(entry)
+                    } else if (entry.isFile) {
+                        if (!isExcluded(entry.absolutePath) && generator.shouldIndexFile(entry)) {
+                            files.add(entry.absolutePath)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                logger.warn("Failed to scan directory: ${dir.absolutePath}", e)
+            }
+        }
+
+        scanDirectory(projectDir)
+        logger.info("Scanned ${files.size} files in project: $projectPath")
+        return files
     }
 
     /**

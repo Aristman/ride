@@ -50,6 +50,12 @@ class SettingsConfigurable : Configurable {
     private var initialHFToken: String = ""
     private var hfTokenLoaded = false
 
+    // Embedding indexer UI components
+    private lateinit var indexProgressBar: javax.swing.JProgressBar
+    private lateinit var currentFileLabel: javax.swing.JLabel
+    private lateinit var indexingSummaryArea: javax.swing.JTextArea
+    private lateinit var indexingScrollPane: javax.swing.JScrollPane
+
     override fun getDisplayName(): String = "Ride"
 
     override fun createComponent(): JComponent {
@@ -567,6 +573,35 @@ class SettingsConfigurable : Configurable {
                     showIndexStatistics()
                 }
             }
+            row {
+                indexProgressBar = javax.swing.JProgressBar(0, 100).apply {
+                    isIndeterminate = false
+                    value = 0
+                    isStringPainted = true
+                    isVisible = false
+                }
+                cell(indexProgressBar)
+                    .align(Align.FILL)
+                    .resizableColumn()
+            }
+            row("Текущий файл:") {
+                currentFileLabel = javax.swing.JLabel("")
+                cell(currentFileLabel)
+                    .align(Align.FILL)
+                    .resizableColumn()
+            }
+            row("Итоги индексации:") {
+                indexingSummaryArea = javax.swing.JTextArea(5, 60).apply {
+                    lineWrap = true
+                    wrapStyleWord = true
+                    isEditable = false
+                }
+                indexingScrollPane = javax.swing.JScrollPane(indexingSummaryArea)
+                cell(indexingScrollPane)
+                    .align(Align.FILL)
+                    .resizableColumn()
+                    .comment("После завершения индексации здесь появится сводка")
+            }
         }
     }
 
@@ -588,8 +623,14 @@ class SettingsConfigurable : Configurable {
                 // Устанавливаем callback для прогресса
                 agent.setProgressCallback { progress ->
                     SwingUtilities.invokeLater {
-                        // TODO: Показать прогресс в UI
-                        println("Progress: ${progress.percentComplete}% - ${progress.currentFile}")
+                        if (!this::indexProgressBar.isInitialized) return@invokeLater
+                        indexProgressBar.isIndeterminate = false
+                        indexProgressBar.isVisible = true
+                        indexProgressBar.value = progress.percentComplete.coerceIn(0, 100)
+                        indexProgressBar.string = "${progress.percentComplete}% (${progress.filesProcessed}/${progress.totalFiles})"
+                        if (this::currentFileLabel.isInitialized) {
+                            currentFileLabel.text = progress.currentFile
+                        }
                     }
                 }
 
@@ -610,10 +651,39 @@ class SettingsConfigurable : Configurable {
                     )
 
                     SwingUtilities.invokeLater {
+                        this@SettingsConfigurable.indexProgressBar.isVisible = false
+
                         if (result.success) {
+                            // Пытаемся извлечь сводку из результата
+                            val data = result.output.data
+                            val resultObj = data["result"]
+                            var summary = ""
+                            when (resultObj) {
+                                is ru.marslab.ide.ride.model.embedding.IndexingResult -> {
+                                    summary = "Файлов обработано: ${resultObj.filesProcessed}\n" +
+                                            "Чанков создано: ${resultObj.chunksCreated}\n" +
+                                            "Эмбеддингов сгенерировано: ${resultObj.embeddingsGenerated}\n" +
+                                            "Длительность: ${resultObj.durationMs} мс"
+                                }
+                                is Map<*, *> -> {
+                                    val filesProcessed = (resultObj["filesProcessed"] as? Number)?.toInt() ?: 0
+                                    val chunksCreated = (resultObj["chunksCreated"] as? Number)?.toInt() ?: 0
+                                    val embeddingsGenerated = (resultObj["embeddingsGenerated"] as? Number)?.toInt() ?: 0
+                                    val durationMs = (resultObj["durationMs"] as? Number)?.toLong() ?: 0L
+                                    summary = "Файлов обработано: ${filesProcessed}\n" +
+                                            "Чанков создано: ${chunksCreated}\n" +
+                                            "Эмбеддингов сгенерировано: ${embeddingsGenerated}\n" +
+                                            "Длительность: ${durationMs} мс"
+                                }
+                            }
+
+                            if (this@SettingsConfigurable::indexingSummaryArea.isInitialized) {
+                                this@SettingsConfigurable.indexingSummaryArea.text = summary
+                            }
+
                             com.intellij.openapi.ui.Messages.showInfoMessage(
-                                "Индексация завершена успешно",
-                                "Успех"
+                                summary,
+                                "Индексация завершена"
                             )
                         } else {
                             com.intellij.openapi.ui.Messages.showErrorDialog(
@@ -625,6 +695,7 @@ class SettingsConfigurable : Configurable {
                 }
             } catch (e: Exception) {
                 SwingUtilities.invokeLater {
+                    if (this@SettingsConfigurable::indexProgressBar.isInitialized) this@SettingsConfigurable.indexProgressBar.isVisible = false
                     com.intellij.openapi.ui.Messages.showErrorDialog(
                         "Ошибка: ${e.message}",
                         "Ошибка"
