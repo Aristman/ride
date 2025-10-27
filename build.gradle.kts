@@ -48,6 +48,9 @@ dependencies {
     // Tiktoken для подсчёта токенов
     implementation("com.knuddels:jtokkit:1.0.0")
 
+    // SQLite для хранения эмбеддингов
+    implementation("org.xerial:sqlite-jdbc:3.45.0.0")
+
     // Testing
     testImplementation("org.jetbrains.kotlin:kotlin-test")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")

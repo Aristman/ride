@@ -56,12 +56,14 @@ class SettingsConfigurable : Configurable {
         val llmConfigPanel = createLlmConfigPanel()
         val chatAppearancePanel = createChatAppearancePanel()
         val agentSettingsPanel = createAgentSettingsPanel()
+        val codeSettingsPanel = createCodeSettingsPanel()
 
         panel = panel {
             row {
                 val tabs = JBTabbedPane()
                 tabs.addTab("Chat Appearance", chatAppearancePanel)
                 tabs.addTab("Agent Settings", agentSettingsPanel)
+                tabs.addTab("Code Settings", codeSettingsPanel)
                 tabs.addTab("LlmConfig", llmConfigPanel)
                 cell(tabs)
                     .align(Align.FILL)
@@ -545,6 +547,212 @@ class SettingsConfigurable : Configurable {
                 enableAutoSummarizationCheck = JBCheckBox("Включить автоматическое сжатие истории")
                 cell(enableAutoSummarizationCheck)
                     .comment("При превышении лимита токенов история будет автоматически сжиматься через SummarizerAgent")
+            }
+        }
+    }
+
+    private fun createCodeSettingsPanel(): DialogPanel = panel {
+        group("Embedding Indexer") {
+            row {
+                comment("Индексация файлов проекта для семантического поиска")
+            }
+            row {
+                button("Запустить индексацию") {
+                    startEmbeddingIndexing()
+                }
+                button("Очистить индекс") {
+                    clearEmbeddingIndex()
+                }
+                button("Показать статистику") {
+                    showIndexStatistics()
+                }
+            }
+        }
+    }
+
+    private fun startEmbeddingIndexing() {
+        val project = com.intellij.openapi.project.ProjectManager.getInstance().openProjects.firstOrNull()
+        if (project == null) {
+            com.intellij.openapi.ui.Messages.showErrorDialog(
+                "Нет открытых проектов",
+                "Ошибка"
+            )
+            return
+        }
+
+        com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread {
+            try {
+                val agent = ru.marslab.ide.ride.agent.tools.EmbeddingIndexerToolAgent()
+                val projectPath = project.basePath ?: return@executeOnPooledThread
+
+                // Устанавливаем callback для прогресса
+                agent.setProgressCallback { progress ->
+                    SwingUtilities.invokeLater {
+                        // TODO: Показать прогресс в UI
+                        println("Progress: ${progress.percentComplete}% - ${progress.currentFile}")
+                    }
+                }
+
+                // Запускаем индексацию
+                kotlinx.coroutines.runBlocking {
+                    val step = ru.marslab.ide.ride.model.tool.ToolPlanStep(
+                        description = "Index project files",
+                        agentType = ru.marslab.ide.ride.model.orchestrator.AgentType.EMBEDDING_INDEXER,
+                        input = ru.marslab.ide.ride.model.tool.StepInput.empty()
+                            .set("action", "index")
+                            .set("project_path", projectPath)
+                            .set("force_reindex", false)
+                    )
+
+                    val result = agent.executeStep(
+                        step,
+                        ru.marslab.ide.ride.model.orchestrator.ExecutionContext(projectPath)
+                    )
+
+                    SwingUtilities.invokeLater {
+                        if (result.success) {
+                            com.intellij.openapi.ui.Messages.showInfoMessage(
+                                "Индексация завершена успешно",
+                                "Успех"
+                            )
+                        } else {
+                            com.intellij.openapi.ui.Messages.showErrorDialog(
+                                "Ошибка индексации: ${result.error}",
+                                "Ошибка"
+                            )
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                SwingUtilities.invokeLater {
+                    com.intellij.openapi.ui.Messages.showErrorDialog(
+                        "Ошибка: ${e.message}",
+                        "Ошибка"
+                    )
+                }
+            }
+        }
+    }
+
+    private fun clearEmbeddingIndex() {
+        val project = com.intellij.openapi.project.ProjectManager.getInstance().openProjects.firstOrNull()
+        if (project == null) {
+            com.intellij.openapi.ui.Messages.showErrorDialog(
+                "Нет открытых проектов",
+                "Ошибка"
+            )
+            return
+        }
+
+        val confirm = com.intellij.openapi.ui.Messages.showYesNoDialog(
+            "Вы уверены, что хотите очистить индекс?",
+            "Подтверждение",
+            com.intellij.openapi.ui.Messages.getQuestionIcon()
+        )
+
+        if (confirm == com.intellij.openapi.ui.Messages.YES) {
+            com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread {
+                try {
+                    val agent = ru.marslab.ide.ride.agent.tools.EmbeddingIndexerToolAgent()
+                    val projectPath = project.basePath ?: return@executeOnPooledThread
+
+                    kotlinx.coroutines.runBlocking {
+                        val step = ru.marslab.ide.ride.model.tool.ToolPlanStep(
+                            description = "Clear index",
+                            agentType = ru.marslab.ide.ride.model.orchestrator.AgentType.EMBEDDING_INDEXER,
+                            input = ru.marslab.ide.ride.model.tool.StepInput.empty()
+                                .set("action", "clear")
+                                .set("project_path", projectPath)
+                        )
+
+                        val result = agent.executeStep(
+                            step,
+                            ru.marslab.ide.ride.model.orchestrator.ExecutionContext(projectPath)
+                        )
+
+                        SwingUtilities.invokeLater {
+                            if (result.success) {
+                                com.intellij.openapi.ui.Messages.showInfoMessage(
+                                    "Индекс очищен",
+                                    "Успех"
+                                )
+                            } else {
+                                com.intellij.openapi.ui.Messages.showErrorDialog(
+                                    "Ошибка: ${result.error}",
+                                    "Ошибка"
+                                )
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    SwingUtilities.invokeLater {
+                        com.intellij.openapi.ui.Messages.showErrorDialog(
+                            "Ошибка: ${e.message}",
+                            "Ошибка"
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private fun showIndexStatistics() {
+        val project = com.intellij.openapi.project.ProjectManager.getInstance().openProjects.firstOrNull()
+        if (project == null) {
+            com.intellij.openapi.ui.Messages.showErrorDialog(
+                "Нет открытых проектов",
+                "Ошибка"
+            )
+            return
+        }
+
+        com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread {
+            try {
+                val agent = ru.marslab.ide.ride.agent.tools.EmbeddingIndexerToolAgent()
+                val projectPath = project.basePath ?: return@executeOnPooledThread
+
+                kotlinx.coroutines.runBlocking {
+                    val step = ru.marslab.ide.ride.model.tool.ToolPlanStep(
+                        description = "Get statistics",
+                        agentType = ru.marslab.ide.ride.model.orchestrator.AgentType.EMBEDDING_INDEXER,
+                        input = ru.marslab.ide.ride.model.tool.StepInput.empty()
+                            .set("action", "stats")
+                            .set("project_path", projectPath)
+                    )
+
+                    val result = agent.executeStep(
+                        step,
+                        ru.marslab.ide.ride.model.orchestrator.ExecutionContext(projectPath)
+                    )
+
+                    SwingUtilities.invokeLater {
+                        if (result.success) {
+                            val stats = result.output.get<Map<String, Int>>("statistics") ?: emptyMap()
+                            val message = """
+                                Статистика индекса:
+                                Файлов: ${stats["files"] ?: 0}
+                                Чанков: ${stats["chunks"] ?: 0}
+                                Эмбеддингов: ${stats["embeddings"] ?: 0}
+                            """.trimIndent()
+                            com.intellij.openapi.ui.Messages.showInfoMessage(
+                                message,
+                                "Статистика"
+                            )
+                        } else {
+                            com.intellij.openapi.ui.Messages.showErrorDialog(
+                                "Ошибка: ${result.error}",
+                                "Ошибка"
+                            )
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                SwingUtilities.invokeLater {
+                    com.intellij.openapi.ui.Messages.showErrorDialog(
+                        "Ошибка: ${e.message}",
+                        "Ошибка"
+                    )
+                }
             }
         }
     }
