@@ -62,6 +62,24 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
         }
 
     /**
+     * Отдельный провайдер для эмбеддингов (страница Code Settings)
+     */
+    var embeddingProvider: String
+        get() = state.embeddingProvider
+        set(value) {
+            state.embeddingProvider = value
+        }
+
+    /**
+     * Отдельная модель для эмбеддингов (страница Code Settings)
+     */
+    var embeddingModelId: String
+        get() = state.embeddingModelId
+        set(value) {
+            state.embeddingModelId = value
+        }
+
+    /**
      * Folder ID для Yandex GPT
      */
     var folderId: String
@@ -277,6 +295,11 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
             "yandexgpt-lite" to "YandexGPT Lite",
             "yandexgpt" to "YandexGPT",
         )
+        // Доступные модели для эмбеддингов (сейчас совпадают с Yandex GPT моделями)
+        val AVAILABLE_EMBEDDING_MODELS: LinkedHashMap<String, String> = linkedMapOf(
+            "yandexgpt-lite" to "YandexGPT Lite",
+            "yandexgpt" to "YandexGPT"
+        )
         val AVAILABLE_HUGGINGFACE_MODELS: LinkedHashMap<String, String> = linkedMapOf(
             HuggingFaceModel.DEEPSEEK_R1.modelId to HuggingFaceModel.DEEPSEEK_R1.displayName,
             HuggingFaceModel.DEEPSEEK_TERMINUS.modelId to HuggingFaceModel.DEEPSEEK_TERMINUS.displayName,
@@ -302,6 +325,13 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
         state.huggingFaceModelId = normalizeHuggingFaceModelId(state.huggingFaceModelId)
         if (!AVAILABLE_PROVIDERS.containsKey(state.selectedProvider)) {
             state.selectedProvider = PluginSettingsState.DEFAULT_PROVIDER
+        }
+        // Эмбеддинговые настройки по умолчанию
+        if (!AVAILABLE_PROVIDERS.containsKey(state.embeddingProvider)) {
+            state.embeddingProvider = PluginSettingsState.DEFAULT_EMBEDDING_PROVIDER
+        }
+        if (!AVAILABLE_EMBEDDING_MODELS.containsKey(state.embeddingModelId)) {
+            state.embeddingModelId = PluginSettingsState.DEFAULT_EMBEDDING_MODEL_ID
         }
     }
 

@@ -19,6 +19,9 @@ data class PluginSettingsState(
     var yandexModelId: String = DEFAULT_YANDEX_MODEL_ID,
     var huggingFaceModelId: String = DEFAULT_HUGGINGFACE_MODEL_ID,
     var selectedProvider: String = DEFAULT_PROVIDER,
+    // Отдельные настройки для LLM эмбеддингов (страница Code Settings)
+    var embeddingProvider: String = DEFAULT_EMBEDDING_PROVIDER,
+    var embeddingModelId: String = DEFAULT_EMBEDDING_MODEL_ID,
     var showProviderName: Boolean = false,
     var enableUncertaintyAnalysis: Boolean = true,
     var maxContextTokens: Int = DEFAULT_MAX_CONTEXT_TOKENS,
@@ -35,6 +38,8 @@ data class PluginSettingsState(
         const val DEFAULT_YANDEX_MODEL_ID = "yandexgpt"
         const val DEFAULT_HUGGINGFACE_MODEL_ID = "deepseek-ai/DeepSeek-R1:fireworks-ai"
         const val DEFAULT_PROVIDER = "YandexGPT"
+        const val DEFAULT_EMBEDDING_PROVIDER = "YandexGPT"
+        const val DEFAULT_EMBEDDING_MODEL_ID = "yandexgpt-lite"
         const val DEFAULT_MAX_CONTEXT_TOKENS = 8000
     }
 }

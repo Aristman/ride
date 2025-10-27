@@ -1,9 +1,15 @@
 package ru.marslab.ide.ride.service.embedding
 
 import com.intellij.openapi.diagnostic.Logger
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonPrimitive
 import ru.marslab.ide.ride.agent.LLMProviderFactory
 import ru.marslab.ide.ride.model.embedding.FileChunkData
 import ru.marslab.ide.ride.model.embedding.IndexingConfig
+import ru.marslab.ide.ride.model.llm.LLMParameters
 import ru.marslab.ide.ride.settings.PluginSettings
 import java.io.File
 import java.security.MessageDigest
@@ -98,44 +104,87 @@ class EmbeddingGeneratorService(
         return chunks
     }
     /**
-     * Генерация эмбеддинга для текста
-     * 
-     * Примечание: Это упрощенная реализация.
-     * В реальности нужно использовать API провайдера эмбеддингов (OpenAI, Cohere и т.д.)
-     * Для демонстрации используется простое хеширование + нормализация
+     * Генерация эмбеддинга для текста через LLM провайдера.
+     * Требования:
+     * - Строгий JSON-массив длиной 100 (float числа)
+     * - Сниженная точность чисел (не более 4 знаков после запятой) для уменьшения объёма ответа
+     * - Используется отдельный провайдер/модель из Code Settings
      */
     suspend fun generateEmbedding(text: String): List<Float> {
         return try {
-            // TODO: Интеграция с реальным API эмбеддингов
-            // Пока используем простую хеш-функцию для демонстрации
-            generateSimpleEmbedding(text)
+            val provider = LLMProviderFactory.createLLMProviderFor(
+                settings.embeddingProvider,
+                settings.embeddingModelId
+            )
+
+            if (!provider.isAvailable()) {
+                logger.error("Embedding LLM provider is not configured")
+                return emptyList()
+            }
+
+            // Урезаем вход, чтобы снизить латентность/таймауты
+            val maxInputChars = 3000
+            val inputText = if (text.length > maxInputChars) text.take(maxInputChars) else text
+
+            val systemPrompt = buildString {
+                appendLine("You are an embedding generator.")
+                appendLine("Return ONLY a strict JSON array of 100 float numbers representing the embedding of the given text.")
+                appendLine("Do not include any explanation, keys, or extra characters. Output must be like: [0.1234, -0.5678, ...].")
+                appendLine("Array length must be exactly 100. Use at most 4 decimal places for each number.")
+            }
+
+            val response = provider.sendRequest(
+                systemPrompt = systemPrompt,
+                userMessage = inputText,
+                conversationHistory = emptyList(),
+                parameters = LLMParameters(temperature = 0.0, maxTokens = 4096)
+            )
+
+            val content = response.content.orEmpty().trim()
+            parseEmbeddingArray(content, expectedDim = 100)
         } catch (e: Exception) {
-            logger.error("Failed to generate embedding", e)
+            logger.error("Failed to generate embedding via LLM", e)
             emptyList()
         }
     }
 
     /**
-     * Простая генерация эмбеддинга на основе хеша
-     * Это временное решение для демонстрации
+     * Батч-генерация эмбеддингов. Возвращает список векторов той же длины, что и входной список.
      */
-    private fun generateSimpleEmbedding(text: String, dimension: Int = 384): List<Float> {
-        val md = MessageDigest.getInstance("SHA-256")
-        val hash = md.digest(text.toByteArray())
-
-        // Расширяем хеш до нужной размерности
-        val embedding = mutableListOf<Float>()
-        var hashIndex = 0
-
-        for (i in 0 until dimension) {
-            val byteValue = hash[hashIndex % hash.size].toInt() and 0xFF
-            embedding.add((byteValue - 128) / 128f) // Нормализация в диапазон [-1, 1]
-            hashIndex++
+    suspend fun generateEmbeddings(texts: List<String>): List<List<Float>> {
+        // Простейшая последовательная батч-обработка; при необходимости можно распараллелить
+        val result = ArrayList<List<Float>>(texts.size)
+        for (t in texts) {
+            result.add(generateEmbedding(t))
         }
+        return result
+    }
 
-        // Нормализуем вектор
-        val norm = kotlin.math.sqrt(embedding.sumOf { (it * it).toDouble() }).toFloat()
-        return if (norm > 0) embedding.map { it / norm } else embedding
+    /**
+     * Разбор строгого JSON массива чисел и нормализация до единичной нормы.
+     */
+    private fun parseEmbeddingArray(jsonText: String, expectedDim: Int): List<Float> {
+        return try {
+            val parsed = Json.parseToJsonElement(jsonText)
+            val arr: JsonArray = parsed.jsonArray
+            // Приводим размер к ожидаемому: обрезаем лишнее или дополняем нулями
+            val rawValues = arr.map { elem ->
+                val prim: JsonPrimitive = elem.jsonPrimitive
+                val d = prim.content.toDouble()
+                d.toFloat()
+            }
+            val vector = when {
+                rawValues.size > expectedDim -> rawValues.take(expectedDim)
+                rawValues.size < expectedDim -> rawValues + List(expectedDim - rawValues.size) { 0f }
+                else -> rawValues
+            }
+            // L2-нормализация
+            val norm = kotlin.math.sqrt(vector.sumOf { (it * it).toDouble() }).toFloat()
+            if (norm > 0f) vector.map { it / norm } else vector
+        } catch (e: Exception) {
+            logger.error("Failed to parse embedding JSON", e)
+            emptyList()
+        }
     }
 
     /**
@@ -190,7 +239,7 @@ class EmbeddingGeneratorService(
      * Получение размерности эмбеддингов
      */
     fun getEmbeddingDimension(): Int {
-        // TODO: Зависит от используемой модели
-        return 384 // Стандартная размерность для многих моделей
+        // Размерность эмбеддинга выбирается как 100 согласно требованиям
+        return 100
     }
 }

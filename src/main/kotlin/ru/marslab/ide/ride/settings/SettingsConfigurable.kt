@@ -39,6 +39,8 @@ class SettingsConfigurable : Configurable {
     private lateinit var modelSelectorComboBox: ComboBox<String>
     private lateinit var hfModelSelectorComboBox: ComboBox<String>
     private lateinit var yandexModelSelectorComboBox: ComboBox<String>
+    private lateinit var embeddingProviderComboBox: ComboBox<String>
+    private lateinit var embeddingModelComboBox: ComboBox<String>
     private lateinit var showProviderNameCheck: JBCheckBox
     private lateinit var enableUncertaintyAnalysisCheck: JBCheckBox
     private lateinit var maxContextTokensField: JBTextField
@@ -49,6 +51,12 @@ class SettingsConfigurable : Configurable {
     private var apiKeyLoaded = false
     private var initialHFToken: String = ""
     private var hfTokenLoaded = false
+
+    // Управление индексацией
+    private lateinit var startIndexButton: javax.swing.JButton
+    private lateinit var clearIndexButton: javax.swing.JButton
+    private lateinit var stopIndexButton: javax.swing.JButton
+    @Volatile private var indexingTask: java.util.concurrent.Future<*>? = null
 
     // Embedding indexer UI components
     private lateinit var indexProgressBar: javax.swing.JProgressBar
@@ -101,6 +109,9 @@ class SettingsConfigurable : Configurable {
         }
         val selectedHFModel = (hfModelSelectorComboBox.selectedItem as? String)?.trim().orEmpty()
         val selectedYandexModel = (yandexModelSelectorComboBox.selectedItem as? String)?.trim().orEmpty()
+        // Embedding LLM selections (Code Settings)
+        val selectedEmbeddingProvider = (embeddingProviderComboBox.selectedItem as? String)?.trim().orEmpty()
+        val selectedEmbeddingModel = (embeddingModelComboBox.selectedItem as? String)?.trim().orEmpty()
 
         return apiKeyModified ||
                 hfTokenModified ||
@@ -138,7 +149,10 @@ class SettingsConfigurable : Configurable {
                 showProviderNameCheck.isSelected != settings.showProviderName ||
                 enableUncertaintyAnalysisCheck.isSelected != settings.enableUncertaintyAnalysis ||
                 maxContextTokensField.text != settings.maxContextTokens.toString() ||
-                enableAutoSummarizationCheck.isSelected != settings.enableAutoSummarization
+                enableAutoSummarizationCheck.isSelected != settings.enableAutoSummarization ||
+                // Mark modified when embedding LLM selections changed
+                selectedEmbeddingProvider != settings.embeddingProvider ||
+                selectedEmbeddingModel != settings.embeddingModelId
     }
 
     override fun apply() {
@@ -226,6 +240,10 @@ class SettingsConfigurable : Configurable {
         }
         settings.enableAutoSummarization = enableAutoSummarizationCheck.isSelected
 
+        // Отдельные настройки LLM для эмбеддингов
+        settings.embeddingProvider = (embeddingProviderComboBox.selectedItem as? String) ?: PluginSettingsState.DEFAULT_EMBEDDING_PROVIDER
+        settings.embeddingModelId = (embeddingModelComboBox.selectedItem as? String) ?: PluginSettingsState.DEFAULT_EMBEDDING_MODEL_ID
+
         initialApiKey = apiKey
         apiKeyLoaded = true
         initialHFToken = hfToken
@@ -288,6 +306,10 @@ class SettingsConfigurable : Configurable {
         enableUncertaintyAnalysisCheck.isSelected = settings.enableUncertaintyAnalysis
         maxContextTokensField.text = settings.maxContextTokens.toString()
         enableAutoSummarizationCheck.isSelected = settings.enableAutoSummarization
+
+        // Эмбеддинговые настройки
+        embeddingProviderComboBox.selectedItem = settings.embeddingProvider
+        embeddingModelComboBox.selectedItem = settings.embeddingModelId
     }
 
     override fun disposeUIResources() {
@@ -563,15 +585,23 @@ class SettingsConfigurable : Configurable {
                 comment("Индексация файлов проекта для семантического поиска")
             }
             row {
-                button("Запустить индексацию") {
-                    startEmbeddingIndexing()
+                startIndexButton = javax.swing.JButton("Запустить индексацию").apply {
+                    addActionListener { startEmbeddingIndexing() }
                 }
-                button("Очистить индекс") {
-                    clearEmbeddingIndex()
+                cell(startIndexButton)
+                clearIndexButton = javax.swing.JButton("Очистить индекс").apply {
+                    addActionListener { clearEmbeddingIndex() }
                 }
-                button("Показать статистику") {
-                    showIndexStatistics()
+                cell(clearIndexButton)
+                val statsButton = javax.swing.JButton("Показать статистику").apply {
+                    addActionListener { showIndexStatistics() }
                 }
+                cell(statsButton)
+                stopIndexButton = javax.swing.JButton("Остановить индексацию").apply {
+                    isEnabled = false
+                    addActionListener { stopEmbeddingIndexing() }
+                }
+                cell(stopIndexButton)
             }
             row {
                 indexProgressBar = javax.swing.JProgressBar(0, 100).apply {
@@ -603,6 +633,50 @@ class SettingsConfigurable : Configurable {
                     .comment("После завершения индексации здесь появится сводка")
             }
         }
+
+        group("Embedding LLM (Scanner)") {
+            row("Provider:") {
+                embeddingProviderComboBox = ComboBox(PluginSettings.AVAILABLE_PROVIDERS.keys.toTypedArray()).apply {
+                    renderer = object : javax.swing.DefaultListCellRenderer() {
+                        override fun getListCellRendererComponent(
+                            list: javax.swing.JList<*>,
+                            value: Any?,
+                            index: Int,
+                            isSelected: Boolean,
+                            cellHasFocus: Boolean
+                        ): java.awt.Component {
+                            val component = super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus)
+                            val key = value as? String
+                            text = PluginSettings.AVAILABLE_PROVIDERS[key] ?: key.orEmpty()
+                            return component
+                        }
+                    }
+                }
+                cell(embeddingProviderComboBox).align(Align.FILL).resizableColumn()
+            }
+            row("Model:") {
+                embeddingModelComboBox = ComboBox(PluginSettings.AVAILABLE_EMBEDDING_MODELS.keys.toTypedArray()).apply {
+                    renderer = object : javax.swing.DefaultListCellRenderer() {
+                        override fun getListCellRendererComponent(
+                            list: javax.swing.JList<*>,
+                            value: Any?,
+                            index: Int,
+                            isSelected: Boolean,
+                            cellHasFocus: Boolean
+                        ): java.awt.Component {
+                            val component = super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus)
+                            val key = value as? String
+                            text = PluginSettings.AVAILABLE_EMBEDDING_MODELS[key] ?: key.orEmpty()
+                            return component
+                        }
+                    }
+                }
+                cell(embeddingModelComboBox).align(Align.FILL).resizableColumn()
+            }
+            row {
+                comment("Выберите LLM для генерации эмбеддингов индекса. По умолчанию YandexGPT Lite.")
+            }
+        }
     }
 
     private fun startEmbeddingIndexing() {
@@ -615,7 +689,12 @@ class SettingsConfigurable : Configurable {
             return
         }
 
-        com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread {
+        // Обновляем состояние кнопок
+        SwingUtilities.invokeLater { updateIndexingButtons(true) }
+        // Фиксируем глобальный статус индексации
+        service<ru.marslab.ide.ride.service.embedding.IndexingStatusService>().setInProgress(true)
+
+        val future = com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread {
             try {
                 val agent = ru.marslab.ide.ride.agent.tools.EmbeddingIndexerToolAgent()
                 val projectPath = project.basePath ?: return@executeOnPooledThread
@@ -632,6 +711,15 @@ class SettingsConfigurable : Configurable {
                             currentFileLabel.text = progress.currentFile
                         }
                     }
+                    // Обновляем глобальный статус
+                    service<ru.marslab.ide.ride.service.embedding.IndexingStatusService>().updateProgress(
+                        ru.marslab.ide.ride.service.embedding.IndexingStatusService.Progress(
+                            percent = progress.percentComplete,
+                            filesProcessed = progress.filesProcessed,
+                            totalFiles = progress.totalFiles,
+                            currentFile = progress.currentFile
+                        )
+                    )
                 }
 
                 // Запускаем индексацию
@@ -652,6 +740,7 @@ class SettingsConfigurable : Configurable {
 
                     SwingUtilities.invokeLater {
                         this@SettingsConfigurable.indexProgressBar.isVisible = false
+                        updateIndexingButtons(false)
 
                         if (result.success) {
                             // Пытаемся извлечь сводку из результата
@@ -692,17 +781,45 @@ class SettingsConfigurable : Configurable {
                             )
                         }
                     }
+                    // Завершаем глобальный статус
+                    service<ru.marslab.ide.ride.service.embedding.IndexingStatusService>().setInProgress(false)
                 }
             } catch (e: Exception) {
                 SwingUtilities.invokeLater {
-                    if (this@SettingsConfigurable::indexProgressBar.isInitialized) this@SettingsConfigurable.indexProgressBar.isVisible = false
+                    if (this::indexProgressBar.isInitialized) this@SettingsConfigurable.indexProgressBar.isVisible = false
+                    updateIndexingButtons(false)
                     com.intellij.openapi.ui.Messages.showErrorDialog(
                         "Ошибка: ${e.message}",
                         "Ошибка"
                     )
                 }
+                // Завершаем глобальный статус при ошибке
+                service<ru.marslab.ide.ride.service.embedding.IndexingStatusService>().setInProgress(false)
             }
         }
+        indexingTask = future
+    }
+
+    private fun stopEmbeddingIndexing() {
+        val task = indexingTask
+        if (task != null && !task.isDone) {
+            task.cancel(true)
+        }
+        SwingUtilities.invokeLater {
+            if (this::indexProgressBar.isInitialized) this@SettingsConfigurable.indexProgressBar.isVisible = false
+            updateIndexingButtons(false)
+            com.intellij.openapi.ui.Messages.showInfoMessage(
+                "Индексация остановлена пользователем",
+                "Остановлено"
+            )
+        }
+        service<ru.marslab.ide.ride.service.embedding.IndexingStatusService>().setInProgress(false)
+    }
+
+    private fun updateIndexingButtons(inProgress: Boolean) {
+        if (this::startIndexButton.isInitialized) startIndexButton.isEnabled = !inProgress
+        if (this::clearIndexButton.isInitialized) clearIndexButton.isEnabled = !inProgress
+        if (this::stopIndexButton.isInitialized) stopIndexButton.isEnabled = inProgress
     }
 
     private fun clearEmbeddingIndex() {
@@ -722,7 +839,7 @@ class SettingsConfigurable : Configurable {
         )
 
         if (confirm == com.intellij.openapi.ui.Messages.YES) {
-            com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread {
+            ApplicationManager.getApplication().executeOnPooledThread {
                 try {
                     val agent = ru.marslab.ide.ride.agent.tools.EmbeddingIndexerToolAgent()
                     val projectPath = project.basePath ?: return@executeOnPooledThread
@@ -749,7 +866,7 @@ class SettingsConfigurable : Configurable {
                                 )
                             } else {
                                 com.intellij.openapi.ui.Messages.showErrorDialog(
-                                    "Ошибка: ${result.error}",
+                                    "Ошибка: ${'$'}{result.error}",
                                     "Ошибка"
                                 )
                             }
@@ -758,7 +875,7 @@ class SettingsConfigurable : Configurable {
                 } catch (e: Exception) {
                     SwingUtilities.invokeLater {
                         com.intellij.openapi.ui.Messages.showErrorDialog(
-                            "Ошибка: ${e.message}",
+                            "Ошибка: ${'$'}{e.message}",
                             "Ошибка"
                         )
                     }

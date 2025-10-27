@@ -45,7 +45,9 @@ data class EmbeddingData(
 data class IndexingConfig(
     val chunkSize: Int = 1000,
     val chunkOverlap: Int = 200,
+    // Deprecated: indexer now relies on ProjectScannerToolAgent rules only
     val includePatterns: List<String> = listOf("**/*.kt", "**/*.java", "**/*.xml", "**/*.md"),
+    // Deprecated: indexer now relies on ProjectScannerToolAgent rules only
     val excludePatterns: List<String> = listOf("**/build/**", "**/target/**", "**/.git/**", "**/.idea/**"),
     val embeddingModel: String = "text-embedding-ada-002"
 )

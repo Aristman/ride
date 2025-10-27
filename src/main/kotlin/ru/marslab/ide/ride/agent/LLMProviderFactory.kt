@@ -45,6 +45,31 @@ object LLMProviderFactory {
     }
 
     /**
+     * Создает LLM Provider для заданного провайдера и модели.
+     * Используется для выбора отдельной LLM под эмбеддинги (страница Code Settings).
+     */
+    fun createLLMProviderFor(provider: String, modelId: String): LLMProvider {
+        val settings = service<PluginSettings>()
+        return when (provider) {
+            PluginSettings.PROVIDER_YANDEX -> {
+                val apiKey = settings.getApiKey()
+                val folderId = settings.folderId
+                createYandexGPTProvider(apiKey, folderId, modelId)
+            }
+            PluginSettings.PROVIDER_HUGGINGFACE -> {
+                val hfToken = settings.getHuggingFaceToken()
+                createHuggingFaceProvider(hfToken, modelId)
+            }
+            else -> {
+                // По умолчанию Yandex
+                val apiKey = settings.getApiKey()
+                val folderId = settings.folderId
+                createYandexGPTProvider(apiKey, folderId, modelId)
+            }
+        }
+    }
+
+    /**
      * Создает провайдер Yandex GPT с указанными настройками
      *
      * @param apiKey API ключ для Yandex GPT
