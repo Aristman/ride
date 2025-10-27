@@ -1,0 +1,86 @@
+[package]
+name = "deploy-pugin"
+version = "0.1.0"
+edition = "2021"
+authors = ["Ride Team"]
+description = "CLI приложение для автоматизации публикации плагинов с LLM-интеграцией"
+license = "MIT"
+repository = "https://github.com/Aristman/ride"
+
+[dependencies]
+# CLI Framework
+clap = { version = "4.4", features = ["derive", "env"] }
+
+# Async Runtime
+tokio = { version = "1.0", features = ["full"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+
+# HTTP Client
+reqwest = { version = "0.11", features = ["json"] }
+
+# Error Handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Environment Variables
+dotenv = "0.15"
+
+# Progress Bars and UI
+indicatif = "0.17"
+colored = "2.0"
+tabled = "0.15"
+
+# Configuration
+config = "0.14"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+# File System Operations
+tempfile = "3.8"
+walkdir = "2.4"
+
+# Regular expressions
+regex = "1.10"
+
+# Date/time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# Git2 для расширенных git операций
+git2 = "0.18"
+
+# Semantic versioning
+semver = "1.0"
+
+# ZIP archive handling
+zip = "0.6"
+
+# Cryptographic hashes
+sha2 = "0.10"
+rand = "0.8"
+xmltree = "0.10"
+
+[features]
+default = []
+# Включает SSH/SCP деплой через crate ssh2 (требуются системные библиотеки libssh2/openssl)
+ssh = ["ssh2"]
+
+[dependencies.ssh2]
+version = "0.9"
+optional = true
+
+
+[dev-dependencies]
+tempfile = "3.8"
+tokio-test = "0.4"
+assert_cmd = "2.0"
+predicates = "3.1"
+
+[[bin]]
+name = "deploy-pugin"
+path = "src/main.rs"

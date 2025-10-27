@@ -1,0 +1,47 @@
+[project]
+name = "ride"
+id = "ru.marslab.ide.ride"
+type = "intellij"
+
+[build]
+gradle_task = "buildPlugin"
+output_dir = "build/distributions"
+build_args = ["-x test"]
+
+[repository]
+# Все секреты загружаются из .env файла
+url = "${REPOSITORY_URL}"
+ssh_host = "${SSH_HOST}"
+ssh_user = "${SSH_USER}"
+ssh_private_key_path = "${SSH_PRIVATE_KEY_PATH}"
+deploy_path = "${DEPLOY_PATH}"
+xml_path = "${XML_PATH}"
+
+[llm]
+provider = "yandexgpt"
+temperature = 0.3
+max_tokens = 2000
+
+[yandexgpt]
+# Загружается из .env
+api_key = "${DEPLOY_PLUGIN_YANDEX_API_KEY}"
+folder_id = "${DEPLOY_PLUGIN_YANDEX_FOLDER_ID}"
+model = "yandexgpt"
+
+# Опциональные провайдеры
+[openai]
+api_key = "${OPENAI_API_KEY}"
+model = "gpt-4"
+
+[anthropic]
+api_key = "${ANTHROPIC_API_KEY}"
+model = "claude-3-sonnet"
+
+[llm_agents]
+changelog_agent = { model = "yandexgpt", temperature = 0.3 }
+version_agent = { model = "yandexgpt-lite", temperature = 0.1 }
+release_agent = { model = "yandexgpt", temperature = 0.4 }
+
+[git]
+main_branch = "main"
+tag_prefix = "v"
