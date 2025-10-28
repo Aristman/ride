@@ -105,16 +105,14 @@ object LLMProviderFactory {
     }
 
     /**
-     * Создает провайдер Hugging Face с использованием enum модели
-     *
-     * @param apiKey Токен Hugging Face (Bearer)
-     * @param model Модель из перечисления HuggingFaceModel
-     * @return Настроенный HuggingFaceProvider
+     * Создает LLM Provider для эмбеддингов с использованием локальной Ollama модели
      */
-    fun createHuggingFaceProvider(
-        apiKey: String,
-        model: HuggingFaceModel
-    ): LLMProvider {
-        return createHuggingFaceProvider(apiKey, model.modelId)
+    fun createEmbeddingProvider(): LLMProvider {
+        val config = OllamaConfig(
+            baseUrl = "http://localhost:11434",
+            model = "nomic-embed-text:latest",
+            timeoutSeconds = 30
+        )
+        return OllamaEmbeddingProvider(config)
     }
 }

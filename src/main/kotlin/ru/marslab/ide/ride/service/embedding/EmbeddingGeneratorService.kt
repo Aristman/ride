@@ -104,46 +104,47 @@ class EmbeddingGeneratorService(
         return chunks
     }
     /**
-     * Генерация эмбеддинга для текста через LLM провайдера.
-     * Требования:
-     * - Строгий JSON-массив длиной 100 (float числа)
-     * - Сниженная точность чисел (не более 4 знаков после запятой) для уменьшения объёма ответа
-     * - Используется отдельный провайдер/модель из Code Settings
+     * Генерация эмбеддинга для текста через локальную Ollama модель.
+     * Использует nomic-embed-text модель для создания векторов эмбеддингов.
      */
     suspend fun generateEmbedding(text: String): List<Float> {
         return try {
-            val provider = LLMProviderFactory.createLLMProviderFor(
-                settings.embeddingProvider,
-                settings.embeddingModelId
-            )
+            val provider = LLMProviderFactory.createEmbeddingProvider()
 
             if (!provider.isAvailable()) {
-                logger.error("Embedding LLM provider is not configured")
+                logger.error("Ollama embedding provider is not available. Make sure Ollama is running with nomic-embed-text model.")
                 return emptyList()
             }
 
-            // Урезаем вход, чтобы снизить латентность/таймауты
-            val maxInputChars = 3000
+            // Урезаем вход, чтобы оптимизировать производительность
+            val maxInputChars = 8000 // Ollama может обработать больше текста
             val inputText = if (text.length > maxInputChars) text.take(maxInputChars) else text
 
-            val systemPrompt = buildString {
-                appendLine("You are an embedding generator.")
-                appendLine("Return ONLY a strict JSON array of 100 float numbers representing the embedding of the given text.")
-                appendLine("Do not include any explanation, keys, or extra characters. Output must be like: [0.1234, -0.5678, ...].")
-                appendLine("Array length must be exactly 100. Use at most 4 decimal places for each number.")
-            }
-
             val response = provider.sendRequest(
-                systemPrompt = systemPrompt,
+                systemPrompt = "", // Для эмбеддингов system prompt не нужен
                 userMessage = inputText,
                 conversationHistory = emptyList(),
-                parameters = LLMParameters(temperature = 0.0, maxTokens = 4096)
+                parameters = LLMParameters(temperature = 0.0, maxTokens = 4096) // Для эмбеддингов все равно нужны параметры
             )
 
-            val content = response.content.orEmpty().trim()
-            parseEmbeddingArray(content, expectedDim = 100)
+            if (!response.success) {
+                logger.error("Ollama request failed: ${response.error}")
+                return emptyList()
+            }
+
+            // Извлекаем эмбеддинг из метаданных ответа
+            @Suppress("UNCHECKED_CAST")
+            val embedding = response.metadata["embedding"] as? List<Float>
+
+            if (embedding != null) {
+                // Нормализуем эмбеддинг до единичной нормы
+                normalizeEmbedding(embedding)
+            } else {
+                logger.error("No embedding found in response metadata. Available keys: ${response.metadata.keys}")
+                emptyList()
+            }
         } catch (e: Exception) {
-            logger.error("Failed to generate embedding via LLM", e)
+            logger.error("Failed to generate embedding via Ollama", e)
             emptyList()
         }
     }
@@ -158,6 +159,18 @@ class EmbeddingGeneratorService(
             result.add(generateEmbedding(t))
         }
         return result
+    }
+
+    /**
+     * L2-нормализация эмбеддинга до единичной нормы
+     */
+    private fun normalizeEmbedding(embedding: List<Float>): List<Float> {
+        val norm = kotlin.math.sqrt(embedding.sumOf { (it * it).toDouble() }).toFloat()
+        return if (norm > 0f) {
+            embedding.map { it / norm }
+        } else {
+            embedding
+        }
     }
 
     /**
@@ -239,7 +252,7 @@ class EmbeddingGeneratorService(
      * Получение размерности эмбеддингов
      */
     fun getEmbeddingDimension(): Int {
-        // Размерность эмбеддинга выбирается как 100 согласно требованиям
-        return 100
+        // Размерность nomic-embed-text модели
+        return 768
     }
 }

@@ -48,8 +48,6 @@ class SettingsConfigurable : Configurable {
     private lateinit var modelSelectorComboBox: ComboBox<String>
     private lateinit var hfModelSelectorComboBox: ComboBox<String>
     private lateinit var yandexModelSelectorComboBox: ComboBox<String>
-    private lateinit var embeddingProviderComboBox: ComboBox<String>
-    private lateinit var embeddingModelComboBox: ComboBox<String>
     private lateinit var showProviderNameCheck: JBCheckBox
     private lateinit var enableUncertaintyAnalysisCheck: JBCheckBox
     private lateinit var maxContextTokensField: JBTextField
@@ -120,9 +118,6 @@ class SettingsConfigurable : Configurable {
         }
         val selectedHFModel = (hfModelSelectorComboBox.selectedItem as? String)?.trim().orEmpty()
         val selectedYandexModel = (yandexModelSelectorComboBox.selectedItem as? String)?.trim().orEmpty()
-        // Embedding LLM selections (Code Settings)
-        val selectedEmbeddingProvider = (embeddingProviderComboBox.selectedItem as? String)?.trim().orEmpty()
-        val selectedEmbeddingModel = (embeddingModelComboBox.selectedItem as? String)?.trim().orEmpty()
 
         return apiKeyModified ||
                 hfTokenModified ||
@@ -160,10 +155,7 @@ class SettingsConfigurable : Configurable {
                 showProviderNameCheck.isSelected != settings.showProviderName ||
                 enableUncertaintyAnalysisCheck.isSelected != settings.enableUncertaintyAnalysis ||
                 maxContextTokensField.text != settings.maxContextTokens.toString() ||
-                enableAutoSummarizationCheck.isSelected != settings.enableAutoSummarization ||
-                // Mark modified when embedding LLM selections changed
-                selectedEmbeddingProvider != settings.embeddingProvider ||
-                selectedEmbeddingModel != settings.embeddingModelId
+                enableAutoSummarizationCheck.isSelected != settings.enableAutoSummarization
     }
 
     override fun apply() {
@@ -251,12 +243,6 @@ class SettingsConfigurable : Configurable {
         }
         settings.enableAutoSummarization = enableAutoSummarizationCheck.isSelected
 
-        // Отдельные настройки LLM для эмбеддингов
-        settings.embeddingProvider =
-            (embeddingProviderComboBox.selectedItem as? String) ?: PluginSettingsState.DEFAULT_EMBEDDING_PROVIDER
-        settings.embeddingModelId =
-            (embeddingModelComboBox.selectedItem as? String) ?: PluginSettingsState.DEFAULT_EMBEDDING_MODEL_ID
-
         initialApiKey = apiKey
         apiKeyLoaded = true
         initialHFToken = hfToken
@@ -319,10 +305,6 @@ class SettingsConfigurable : Configurable {
         enableUncertaintyAnalysisCheck.isSelected = settings.enableUncertaintyAnalysis
         maxContextTokensField.text = settings.maxContextTokens.toString()
         enableAutoSummarizationCheck.isSelected = settings.enableAutoSummarization
-
-        // Эмбеддинговые настройки
-        embeddingProviderComboBox.selectedItem = settings.embeddingProvider
-        embeddingModelComboBox.selectedItem = settings.embeddingModelId
     }
 
     override fun disposeUIResources() {
@@ -647,49 +629,15 @@ class SettingsConfigurable : Configurable {
             }
         }
 
-        group("Embedding LLM (Scanner)") {
-            row("Provider:") {
-                embeddingProviderComboBox = ComboBox(PluginSettings.AVAILABLE_PROVIDERS.keys.toTypedArray()).apply {
-                    renderer = object : DefaultListCellRenderer() {
-                        override fun getListCellRendererComponent(
-                            list: javax.swing.JList<*>,
-                            value: Any?,
-                            index: Int,
-                            isSelected: Boolean,
-                            cellHasFocus: Boolean
-                        ): java.awt.Component {
-                            val component =
-                                super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus)
-                            val key = value as? String
-                            text = PluginSettings.AVAILABLE_PROVIDERS[key] ?: key.orEmpty()
-                            return component
-                        }
-                    }
-                }
-                cell(embeddingProviderComboBox).align(Align.FILL).resizableColumn()
-            }
-            row("Model:") {
-                embeddingModelComboBox = ComboBox(PluginSettings.AVAILABLE_EMBEDDING_MODELS.keys.toTypedArray()).apply {
-                    renderer = object : DefaultListCellRenderer() {
-                        override fun getListCellRendererComponent(
-                            list: javax.swing.JList<*>,
-                            value: Any?,
-                            index: Int,
-                            isSelected: Boolean,
-                            cellHasFocus: Boolean
-                        ): java.awt.Component {
-                            val component =
-                                super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus)
-                            val key = value as? String
-                            text = PluginSettings.AVAILABLE_EMBEDDING_MODELS[key] ?: key.orEmpty()
-                            return component
-                        }
-                    }
-                }
-                cell(embeddingModelComboBox).align(Align.FILL).resizableColumn()
+        group("Embedding Configuration") {
+            row {
+                comment("Используется локальная модель nomic-embed-text через Ollama для генерации эмбеддингов.")
             }
             row {
-                comment("Выберите LLM для генерации эмбеддингов индекса. По умолчанию YandexGPT Lite.")
+                comment("Модель: nomic-embed-text (768 dimensions)")
+            }
+            row {
+                comment("Убедитесь, что Ollama запущен и модель установлена: ollama pull nomic-embed-text")
             }
         }
     }

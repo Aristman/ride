@@ -243,8 +243,10 @@ class EmbeddingIndexerToolAgent(
                 chunksCreated += chunks.size
 
                 // Генерируем эмбеддинги для каждого чанка
-                for (chunk in chunks) {
+                for ((chunkIndex, chunk) in chunks.withIndex()) {
                     val chunkId = db.saveFileChunk(chunk)
+
+                    logger.debug("Processing chunk ${chunkIndex + 1}/${chunks.size} for file: $filePath, content length: ${chunk.content.length}")
 
                     val embedding = generator.generateEmbedding(chunk.content)
                     if (embedding.isNotEmpty()) {
@@ -255,6 +257,9 @@ class EmbeddingIndexerToolAgent(
                         )
                         db.saveEmbedding(embeddingData)
                         embeddingsGenerated++
+                        logger.debug("Embedding generated successfully for chunk ${chunkIndex + 1}")
+                    } else {
+                        logger.warn("Failed to generate embedding for chunk ${chunkIndex + 1} in file: $filePath")
                     }
                 }
 
