@@ -3,19 +3,28 @@ package ru.marslab.ide.ride.settings
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.options.Configurable
+import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.DialogPanel
+import com.intellij.openapi.ui.Messages
+import com.intellij.openapi.ui.Messages.showErrorDialog
 import com.intellij.ui.ColorPanel
 import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.components.JBPasswordField
 import com.intellij.ui.components.JBTabbedPane
 import com.intellij.ui.components.JBTextField
 import com.intellij.ui.dsl.builder.*
+import ru.marslab.ide.ride.agent.tools.EmbeddingIndexerToolAgent
+import ru.marslab.ide.ride.model.embedding.IndexingResult
+import ru.marslab.ide.ride.model.orchestrator.AgentType
+import ru.marslab.ide.ride.model.orchestrator.ExecutionContext
+import ru.marslab.ide.ride.model.tool.StepInput
+import ru.marslab.ide.ride.model.tool.ToolPlanStep
+import ru.marslab.ide.ride.service.ChatService
+import ru.marslab.ide.ride.service.embedding.IndexingStatusService
 import java.awt.CardLayout
 import java.awt.Color
-import javax.swing.JComponent
-import javax.swing.JPanel
-import javax.swing.SwingUtilities
+import javax.swing.*
 
 /**
  * UI для настроек плагина в IDE Settings
@@ -53,10 +62,12 @@ class SettingsConfigurable : Configurable {
     private var hfTokenLoaded = false
 
     // Управление индексацией
-    private lateinit var startIndexButton: javax.swing.JButton
-    private lateinit var clearIndexButton: javax.swing.JButton
-    private lateinit var stopIndexButton: javax.swing.JButton
-    @Volatile private var indexingTask: java.util.concurrent.Future<*>? = null
+    private lateinit var startIndexButton: JButton
+    private lateinit var clearIndexButton: JButton
+    private lateinit var stopIndexButton: JButton
+
+    @Volatile
+    private var indexingTask: java.util.concurrent.Future<*>? = null
 
     // Embedding indexer UI components
     private lateinit var indexProgressBar: javax.swing.JProgressBar
@@ -241,8 +252,10 @@ class SettingsConfigurable : Configurable {
         settings.enableAutoSummarization = enableAutoSummarizationCheck.isSelected
 
         // Отдельные настройки LLM для эмбеддингов
-        settings.embeddingProvider = (embeddingProviderComboBox.selectedItem as? String) ?: PluginSettingsState.DEFAULT_EMBEDDING_PROVIDER
-        settings.embeddingModelId = (embeddingModelComboBox.selectedItem as? String) ?: PluginSettingsState.DEFAULT_EMBEDDING_MODEL_ID
+        settings.embeddingProvider =
+            (embeddingProviderComboBox.selectedItem as? String) ?: PluginSettingsState.DEFAULT_EMBEDDING_PROVIDER
+        settings.embeddingModelId =
+            (embeddingModelComboBox.selectedItem as? String) ?: PluginSettingsState.DEFAULT_EMBEDDING_MODEL_ID
 
         initialApiKey = apiKey
         apiKeyLoaded = true
@@ -250,7 +263,7 @@ class SettingsConfigurable : Configurable {
         hfTokenLoaded = true
 
         // Пересоздаём агента с новыми настройками (моментальная смена LLM в чате)
-        service<ru.marslab.ide.ride.service.ChatService>().recreateAgent()
+        service<ChatService>().recreateAgent()
     }
 
     override fun reset() {
@@ -332,7 +345,7 @@ class SettingsConfigurable : Configurable {
             add(PluginSettings.PROVIDER_HUGGINGFACE)
         }
         modelSelectorComboBox = ComboBox(topEntries.toTypedArray()).apply {
-            renderer = object : javax.swing.DefaultListCellRenderer() {
+            renderer = object : DefaultListCellRenderer() {
                 override fun getListCellRendererComponent(
                     list: javax.swing.JList<*>,
                     value: Any?,
@@ -350,7 +363,7 @@ class SettingsConfigurable : Configurable {
 
         // Комбобокс для выбора моделей HuggingFace
         hfModelSelectorComboBox = ComboBox(PluginSettings.AVAILABLE_HUGGINGFACE_MODELS.keys.toTypedArray()).apply {
-            renderer = object : javax.swing.DefaultListCellRenderer() {
+            renderer = object : DefaultListCellRenderer() {
                 override fun getListCellRendererComponent(
                     list: javax.swing.JList<*>,
                     value: Any?,
@@ -368,7 +381,7 @@ class SettingsConfigurable : Configurable {
 
         // Комбобокс для выбора моделей Yandex
         yandexModelSelectorComboBox = ComboBox(PluginSettings.AVAILABLE_YANDEX_MODELS.keys.toTypedArray()).apply {
-            renderer = object : javax.swing.DefaultListCellRenderer() {
+            renderer = object : DefaultListCellRenderer() {
                 override fun getListCellRendererComponent(
                     list: javax.swing.JList<*>,
                     value: Any?,
@@ -585,19 +598,19 @@ class SettingsConfigurable : Configurable {
                 comment("Индексация файлов проекта для семантического поиска")
             }
             row {
-                startIndexButton = javax.swing.JButton("Запустить индексацию").apply {
+                startIndexButton = JButton("Запустить индексацию").apply {
                     addActionListener { startEmbeddingIndexing() }
                 }
                 cell(startIndexButton)
-                clearIndexButton = javax.swing.JButton("Очистить индекс").apply {
+                clearIndexButton = JButton("Очистить индекс").apply {
                     addActionListener { clearEmbeddingIndex() }
                 }
                 cell(clearIndexButton)
-                val statsButton = javax.swing.JButton("Показать статистику").apply {
+                val statsButton = JButton("Показать статистику").apply {
                     addActionListener { showIndexStatistics() }
                 }
                 cell(statsButton)
-                stopIndexButton = javax.swing.JButton("Остановить индексацию").apply {
+                stopIndexButton = JButton("Остановить индексацию").apply {
                     isEnabled = false
                     addActionListener { stopEmbeddingIndexing() }
                 }
@@ -637,7 +650,7 @@ class SettingsConfigurable : Configurable {
         group("Embedding LLM (Scanner)") {
             row("Provider:") {
                 embeddingProviderComboBox = ComboBox(PluginSettings.AVAILABLE_PROVIDERS.keys.toTypedArray()).apply {
-                    renderer = object : javax.swing.DefaultListCellRenderer() {
+                    renderer = object : DefaultListCellRenderer() {
                         override fun getListCellRendererComponent(
                             list: javax.swing.JList<*>,
                             value: Any?,
@@ -645,7 +658,8 @@ class SettingsConfigurable : Configurable {
                             isSelected: Boolean,
                             cellHasFocus: Boolean
                         ): java.awt.Component {
-                            val component = super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus)
+                            val component =
+                                super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus)
                             val key = value as? String
                             text = PluginSettings.AVAILABLE_PROVIDERS[key] ?: key.orEmpty()
                             return component
@@ -656,7 +670,7 @@ class SettingsConfigurable : Configurable {
             }
             row("Model:") {
                 embeddingModelComboBox = ComboBox(PluginSettings.AVAILABLE_EMBEDDING_MODELS.keys.toTypedArray()).apply {
-                    renderer = object : javax.swing.DefaultListCellRenderer() {
+                    renderer = object : DefaultListCellRenderer() {
                         override fun getListCellRendererComponent(
                             list: javax.swing.JList<*>,
                             value: Any?,
@@ -664,7 +678,8 @@ class SettingsConfigurable : Configurable {
                             isSelected: Boolean,
                             cellHasFocus: Boolean
                         ): java.awt.Component {
-                            val component = super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus)
+                            val component =
+                                super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus)
                             val key = value as? String
                             text = PluginSettings.AVAILABLE_EMBEDDING_MODELS[key] ?: key.orEmpty()
                             return component
@@ -680,9 +695,9 @@ class SettingsConfigurable : Configurable {
     }
 
     private fun startEmbeddingIndexing() {
-        val project = com.intellij.openapi.project.ProjectManager.getInstance().openProjects.firstOrNull()
+        val project = ProjectManager.getInstance().openProjects.firstOrNull()
         if (project == null) {
-            com.intellij.openapi.ui.Messages.showErrorDialog(
+            showErrorDialog(
                 "Нет открытых проектов",
                 "Ошибка"
             )
@@ -692,11 +707,11 @@ class SettingsConfigurable : Configurable {
         // Обновляем состояние кнопок
         SwingUtilities.invokeLater { updateIndexingButtons(true) }
         // Фиксируем глобальный статус индексации
-        service<ru.marslab.ide.ride.service.embedding.IndexingStatusService>().setInProgress(true)
+        service<IndexingStatusService>().setInProgress(true)
 
-        val future = com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread {
+        val future = ApplicationManager.getApplication().executeOnPooledThread {
             try {
-                val agent = ru.marslab.ide.ride.agent.tools.EmbeddingIndexerToolAgent()
+                val agent = EmbeddingIndexerToolAgent()
                 val projectPath = project.basePath ?: return@executeOnPooledThread
 
                 // Устанавливаем callback для прогресса
@@ -706,14 +721,15 @@ class SettingsConfigurable : Configurable {
                         indexProgressBar.isIndeterminate = false
                         indexProgressBar.isVisible = true
                         indexProgressBar.value = progress.percentComplete.coerceIn(0, 100)
-                        indexProgressBar.string = "${progress.percentComplete}% (${progress.filesProcessed}/${progress.totalFiles})"
+                        indexProgressBar.string =
+                            "${progress.percentComplete}% (${progress.filesProcessed}/${progress.totalFiles})"
                         if (this::currentFileLabel.isInitialized) {
                             currentFileLabel.text = progress.currentFile
                         }
                     }
                     // Обновляем глобальный статус
-                    service<ru.marslab.ide.ride.service.embedding.IndexingStatusService>().updateProgress(
-                        ru.marslab.ide.ride.service.embedding.IndexingStatusService.Progress(
+                    service<IndexingStatusService>().updateProgress(
+                        IndexingStatusService.Progress(
                             percent = progress.percentComplete,
                             filesProcessed = progress.filesProcessed,
                             totalFiles = progress.totalFiles,
@@ -724,10 +740,10 @@ class SettingsConfigurable : Configurable {
 
                 // Запускаем индексацию
                 kotlinx.coroutines.runBlocking {
-                    val step = ru.marslab.ide.ride.model.tool.ToolPlanStep(
+                    val step = ToolPlanStep(
                         description = "Index project files",
-                        agentType = ru.marslab.ide.ride.model.orchestrator.AgentType.EMBEDDING_INDEXER,
-                        input = ru.marslab.ide.ride.model.tool.StepInput.empty()
+                        agentType = AgentType.EMBEDDING_INDEXER,
+                        input = StepInput.empty()
                             .set("action", "index")
                             .set("project_path", projectPath)
                             .set("force_reindex", false)
@@ -735,7 +751,7 @@ class SettingsConfigurable : Configurable {
 
                     val result = agent.executeStep(
                         step,
-                        ru.marslab.ide.ride.model.orchestrator.ExecutionContext(projectPath)
+                        ExecutionContext(projectPath)
                     )
 
                     SwingUtilities.invokeLater {
@@ -748,16 +764,18 @@ class SettingsConfigurable : Configurable {
                             val resultObj = data["result"]
                             var summary = ""
                             when (resultObj) {
-                                is ru.marslab.ide.ride.model.embedding.IndexingResult -> {
+                                is IndexingResult -> {
                                     summary = "Файлов обработано: ${resultObj.filesProcessed}\n" +
                                             "Чанков создано: ${resultObj.chunksCreated}\n" +
                                             "Эмбеддингов сгенерировано: ${resultObj.embeddingsGenerated}\n" +
                                             "Длительность: ${resultObj.durationMs} мс"
                                 }
+
                                 is Map<*, *> -> {
                                     val filesProcessed = (resultObj["filesProcessed"] as? Number)?.toInt() ?: 0
                                     val chunksCreated = (resultObj["chunksCreated"] as? Number)?.toInt() ?: 0
-                                    val embeddingsGenerated = (resultObj["embeddingsGenerated"] as? Number)?.toInt() ?: 0
+                                    val embeddingsGenerated =
+                                        (resultObj["embeddingsGenerated"] as? Number)?.toInt() ?: 0
                                     val durationMs = (resultObj["durationMs"] as? Number)?.toLong() ?: 0L
                                     summary = "Файлов обработано: ${filesProcessed}\n" +
                                             "Чанков создано: ${chunksCreated}\n" +
@@ -770,31 +788,31 @@ class SettingsConfigurable : Configurable {
                                 this@SettingsConfigurable.indexingSummaryArea.text = summary
                             }
 
-                            com.intellij.openapi.ui.Messages.showInfoMessage(
+                            Messages.showInfoMessage(
                                 summary,
                                 "Индексация завершена"
                             )
                         } else {
-                            com.intellij.openapi.ui.Messages.showErrorDialog(
+                            showErrorDialog(
                                 "Ошибка индексации: ${result.error}",
                                 "Ошибка"
                             )
                         }
                     }
                     // Завершаем глобальный статус
-                    service<ru.marslab.ide.ride.service.embedding.IndexingStatusService>().setInProgress(false)
+                    service<IndexingStatusService>().setInProgress(false)
                 }
             } catch (e: Exception) {
                 SwingUtilities.invokeLater {
                     // Прогрессбар не скрываем – он отображает уровень индексации
                     updateIndexingButtons(false)
-                    com.intellij.openapi.ui.Messages.showErrorDialog(
+                    showErrorDialog(
                         "Ошибка: ${e.message}",
                         "Ошибка"
                     )
                 }
                 // Завершаем глобальный статус при ошибке
-                service<ru.marslab.ide.ride.service.embedding.IndexingStatusService>().setInProgress(false)
+                service<IndexingStatusService>().setInProgress(false)
             }
         }
         indexingTask = future
@@ -808,12 +826,12 @@ class SettingsConfigurable : Configurable {
         SwingUtilities.invokeLater {
             // Прогрессбар не скрываем – он отображает уровень индексации
             updateIndexingButtons(false)
-            com.intellij.openapi.ui.Messages.showInfoMessage(
+            Messages.showInfoMessage(
                 "Индексация остановлена пользователем",
                 "Остановлено"
             )
         }
-        service<ru.marslab.ide.ride.service.embedding.IndexingStatusService>().setInProgress(false)
+        service<IndexingStatusService>().setInProgress(false)
     }
 
     private fun updateIndexingButtons(inProgress: Boolean) {
@@ -823,31 +841,31 @@ class SettingsConfigurable : Configurable {
     }
 
     private fun clearEmbeddingIndex() {
-        val project = com.intellij.openapi.project.ProjectManager.getInstance().openProjects.firstOrNull()
+        val project = ProjectManager.getInstance().openProjects.firstOrNull()
         if (project == null) {
-            com.intellij.openapi.ui.Messages.showErrorDialog(
+            showErrorDialog(
                 "Нет открытых проектов",
                 "Ошибка"
             )
             return
         }
 
-        val confirm = com.intellij.openapi.ui.Messages.showYesNoDialog(
+        val confirm = Messages.showYesNoDialog(
             "Вы уверены, что хотите очистить индекс?",
             "Подтверждение",
-            com.intellij.openapi.ui.Messages.getQuestionIcon()
+            Messages.getQuestionIcon()
         )
 
-        if (confirm == com.intellij.openapi.ui.Messages.YES) {
+        if (confirm == Messages.YES) {
             ApplicationManager.getApplication().executeOnPooledThread {
                 try {
-                    val agent = ru.marslab.ide.ride.agent.tools.EmbeddingIndexerToolAgent()
+                    val agent = EmbeddingIndexerToolAgent()
                     val projectPath = project.basePath ?: return@executeOnPooledThread
 
                     kotlinx.coroutines.runBlocking {
-                        val step = ru.marslab.ide.ride.model.tool.ToolPlanStep(
+                        val step = ToolPlanStep(
                             description = "Clear index",
-                            agentType = ru.marslab.ide.ride.model.orchestrator.AgentType.EMBEDDING_INDEXER,
+                            agentType = AgentType.EMBEDDING_INDEXER,
                             input = ru.marslab.ide.ride.model.tool.StepInput.empty()
                                 .set("action", "clear")
                                 .set("project_path", projectPath)
@@ -855,17 +873,17 @@ class SettingsConfigurable : Configurable {
 
                         val result = agent.executeStep(
                             step,
-                            ru.marslab.ide.ride.model.orchestrator.ExecutionContext(projectPath)
+                            ExecutionContext(projectPath)
                         )
 
                         SwingUtilities.invokeLater {
                             if (result.success) {
-                                com.intellij.openapi.ui.Messages.showInfoMessage(
+                                Messages.showInfoMessage(
                                     "Индекс очищен",
                                     "Успех"
                                 )
                             } else {
-                                com.intellij.openapi.ui.Messages.showErrorDialog(
+                                showErrorDialog(
                                     "Ошибка: ${'$'}{result.error}",
                                     "Ошибка"
                                 )
@@ -874,7 +892,7 @@ class SettingsConfigurable : Configurable {
                     }
                 } catch (e: Exception) {
                     SwingUtilities.invokeLater {
-                        com.intellij.openapi.ui.Messages.showErrorDialog(
+                        showErrorDialog(
                             "Ошибка: ${'$'}{e.message}",
                             "Ошибка"
                         )
@@ -885,24 +903,24 @@ class SettingsConfigurable : Configurable {
     }
 
     private fun showIndexStatistics() {
-        val project = com.intellij.openapi.project.ProjectManager.getInstance().openProjects.firstOrNull()
+        val project = ProjectManager.getInstance().openProjects.firstOrNull()
         if (project == null) {
-            com.intellij.openapi.ui.Messages.showErrorDialog(
+            showErrorDialog(
                 "Нет открытых проектов",
                 "Ошибка"
             )
             return
         }
 
-        com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread {
+        ApplicationManager.getApplication().executeOnPooledThread {
             try {
-                val agent = ru.marslab.ide.ride.agent.tools.EmbeddingIndexerToolAgent()
+                val agent = EmbeddingIndexerToolAgent()
                 val projectPath = project.basePath ?: return@executeOnPooledThread
 
                 kotlinx.coroutines.runBlocking {
-                    val step = ru.marslab.ide.ride.model.tool.ToolPlanStep(
+                    val step = ToolPlanStep(
                         description = "Get statistics",
-                        agentType = ru.marslab.ide.ride.model.orchestrator.AgentType.EMBEDDING_INDEXER,
+                        agentType = AgentType.EMBEDDING_INDEXER,
                         input = ru.marslab.ide.ride.model.tool.StepInput.empty()
                             .set("action", "stats")
                             .set("project_path", projectPath)
@@ -910,7 +928,7 @@ class SettingsConfigurable : Configurable {
 
                     val result = agent.executeStep(
                         step,
-                        ru.marslab.ide.ride.model.orchestrator.ExecutionContext(projectPath)
+                        ExecutionContext(projectPath)
                     )
 
                     SwingUtilities.invokeLater {
@@ -922,12 +940,12 @@ class SettingsConfigurable : Configurable {
                                 Чанков: ${stats["chunks"] ?: 0}
                                 Эмбеддингов: ${stats["embeddings"] ?: 0}
                             """.trimIndent()
-                            com.intellij.openapi.ui.Messages.showInfoMessage(
+                            Messages.showInfoMessage(
                                 message,
                                 "Статистика"
                             )
                         } else {
-                            com.intellij.openapi.ui.Messages.showErrorDialog(
+                            showErrorDialog(
                                 "Ошибка: ${result.error}",
                                 "Ошибка"
                             )
@@ -936,7 +954,7 @@ class SettingsConfigurable : Configurable {
                 }
             } catch (e: Exception) {
                 SwingUtilities.invokeLater {
-                    com.intellij.openapi.ui.Messages.showErrorDialog(
+                    showErrorDialog(
                         "Ошибка: ${e.message}",
                         "Ошибка"
                     )

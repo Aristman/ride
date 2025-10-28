@@ -295,6 +295,7 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
             "yandexgpt-lite" to "YandexGPT Lite",
             "yandexgpt" to "YandexGPT",
         )
+
         // Доступные модели для эмбеддингов (сейчас совпадают с Yandex GPT моделями)
         val AVAILABLE_EMBEDDING_MODELS: LinkedHashMap<String, String> = linkedMapOf(
             "yandexgpt-lite" to "YandexGPT Lite",
