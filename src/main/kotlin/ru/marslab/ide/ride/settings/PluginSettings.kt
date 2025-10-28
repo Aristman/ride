@@ -219,6 +219,15 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
         }
 
     /**
+     * Включить RAG-обогащение сообщений через поиск релевантных фрагментов в индексе эмбеддингов
+     */
+    var enableRagEnrichment: Boolean
+        get() = state.enableRagEnrichment
+        set(value) {
+            state.enableRagEnrichment = value
+        }
+
+    /**
      * Получает токен Hugging Face из безопасного хранилища
      */
     fun getHuggingFaceToken(): String {
