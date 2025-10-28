@@ -162,12 +162,12 @@ class EmbeddingService {
     // Приватные методы
 
     private fun getEmbeddingDbPath(projectPath: String): String {
-        // Создаем путь к базе данных эмбеддингов в директории .idea/ride
-        val ideaDir = File(projectPath, ".idea")
-        val rideDir = File(ideaDir, "ride")
-        if (!rideDir.exists()) {
-            rideDir.mkdirs()
+        // Создаем путь к базе данных эмбеддингов в директории .ride/embeddings
+        val rideDir = File(projectPath, ".ride")
+        val embeddingsDir = File(rideDir, "embeddings")
+        if (!embeddingsDir.exists()) {
+            embeddingsDir.mkdirs()
         }
-        return File(rideDir, "embeddings.db").absolutePath
+        return File(embeddingsDir, "embeddings.db").absolutePath
     }
 }
