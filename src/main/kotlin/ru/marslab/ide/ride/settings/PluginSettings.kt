@@ -61,6 +61,7 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
             state.selectedProvider = value
         }
 
+    
     /**
      * Folder ID для Yandex GPT
      */
@@ -277,6 +278,7 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
             "yandexgpt-lite" to "YandexGPT Lite",
             "yandexgpt" to "YandexGPT",
         )
+
         val AVAILABLE_HUGGINGFACE_MODELS: LinkedHashMap<String, String> = linkedMapOf(
             HuggingFaceModel.DEEPSEEK_R1.modelId to HuggingFaceModel.DEEPSEEK_R1.displayName,
             HuggingFaceModel.DEEPSEEK_TERMINUS.modelId to HuggingFaceModel.DEEPSEEK_TERMINUS.displayName,

@@ -22,6 +22,9 @@ object ProjectScannerAgentBridge {
 
     private val logger = Logger.getInstance(ProjectScannerAgentBridge::class.java)
 
+    // Fallback сканер на случай, если ToolAgentRegistry не инициализирован в данном контексте (например, из Settings UI)
+    private val fallbackScannerAgent: ProjectScannerToolAgent by lazy { ProjectScannerToolAgent() }
+
     /**
      * Создает подписку на дельты изменений файлов для указанного проекта
      *
@@ -147,9 +150,11 @@ object ProjectScannerAgentBridge {
         return try {
             val registry = ToolAgentRegistry()
             val agentType = AgentType.valueOf("PROJECT_SCANNER")
-            registry.get(agentType) as? ProjectScannerToolAgent
+            val fromRegistry = registry.get(agentType) as? ProjectScannerToolAgent
+            fromRegistry ?: fallbackScannerAgent
         } catch (e: Exception) {
-            null
+            // Если не удалось получить из реестра — используем fallback
+            fallbackScannerAgent
         }
     }
 }

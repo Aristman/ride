@@ -148,7 +148,7 @@ object AgentFactory {
         apiKey: String,
         model: HuggingFaceModel
     ): LLMProvider {
-        return LLMProviderFactory.createHuggingFaceProvider(apiKey, model)
+        return LLMProviderFactory.createHuggingFaceProvider(apiKey, model.modelId)
     }
 
     /**

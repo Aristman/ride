@@ -39,6 +39,10 @@ object ToolAgentInitializer {
             registry.register(UserInteractionAgent())
             logger.info("Registered UserInteractionAgent")
 
+            // Регистрируем EmbeddingIndexerToolAgent
+            registry.register(EmbeddingIndexerToolAgent())
+            logger.info("Registered EmbeddingIndexerToolAgent")
+
             logger.info("All Tool Agents registered successfully. Total: ${registry.count()}")
 
             // Выводим статистику

@@ -3,19 +3,28 @@ package ru.marslab.ide.ride.settings
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.options.Configurable
+import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.DialogPanel
+import com.intellij.openapi.ui.Messages
+import com.intellij.openapi.ui.Messages.showErrorDialog
 import com.intellij.ui.ColorPanel
 import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.components.JBPasswordField
 import com.intellij.ui.components.JBTabbedPane
 import com.intellij.ui.components.JBTextField
 import com.intellij.ui.dsl.builder.*
+import ru.marslab.ide.ride.agent.tools.EmbeddingIndexerToolAgent
+import ru.marslab.ide.ride.model.embedding.IndexingResult
+import ru.marslab.ide.ride.model.orchestrator.AgentType
+import ru.marslab.ide.ride.model.orchestrator.ExecutionContext
+import ru.marslab.ide.ride.model.tool.StepInput
+import ru.marslab.ide.ride.model.tool.ToolPlanStep
+import ru.marslab.ide.ride.service.ChatService
+import ru.marslab.ide.ride.service.embedding.IndexingStatusService
 import java.awt.CardLayout
 import java.awt.Color
-import javax.swing.JComponent
-import javax.swing.JPanel
-import javax.swing.SwingUtilities
+import javax.swing.*
 
 /**
  * UI для настроек плагина в IDE Settings
@@ -50,18 +59,34 @@ class SettingsConfigurable : Configurable {
     private var initialHFToken: String = ""
     private var hfTokenLoaded = false
 
+    // Управление индексацией
+    private lateinit var startIndexButton: JButton
+    private lateinit var clearIndexButton: JButton
+    private lateinit var stopIndexButton: JButton
+
+    @Volatile
+    private var indexingTask: java.util.concurrent.Future<*>? = null
+
+    // Embedding indexer UI components
+    private lateinit var indexProgressBar: javax.swing.JProgressBar
+    private lateinit var currentFileLabel: javax.swing.JLabel
+    private lateinit var indexingSummaryArea: javax.swing.JTextArea
+    private lateinit var indexingScrollPane: javax.swing.JScrollPane
+
     override fun getDisplayName(): String = "Ride"
 
     override fun createComponent(): JComponent {
         val llmConfigPanel = createLlmConfigPanel()
         val chatAppearancePanel = createChatAppearancePanel()
         val agentSettingsPanel = createAgentSettingsPanel()
+        val codeSettingsPanel = createCodeSettingsPanel()
 
         panel = panel {
             row {
                 val tabs = JBTabbedPane()
                 tabs.addTab("Chat Appearance", chatAppearancePanel)
                 tabs.addTab("Agent Settings", agentSettingsPanel)
+                tabs.addTab("Code Settings", codeSettingsPanel)
                 tabs.addTab("LlmConfig", llmConfigPanel)
                 cell(tabs)
                     .align(Align.FILL)
@@ -224,7 +249,7 @@ class SettingsConfigurable : Configurable {
         hfTokenLoaded = true
 
         // Пересоздаём агента с новыми настройками (моментальная смена LLM в чате)
-        service<ru.marslab.ide.ride.service.ChatService>().recreateAgent()
+        service<ChatService>().recreateAgent()
     }
 
     override fun reset() {
@@ -302,7 +327,7 @@ class SettingsConfigurable : Configurable {
             add(PluginSettings.PROVIDER_HUGGINGFACE)
         }
         modelSelectorComboBox = ComboBox(topEntries.toTypedArray()).apply {
-            renderer = object : javax.swing.DefaultListCellRenderer() {
+            renderer = object : DefaultListCellRenderer() {
                 override fun getListCellRendererComponent(
                     list: javax.swing.JList<*>,
                     value: Any?,
@@ -320,7 +345,7 @@ class SettingsConfigurable : Configurable {
 
         // Комбобокс для выбора моделей HuggingFace
         hfModelSelectorComboBox = ComboBox(PluginSettings.AVAILABLE_HUGGINGFACE_MODELS.keys.toTypedArray()).apply {
-            renderer = object : javax.swing.DefaultListCellRenderer() {
+            renderer = object : DefaultListCellRenderer() {
                 override fun getListCellRendererComponent(
                     list: javax.swing.JList<*>,
                     value: Any?,
@@ -338,7 +363,7 @@ class SettingsConfigurable : Configurable {
 
         // Комбобокс для выбора моделей Yandex
         yandexModelSelectorComboBox = ComboBox(PluginSettings.AVAILABLE_YANDEX_MODELS.keys.toTypedArray()).apply {
-            renderer = object : javax.swing.DefaultListCellRenderer() {
+            renderer = object : DefaultListCellRenderer() {
                 override fun getListCellRendererComponent(
                     list: javax.swing.JList<*>,
                     value: Any?,
@@ -545,6 +570,343 @@ class SettingsConfigurable : Configurable {
                 enableAutoSummarizationCheck = JBCheckBox("Включить автоматическое сжатие истории")
                 cell(enableAutoSummarizationCheck)
                     .comment("При превышении лимита токенов история будет автоматически сжиматься через SummarizerAgent")
+            }
+        }
+    }
+
+    private fun createCodeSettingsPanel(): DialogPanel = panel {
+        group("Embedding Indexer") {
+            row {
+                comment("Индексация файлов проекта для семантического поиска")
+            }
+            row {
+                startIndexButton = JButton("Запустить индексацию").apply {
+                    addActionListener { startEmbeddingIndexing() }
+                }
+                cell(startIndexButton)
+                clearIndexButton = JButton("Очистить индекс").apply {
+                    addActionListener { clearEmbeddingIndex() }
+                }
+                cell(clearIndexButton)
+                val statsButton = JButton("Показать статистику").apply {
+                    addActionListener { showIndexStatistics() }
+                }
+                cell(statsButton)
+                stopIndexButton = JButton("Остановить индексацию").apply {
+                    isEnabled = false
+                    addActionListener { stopEmbeddingIndexing() }
+                }
+                cell(stopIndexButton)
+            }
+            row {
+                indexProgressBar = javax.swing.JProgressBar(0, 100).apply {
+                    isIndeterminate = false
+                    value = 0
+                    isStringPainted = true
+                    isVisible = true
+                }
+                cell(indexProgressBar)
+                    .align(Align.FILL)
+                    .resizableColumn()
+            }
+            row("Текущий файл:") {
+                currentFileLabel = javax.swing.JLabel("")
+                cell(currentFileLabel)
+                    .align(Align.FILL)
+                    .resizableColumn()
+            }
+            row("Итоги индексации:") {
+                indexingSummaryArea = javax.swing.JTextArea(5, 60).apply {
+                    lineWrap = true
+                    wrapStyleWord = true
+                    isEditable = false
+                }
+                indexingScrollPane = javax.swing.JScrollPane(indexingSummaryArea)
+                cell(indexingScrollPane)
+                    .align(Align.FILL)
+                    .resizableColumn()
+                    .comment("После завершения индексации здесь появится сводка")
+            }
+        }
+
+        group("Embedding Configuration") {
+            row {
+                comment("Используется локальная модель nomic-embed-text через Ollama для генерации эмбеддингов.")
+            }
+            row {
+                comment("Модель: nomic-embed-text (768 dimensions)")
+            }
+            row {
+                comment("Убедитесь, что Ollama запущен и модель установлена: ollama pull nomic-embed-text")
+            }
+        }
+    }
+
+    private fun startEmbeddingIndexing() {
+        val project = ProjectManager.getInstance().openProjects.firstOrNull()
+        if (project == null) {
+            showErrorDialog(
+                "Нет открытых проектов",
+                "Ошибка"
+            )
+            return
+        }
+
+        // Обновляем состояние кнопок
+        SwingUtilities.invokeLater { updateIndexingButtons(true) }
+        // Фиксируем глобальный статус индексации
+        service<IndexingStatusService>().setInProgress(true)
+
+        val future = ApplicationManager.getApplication().executeOnPooledThread {
+            try {
+                val agent = EmbeddingIndexerToolAgent()
+                val projectPath = project.basePath ?: return@executeOnPooledThread
+
+                // Устанавливаем callback для прогресса
+                agent.setProgressCallback { progress ->
+                    SwingUtilities.invokeLater {
+                        if (!this::indexProgressBar.isInitialized) return@invokeLater
+                        indexProgressBar.isIndeterminate = false
+                        indexProgressBar.isVisible = true
+                        indexProgressBar.value = progress.percentComplete.coerceIn(0, 100)
+                        indexProgressBar.string =
+                            "${progress.percentComplete}% (${progress.filesProcessed}/${progress.totalFiles})"
+                        if (this::currentFileLabel.isInitialized) {
+                            currentFileLabel.text = progress.currentFile
+                        }
+                    }
+                    // Обновляем глобальный статус
+                    service<IndexingStatusService>().updateProgress(
+                        IndexingStatusService.Progress(
+                            percent = progress.percentComplete,
+                            filesProcessed = progress.filesProcessed,
+                            totalFiles = progress.totalFiles,
+                            currentFile = progress.currentFile
+                        )
+                    )
+                }
+
+                // Запускаем индексацию
+                kotlinx.coroutines.runBlocking {
+                    val step = ToolPlanStep(
+                        description = "Index project files",
+                        agentType = AgentType.EMBEDDING_INDEXER,
+                        input = StepInput.empty()
+                            .set("action", "index")
+                            .set("project_path", projectPath)
+                            .set("force_reindex", false)
+                    )
+
+                    val result = agent.executeStep(
+                        step,
+                        ExecutionContext(projectPath)
+                    )
+
+                    SwingUtilities.invokeLater {
+                        // Прогрессбар не скрываем – он отображает уровень индексации
+                        updateIndexingButtons(false)
+
+                        if (result.success) {
+                            // Пытаемся извлечь сводку из результата
+                            val data = result.output.data
+                            val resultObj = data["result"]
+                            var summary = ""
+                            when (resultObj) {
+                                is IndexingResult -> {
+                                    summary = "Файлов обработано: ${resultObj.filesProcessed}\n" +
+                                            "Чанков создано: ${resultObj.chunksCreated}\n" +
+                                            "Эмбеддингов сгенерировано: ${resultObj.embeddingsGenerated}\n" +
+                                            "Длительность: ${resultObj.durationMs} мс"
+                                }
+
+                                is Map<*, *> -> {
+                                    val filesProcessed = (resultObj["filesProcessed"] as? Number)?.toInt() ?: 0
+                                    val chunksCreated = (resultObj["chunksCreated"] as? Number)?.toInt() ?: 0
+                                    val embeddingsGenerated =
+                                        (resultObj["embeddingsGenerated"] as? Number)?.toInt() ?: 0
+                                    val durationMs = (resultObj["durationMs"] as? Number)?.toLong() ?: 0L
+                                    summary = "Файлов обработано: ${filesProcessed}\n" +
+                                            "Чанков создано: ${chunksCreated}\n" +
+                                            "Эмбеддингов сгенерировано: ${embeddingsGenerated}\n" +
+                                            "Длительность: ${durationMs} мс"
+                                }
+                            }
+
+                            if (this@SettingsConfigurable::indexingSummaryArea.isInitialized) {
+                                this@SettingsConfigurable.indexingSummaryArea.text = summary
+                            }
+
+                            Messages.showInfoMessage(
+                                summary,
+                                "Индексация завершена"
+                            )
+                        } else {
+                            showErrorDialog(
+                                "Ошибка индексации: ${result.error}",
+                                "Ошибка"
+                            )
+                        }
+                    }
+                    // Завершаем глобальный статус
+                    service<IndexingStatusService>().setInProgress(false)
+                }
+            } catch (e: Exception) {
+                SwingUtilities.invokeLater {
+                    // Прогрессбар не скрываем – он отображает уровень индексации
+                    updateIndexingButtons(false)
+                    showErrorDialog(
+                        "Ошибка: ${e.message}",
+                        "Ошибка"
+                    )
+                }
+                // Завершаем глобальный статус при ошибке
+                service<IndexingStatusService>().setInProgress(false)
+            }
+        }
+        indexingTask = future
+    }
+
+    private fun stopEmbeddingIndexing() {
+        val task = indexingTask
+        if (task != null && !task.isDone) {
+            task.cancel(true)
+        }
+        SwingUtilities.invokeLater {
+            // Прогрессбар не скрываем – он отображает уровень индексации
+            updateIndexingButtons(false)
+            Messages.showInfoMessage(
+                "Индексация остановлена пользователем",
+                "Остановлено"
+            )
+        }
+        service<IndexingStatusService>().setInProgress(false)
+    }
+
+    private fun updateIndexingButtons(inProgress: Boolean) {
+        if (this::startIndexButton.isInitialized) startIndexButton.isEnabled = !inProgress
+        if (this::clearIndexButton.isInitialized) clearIndexButton.isEnabled = !inProgress
+        if (this::stopIndexButton.isInitialized) stopIndexButton.isEnabled = inProgress
+    }
+
+    private fun clearEmbeddingIndex() {
+        val project = ProjectManager.getInstance().openProjects.firstOrNull()
+        if (project == null) {
+            showErrorDialog(
+                "Нет открытых проектов",
+                "Ошибка"
+            )
+            return
+        }
+
+        val confirm = Messages.showYesNoDialog(
+            "Вы уверены, что хотите очистить индекс?",
+            "Подтверждение",
+            Messages.getQuestionIcon()
+        )
+
+        if (confirm == Messages.YES) {
+            ApplicationManager.getApplication().executeOnPooledThread {
+                try {
+                    val agent = EmbeddingIndexerToolAgent()
+                    val projectPath = project.basePath ?: return@executeOnPooledThread
+
+                    kotlinx.coroutines.runBlocking {
+                        val step = ToolPlanStep(
+                            description = "Clear index",
+                            agentType = AgentType.EMBEDDING_INDEXER,
+                            input = ru.marslab.ide.ride.model.tool.StepInput.empty()
+                                .set("action", "clear")
+                                .set("project_path", projectPath)
+                        )
+
+                        val result = agent.executeStep(
+                            step,
+                            ExecutionContext(projectPath)
+                        )
+
+                        SwingUtilities.invokeLater {
+                            if (result.success) {
+                                Messages.showInfoMessage(
+                                    "Индекс очищен",
+                                    "Успех"
+                                )
+                            } else {
+                                showErrorDialog(
+                                    "Ошибка: ${'$'}{result.error}",
+                                    "Ошибка"
+                                )
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    SwingUtilities.invokeLater {
+                        showErrorDialog(
+                            "Ошибка: ${'$'}{e.message}",
+                            "Ошибка"
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private fun showIndexStatistics() {
+        val project = ProjectManager.getInstance().openProjects.firstOrNull()
+        if (project == null) {
+            showErrorDialog(
+                "Нет открытых проектов",
+                "Ошибка"
+            )
+            return
+        }
+
+        ApplicationManager.getApplication().executeOnPooledThread {
+            try {
+                val agent = EmbeddingIndexerToolAgent()
+                val projectPath = project.basePath ?: return@executeOnPooledThread
+
+                kotlinx.coroutines.runBlocking {
+                    val step = ToolPlanStep(
+                        description = "Get statistics",
+                        agentType = AgentType.EMBEDDING_INDEXER,
+                        input = ru.marslab.ide.ride.model.tool.StepInput.empty()
+                            .set("action", "stats")
+                            .set("project_path", projectPath)
+                    )
+
+                    val result = agent.executeStep(
+                        step,
+                        ExecutionContext(projectPath)
+                    )
+
+                    SwingUtilities.invokeLater {
+                        if (result.success) {
+                            val stats = result.output.get<Map<String, Int>>("statistics") ?: emptyMap()
+                            val message = """
+                                Статистика индекса:
+                                Файлов: ${stats["files"] ?: 0}
+                                Чанков: ${stats["chunks"] ?: 0}
+                                Эмбеддингов: ${stats["embeddings"] ?: 0}
+                            """.trimIndent()
+                            Messages.showInfoMessage(
+                                message,
+                                "Статистика"
+                            )
+                        } else {
+                            showErrorDialog(
+                                "Ошибка: ${result.error}",
+                                "Ошибка"
+                            )
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                SwingUtilities.invokeLater {
+                    showErrorDialog(
+                        "Ошибка: ${e.message}",
+                        "Ошибка"
+                    )
+                }
             }
         }
     }
