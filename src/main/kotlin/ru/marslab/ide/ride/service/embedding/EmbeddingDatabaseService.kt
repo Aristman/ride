@@ -202,32 +202,51 @@ class EmbeddingDatabaseService(private val dbPath: String) {
     ): List<Pair<Long, Float>> {
         if (topK <= 0) return emptyList()
 
-        val sql = "SELECT chunk_id, embedding FROM embeddings"
+        // Конвертируем запрос в примитивный массив для исключения бокса
+        val queryArray = FloatArray(queryEmbedding.size) { i -> queryEmbedding[i] }
 
         // Min-heap по схожести: на вершине минимальный элемент
         val heap = java.util.PriorityQueue<Pair<Long, Float>>(topK) { a, b ->
             a.second.compareTo(b.second)
         }
 
-        connection?.createStatement()?.use { stmt ->
-            val rs = stmt.executeQuery(sql)
-            while (rs.next()) {
-                val chunkId = rs.getLong("chunk_id")
-                val embeddingBytes = rs.getBytes("embedding")
-                val embedding = byteArrayToFloatList(embeddingBytes)
+        val countSql = "SELECT COUNT(*) AS cnt FROM embeddings"
+        val pageSql = "SELECT chunk_id, embedding FROM embeddings LIMIT ? OFFSET ?"
+        // Небольшой размер страницы уменьшает пиковые аллокации (байтовые массивы/буферы)
+        val pageSize = 500
 
-                val similarity = cosineSimilarity(queryEmbedding, embedding)
+        val conn = connection ?: return emptyList()
 
-                // Отсечение по порогу (если задан)
-                if (minSimilarity != null && similarity < minSimilarity) continue
+        // Получаем количество строк и обходим таблицу батчами
+        val total = conn.createStatement().use { st ->
+            val rs = st.executeQuery(countSql)
+            if (rs.next()) rs.getInt("cnt") else 0
+        }
 
-                if (heap.size < topK) {
-                    heap.add(chunkId to similarity)
-                } else if (heap.peek().second < similarity) {
-                    heap.poll()
-                    heap.add(chunkId to similarity)
+        var offset = 0
+        while (offset < total) {
+            conn.prepareStatement(pageSql).use { stmt ->
+                stmt.setInt(1, pageSize)
+                stmt.setInt(2, offset)
+                val rs = stmt.executeQuery()
+                while (rs.next()) {
+                    val chunkId = rs.getLong("chunk_id")
+                    val binStream = rs.getBinaryStream("embedding")
+
+                    val similarity = cosineSimilarityFromStream(queryArray, binStream)
+
+                    // Отсечение по порогу (если задан)
+                    if (minSimilarity != null && similarity < minSimilarity) continue
+
+                    if (heap.size < topK) {
+                        heap.add(chunkId to similarity)
+                    } else if (heap.peek().second < similarity) {
+                        heap.poll()
+                        heap.add(chunkId to similarity)
+                    }
                 }
             }
+            offset += pageSize
         }
 
         // Преобразуем heap в отсортированный по убыванию список
@@ -354,6 +373,60 @@ class EmbeddingDatabaseService(private val dbPath: String) {
             floats.add(buffer.float)
         }
         return floats
+    }
+
+    /**
+     * Косинусное сходство, вычисляемое напрямую из byte[] BLOB без создания списка Float
+     */
+    private fun cosineSimilarityFromByteArray(query: FloatArray, bytes: ByteArray): Float {
+        val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+        var dot = 0f
+        var normQ = 0f
+        var normV = 0f
+        var i = 0
+        while (buffer.hasRemaining() && i < query.size) {
+            val v = buffer.float
+            val q = query[i]
+            dot += q * v
+            normQ += q * q
+            normV += v * v
+            i++
+        }
+        val denom = kotlin.math.sqrt(normQ) * kotlin.math.sqrt(normV)
+        return if (denom > 0f) dot / denom else 0f
+    }
+
+    /**
+     * Косинусное сходство, вычисляемое из InputStream BLOB без создания больших массивов
+     */
+    private fun cosineSimilarityFromStream(query: FloatArray, stream: java.io.InputStream): Float {
+        stream.use { inp ->
+            val buf = ByteArray(4)
+            var dot = 0f
+            var normQ = 0f
+            var normV = 0f
+            var i = 0
+            while (i < query.size) {
+                var read = 0
+                while (read < 4) {
+                    val r = inp.read(buf, read, 4 - read)
+                    if (r <= 0) {
+                        // достигли конца BLOB раньше времени
+                        val denomEarly = kotlin.math.sqrt(normQ) * kotlin.math.sqrt(normV)
+                        return if (denomEarly > 0f) dot / denomEarly else 0f
+                    }
+                    read += r
+                }
+                val v = ByteBuffer.wrap(buf).order(ByteOrder.LITTLE_ENDIAN).float
+                val q = query[i]
+                dot += q * v
+                normQ += q * q
+                normV += v * v
+                i++
+            }
+            val denom = kotlin.math.sqrt(normQ) * kotlin.math.sqrt(normV)
+            return if (denom > 0f) dot / denom else 0f
+        }
     }
 
     private fun cosineSimilarity(a: List<Float>, b: List<Float>): Float {
