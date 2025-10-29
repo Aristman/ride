@@ -187,3 +187,4 @@ class EmbeddingService {
     fun setTestEmbeddingGenerator(generator: (suspend (String) -> List<Float>)?) {
         this.testEmbeddingGenerator = generator
     }
+}
