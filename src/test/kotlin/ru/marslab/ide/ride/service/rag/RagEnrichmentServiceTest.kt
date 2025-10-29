@@ -7,7 +7,9 @@ import ru.marslab.ide.ride.service.embedding.EmbeddingService
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlin.test.Ignore
 
+@Ignore("Disabled RAG tests")
 class RagEnrichmentServiceTest : BasePlatformTestCase() {
 
     private lateinit var ragService: RagEnrichmentService

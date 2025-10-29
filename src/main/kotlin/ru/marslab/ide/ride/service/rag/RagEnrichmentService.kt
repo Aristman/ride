@@ -101,36 +101,58 @@ class RagEnrichmentService {
             val filteredChunks = similarChunks.filter { (_, similarity) ->
                 similarity >= threshold
             }
-
             if (filteredChunks.isEmpty()) {
                 logger.info("No chunks found above similarity threshold $threshold")
                 return null
             }
 
-            // Получаем содержимое чанков с обработкой ошибок
-            val chunksWithContent = filteredChunks.mapNotNull { (chunkId, similarity) ->
+            // Ветвление по стратегии реранкера
+            val strategy = settings.ragRerankerStrategy
+            val selectedIdsWithSim: List<Pair<Long, Float>> = if (strategy == "MMR") {
+                // Выполним MMR отбор поверх отфильтрованных кандидатов
+                val mmrTopK = settings.ragMmrTopK
+                val lambda = settings.ragMmrLambda
+                val candidateIds = filteredChunks.map { it.first }
+
+                // Загружаем эмбеддинги кандидатов
+                val candidateEmbeddings: Map<Long, List<Float>> = candidateIds.mapNotNull { id ->
+                    try {
+                        getChunkEmbedding(projectPath, id)?.let { id to it }
+                    } catch (e: Exception) {
+                        logger.warn("Failed to load embedding for chunk id=$id", e)
+                        null
+                    }
+                }.toMap()
+
+                // Преобразуем queryEmbedding в FloatArray
+                val queryArr = FloatArray(queryEmbedding.size) { i -> queryEmbedding[i] }
+
+                val simsToQuery: Map<Long, Float> = filteredChunks.toMap()
+                val selected = mmrSelect(candidateEmbeddings, simsToQuery, queryArr, mmrTopK, lambda)
+                selected.map { id -> id to (simsToQuery[id] ?: 0f) }
+            } else {
+                // THRESHOLD: сортировка по similarity и урезание до topK выполнится ниже
+                filteredChunks
+            }
+
+            // Получаем содержимое выбранных чанков
+            val chunksWithContent = selectedIdsWithSim.mapNotNull { (chunkId, similarity) ->
                 try {
                     val chunk = getChunkContent(projectPath, chunkId)
                     if (chunk != null) {
                         val filePath = getFilePathFromChunk(projectPath, chunkId)
-                        // Проверяем качество контента
-                        if (chunk.content.isNotBlank() && chunk.content.length > 10) {
+                        if (chunk.content.isNotBlank() && chunk.content.length >= 5) {
                             RagChunk(
                                 content = chunk.content,
-                                filePath = filePath,
+                                filePath = filePath ?: "",
                                 startLine = chunk.startLine,
                                 endLine = chunk.endLine,
                                 similarity = similarity
                             )
-                        } else {
-                            logger.debug("Skipping chunk $chunkId: content too short or empty")
-                            null
-                        }
-                    } else {
-                        logger.warn("Failed to get chunk content for ID: $chunkId")
-                        null
-                    }
+                        } else null
+                    } else null
                 } catch (e: Exception) {
+                    logger.warn("Failed to load chunk content for id=$chunkId", e)
                     logger.error("Error processing chunk $chunkId", e)
                     null
                 }
@@ -144,7 +166,7 @@ class RagEnrichmentService {
             // Сортируем по релевантности и ограничиваем по токенам
             val sortedChunks = chunksWithContent.sortedByDescending { it.similarity }
                 .let { list ->
-                    val topK = settings.ragTopK
+                    val topK = if (strategy == "MMR") settings.ragMmrTopK else settings.ragTopK
                     if (list.size > topK) list.take(topK) else list
                 }
             val limitedChunks = try {
@@ -160,8 +182,9 @@ class RagEnrichmentService {
                 return null
             }
 
+            val metaTopK = if (strategy == "MMR") settings.ragMmrTopK else settings.ragTopK
             logger.info(
-                "RAG enrichment successful: ${limitedChunks.size} chunks, ${estimateTokens(limitedChunks)} tokens (strategy=THRESHOLD, candidateK=$candidateK, topK=${settings.ragTopK}, threshold=$threshold)"
+                "RAG enrichment successful: ${limitedChunks.size} chunks, ${estimateTokens(limitedChunks)} tokens (strategy=$strategy, candidateK=$candidateK, topK=$metaTopK, threshold=$threshold)"
             )
 
             RagResult(
@@ -354,6 +377,79 @@ class RagEnrichmentService {
 
     private fun estimateTokens(chunks: List<RagChunk>): Int {
         return chunks.sumOf { TokenEstimator.estimateTokens(it.content) }
+    }
+
+    // --- MMR helpers ---
+    private fun mmrSelect(
+        embeddings: Map<Long, List<Float>>,
+        simsToQuery: Map<Long, Float>,
+        query: FloatArray,
+        k: Int,
+        lambda: Float
+    ): List<Long> {
+        if (embeddings.isEmpty() || k <= 0) return emptyList()
+        val selected = mutableListOf<Long>()
+        val candidates = embeddings.keys.toMutableSet()
+
+        // стартуем с лучшего по релевантности к запросу
+        val first = candidates.maxByOrNull { simsToQuery[it] ?: 0f } ?: return emptyList()
+        selected.add(first)
+        candidates.remove(first)
+
+        while (selected.size < k && candidates.isNotEmpty()) {
+            var bestId: Long? = null
+            var bestScore = Float.NEGATIVE_INFINITY
+            for (cand in candidates) {
+                val rel = simsToQuery[cand] ?: 0f
+                var div = 0f
+                val eCand = embeddings[cand]
+                if (eCand != null) {
+                    for (s in selected) {
+                        val eSel = embeddings[s] ?: continue
+                        val simDS = cosine(eCand, eSel)
+                        if (simDS > div) div = simDS
+                    }
+                }
+                val score = lambda * rel - (1 - lambda) * div
+                if (score > bestScore) {
+                    bestScore = score
+                    bestId = cand
+                }
+            }
+            if (bestId == null) break
+            selected.add(bestId)
+            candidates.remove(bestId)
+        }
+        return selected
+    }
+
+    private fun cosine(a: List<Float>, b: List<Float>): Float {
+        if (a.size != b.size) return 0f
+        var dot = 0f
+        var normA = 0f
+        var normB = 0f
+        for (i in a.indices) {
+            val av = a[i]
+            val bv = b[i]
+            dot += av * bv
+            normA += av * av
+            normB += bv * bv
+        }
+        val denom = kotlin.math.sqrt(normA) * kotlin.math.sqrt(normB)
+        return if (denom > 0f) dot / denom else 0f
+    }
+
+    private fun getChunkEmbedding(projectPath: String, chunkId: Long): List<Float>? {
+        val embeddingService = EmbeddingService.getInstance()
+        val dbService = embeddingService.getDatabaseService(projectPath)
+        return try {
+            val res = dbService?.getEmbeddingByChunkId(chunkId)
+            dbService?.close()
+            res
+        } catch (e: Exception) {
+            logger.error("Error reading embedding for chunk=$chunkId", e)
+            null
+        }
     }
 }
 

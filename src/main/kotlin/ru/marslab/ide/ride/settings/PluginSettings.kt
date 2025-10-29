@@ -249,8 +249,24 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
     var ragRerankerStrategy: String
         get() = state.ragRerankerStrategy
         set(value) {
-            // Поддерживаем только THRESHOLD на данном этапе
-            state.ragRerankerStrategy = if (value == "THRESHOLD") "THRESHOLD" else PluginSettingsState.DEFAULT_RAG_RERANKER_STRATEGY
+            // Поддерживаем THRESHOLD и MMR
+            state.ragRerankerStrategy = when (value) {
+                "THRESHOLD", "MMR" -> value
+                else -> PluginSettingsState.DEFAULT_RAG_RERANKER_STRATEGY
+            }
+        }
+
+    // --- MMR parameters ---
+    var ragMmrLambda: Float
+        get() = state.ragMmrLambda
+        set(value) {
+            state.ragMmrLambda = value.coerceIn(0f, 1f)
+        }
+
+    var ragMmrTopK: Int
+        get() = state.ragMmrTopK
+        set(value) {
+            state.ragMmrTopK = value.coerceIn(1, 200)
         }
 
     /**
@@ -346,9 +362,16 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
         if (state.ragCandidateK < state.ragTopK) state.ragCandidateK = maxOf(PluginSettingsState.DEFAULT_RAG_CANDIDATE_K, state.ragTopK)
         state.ragSimilarityThreshold = state.ragSimilarityThreshold.takeIf { it in 0f..1f }
             ?: PluginSettingsState.DEFAULT_RAG_SIMILARITY_THRESHOLD
-        if (state.ragRerankerStrategy !in setOf("THRESHOLD")) {
+        if (state.ragRerankerStrategy !in setOf("THRESHOLD", "MMR")) {
             state.ragRerankerStrategy = PluginSettingsState.DEFAULT_RAG_RERANKER_STRATEGY
         }
+
+        // Normalize MMR
+        state.ragMmrLambda = state.ragMmrLambda.takeIf { it in 0f..1f } ?: PluginSettingsState.DEFAULT_RAG_MMR_LAMBDA
+        if (state.ragMmrTopK <= 0) state.ragMmrTopK = PluginSettingsState.DEFAULT_RAG_MMR_TOP_K
+        // ragMmrTopK должен быть не меньше ragTopK и не больше candidateK
+        if (state.ragMmrTopK < state.ragTopK) state.ragMmrTopK = state.ragTopK
+        if (state.ragMmrTopK > state.ragCandidateK) state.ragMmrTopK = state.ragCandidateK
     }
 
     private fun normalizeColor(value: String?, default: String): String {

@@ -58,6 +58,8 @@ class SettingsConfigurable : Configurable {
     private lateinit var ragCandidateKField: JBTextField
     private lateinit var ragSimilarityThresholdField: JBTextField
     private lateinit var ragRerankerStrategyComboBox: ComboBox<String>
+    private lateinit var ragMmrLambdaField: JBTextField
+    private lateinit var ragMmrTopKField: JBTextField
 
     private var panel: DialogPanel? = null
     private var initialApiKey: String = ""
@@ -166,7 +168,9 @@ class SettingsConfigurable : Configurable {
                 ragTopKField.text != settings.ragTopK.toString() ||
                 ragCandidateKField.text != settings.ragCandidateK.toString() ||
                 ragSimilarityThresholdField.text != settings.ragSimilarityThreshold.toString() ||
-                (ragRerankerStrategyComboBox.selectedItem as? String).orEmpty() != settings.ragRerankerStrategy
+                (ragRerankerStrategyComboBox.selectedItem as? String).orEmpty() != settings.ragRerankerStrategy ||
+                ragMmrLambdaField.text != settings.ragMmrLambda.toString() ||
+                ragMmrTopKField.text != settings.ragMmrTopK.toString()
     }
 
     override fun apply() {
@@ -275,6 +279,19 @@ class SettingsConfigurable : Configurable {
             settings.ragSimilarityThreshold = PluginSettingsState.DEFAULT_RAG_SIMILARITY_THRESHOLD
         }
         settings.ragRerankerStrategy = (ragRerankerStrategyComboBox.selectedItem as? String) ?: PluginSettingsState.DEFAULT_RAG_RERANKER_STRATEGY
+        // MMR params
+        try {
+            val mmrLambda = ragMmrLambdaField.text.toFloat()
+            settings.ragMmrLambda = mmrLambda
+        } catch (_: NumberFormatException) {
+            settings.ragMmrLambda = PluginSettingsState.DEFAULT_RAG_MMR_LAMBDA
+        }
+        try {
+            val mmrTopK = ragMmrTopKField.text.toInt()
+            settings.ragMmrTopK = mmrTopK
+        } catch (_: NumberFormatException) {
+            settings.ragMmrTopK = PluginSettingsState.DEFAULT_RAG_MMR_TOP_K
+        }
 
         initialApiKey = apiKey
         apiKeyLoaded = true
@@ -344,6 +361,9 @@ class SettingsConfigurable : Configurable {
         ragCandidateKField.text = settings.ragCandidateK.toString()
         ragSimilarityThresholdField.text = settings.ragSimilarityThreshold.toString()
         ragRerankerStrategyComboBox.selectedItem = settings.ragRerankerStrategy
+        ragMmrLambdaField.text = settings.ragMmrLambda.toString()
+        ragMmrTopKField.text = settings.ragMmrTopK.toString()
+        updateMmrVisibility()
     }
 
     override fun disposeUIResources() {
@@ -619,11 +639,12 @@ class SettingsConfigurable : Configurable {
                     .comment("Добавлять релевантные фрагменты из индексированных файлов проекта в запросы к LLM")
             }
             row("Reranker Strategy:") {
-                // На данном этапе поддерживаем только THRESHOLD, но готовим селектор для будущего расширения
-                ragRerankerStrategyComboBox = ComboBox(arrayOf("THRESHOLD"))
+                ragRerankerStrategyComboBox = ComboBox(arrayOf("THRESHOLD", "MMR")).apply {
+                    addActionListener { updateMmrVisibility() }
+                }
                 cell(ragRerankerStrategyComboBox)
                     .align(AlignX.LEFT)
-                    .comment("Стратегия второго этапа после поиска. В данной версии доступен только THRESHOLD")
+                    .comment("Стратегия второго этапа: THRESHOLD (порог) или MMR (диверсификация)")
             }
             row("Top K:") {
                 ragTopKField = JBTextField()
@@ -643,7 +664,27 @@ class SettingsConfigurable : Configurable {
                     .columns(6)
                     .comment("Порог релевантности (0..1). По умолчанию 0.25")
             }
+            row("MMR lambda:") {
+                ragMmrLambdaField = JBTextField()
+                cell(ragMmrLambdaField)
+                    .columns(6)
+                    .comment("Баланс релевантности/разнообразия [0..1]. По умолчанию 0.5")
+            }
+            row("MMR Top K:") {
+                ragMmrTopKField = JBTextField()
+                cell(ragMmrTopKField)
+                    .columns(6)
+                    .comment("Размер результата после MMR. По умолчанию равен Top K")
+            }
         }
+
+    }
+
+    private fun updateMmrVisibility() {
+        val strategy = (ragRerankerStrategyComboBox.selectedItem as? String).orEmpty()
+        val visible = strategy == "MMR"
+        ragMmrLambdaField.isEnabled = visible
+        ragMmrTopKField.isEnabled = visible
     }
 
     private fun createCodeSettingsPanel(): DialogPanel = panel {

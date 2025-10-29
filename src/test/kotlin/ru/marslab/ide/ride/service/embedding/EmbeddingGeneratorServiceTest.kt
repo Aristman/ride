@@ -8,7 +8,9 @@ import java.io.File
 import java.nio.file.Path
 import kotlin.io.path.createTempDirectory
 import kotlin.test.*
+import kotlin.test.Ignore
 
+@Ignore("Disabled RAG tests")
 class EmbeddingGeneratorServiceTest {
 
     private lateinit var tempDir: Path

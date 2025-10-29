@@ -142,6 +142,22 @@ class EmbeddingDatabaseService(private val dbPath: String) {
     }
 
     /**
+     * Получить эмбеддинг по chunkId
+     */
+    fun getEmbeddingByChunkId(chunkId: Long): List<Float>? {
+        val sql = "SELECT embedding FROM embeddings WHERE chunk_id = ?"
+        connection?.prepareStatement(sql)?.use { stmt ->
+            stmt.setLong(1, chunkId)
+            val rs = stmt.executeQuery()
+            if (rs.next()) {
+                val bytes = rs.getBytes("embedding")
+                return byteArrayToFloatList(bytes)
+            }
+        }
+        return null
+    }
+
+    /**
      * Сохранение чанка файла
      */
     fun saveFileChunk(chunk: FileChunkData): Long {

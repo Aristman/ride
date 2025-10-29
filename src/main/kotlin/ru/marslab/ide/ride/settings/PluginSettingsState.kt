@@ -28,7 +28,10 @@ data class PluginSettingsState(
     var ragTopK: Int = DEFAULT_RAG_TOP_K,
     var ragCandidateK: Int = DEFAULT_RAG_CANDIDATE_K,
     var ragSimilarityThreshold: Float = DEFAULT_RAG_SIMILARITY_THRESHOLD,
-    var ragRerankerStrategy: String = DEFAULT_RAG_RERANKER_STRATEGY
+    var ragRerankerStrategy: String = DEFAULT_RAG_RERANKER_STRATEGY,
+    // --- MMR parameters ---
+    var ragMmrLambda: Float = DEFAULT_RAG_MMR_LAMBDA,
+    var ragMmrTopK: Int = DEFAULT_RAG_MMR_TOP_K
 ) {
     companion object {
         const val DEFAULT_CHAT_FONT_SIZE = 9
@@ -48,5 +51,8 @@ data class PluginSettingsState(
         const val DEFAULT_RAG_CANDIDATE_K = 30
         const val DEFAULT_RAG_RERANKER_STRATEGY = "THRESHOLD"
         const val DEFAULT_RAG_SIMILARITY_THRESHOLD = 0.25f
+        // MMR defaults
+        const val DEFAULT_RAG_MMR_LAMBDA = 0.5f
+        const val DEFAULT_RAG_MMR_TOP_K = DEFAULT_RAG_TOP_K
     }
 }
