@@ -31,6 +31,7 @@ import ru.marslab.ide.ride.model.tool.StepInput
 import ru.marslab.ide.ride.model.tool.ToolPlanStep
 import ru.marslab.ide.ride.model.orchestrator.AgentType
 import ru.marslab.ide.ride.service.storage.ChatStorageService
+import ru.marslab.ide.ride.service.rag.RagEnrichmentService
 import ru.marslab.ide.ride.settings.PluginSettings
 import ru.marslab.ide.ride.ui.chat.JcefChatView
 import ru.marslab.ide.ride.util.TokenEstimator
@@ -414,12 +415,6 @@ class ChatService {
                     return@launch
                 }
 
-                // Формируем контекст
-                val context = ChatContext(
-                    project = project,
-                    history = getCurrentHistory().getMessages()
-                )
-
                 // Получаем параметры из настроек
                 val settings = service<PluginSettings>()
                 val llmParameters = LLMParameters(
@@ -427,12 +422,43 @@ class ChatService {
                     maxTokens = settings.maxTokens
                 )
 
+                // Выполняем RAG обогащение если включено
+                val ragService = service<RagEnrichmentService>()
+                val maxRagTokens = (settings.maxContextTokens * 0.3).toInt() // 30% от контекста на RAG
+                val ragResult = ragService.enrichQuery(userMessage, maxRagTokens)
+
+                // Обогащенный запрос с RAG контекстом
+                val enrichedRequest = if (ragResult != null && ragResult.chunks.isNotEmpty()) {
+                    logger.info("RAG: enriched query with ${ragResult.chunks.size} chunks, ${ragResult.totalTokens} tokens")
+                    ragService.createEnrichedPrompt(
+                        systemPrompt = "", // Системный промпт будет добавлен агентом
+                        userQuery = userMessage,
+                        ragResult = ragResult
+                    )
+                } else {
+                    userMessage
+                }
+
+                // Формируем контекст
+                val context = ChatContext(
+                    project = project,
+                    history = getCurrentHistory().getMessages()
+                )
+
                 // Создаем запрос к агенту
                 val agentRequest = AgentRequest(
-                    request = userMessage,
+                    request = enrichedRequest,
                     context = context,
                     parameters = llmParameters
                 )
+
+                // Сохраняем RAG метаданные для добавления в ответ
+                val ragMetadata = if (ragResult != null) mapOf(
+                    "ragEnabled" to true,
+                    "ragChunksCount" to ragResult.chunks.size,
+                    "ragTokens" to ragResult.totalTokens,
+                    "ragSources" to ragResult.chunks.map { "${it.filePath}:${it.startLine}-${it.endLine}" }
+                ) else emptyMap()
 
                 // Измеряем время выполнения запроса к LLM
                 val startTime = System.currentTimeMillis()
@@ -450,7 +476,7 @@ class ChatService {
                         }
 
                         // Создаем и сохраняем сообщение ассистента с учетом анализа неопределенности
-                        val metadata = agentResponse.metadata + mapOf(
+                        val baseMetadata = mapOf(
                             "isFinal" to agentResponse.isFinal,
                             "uncertainty" to (agentResponse.uncertainty ?: 0.0),
                             "responseTimeMs" to responseTime,
@@ -458,6 +484,9 @@ class ChatService {
                             "tokenUsage" to (tokenUsage ?: TokenUsage.EMPTY),
                             "formattedOutput" to (agentResponse.formattedOutput ?: Unit)
                         )
+
+                        // Добавляем RAG метаданные если было обогащение
+                        val metadata = agentResponse.metadata + baseMetadata + ragMetadata
 
                         // Проверяем наличие системного сообщения о сжатии/обрезке
                         val systemMessage = agentResponse.metadata["systemMessage"] as? String

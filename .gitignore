@@ -49,3 +49,5 @@ bin/
 /local.properties
 /plugin-repository/.env
 /.ride/mcp.json
+/.ride/
+/.run/

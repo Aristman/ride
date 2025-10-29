@@ -52,6 +52,7 @@ class SettingsConfigurable : Configurable {
     private lateinit var enableUncertaintyAnalysisCheck: JBCheckBox
     private lateinit var maxContextTokensField: JBTextField
     private lateinit var enableAutoSummarizationCheck: JBCheckBox
+    private lateinit var enableRagEnrichmentCheck: JBCheckBox
 
     private var panel: DialogPanel? = null
     private var initialApiKey: String = ""
@@ -155,7 +156,8 @@ class SettingsConfigurable : Configurable {
                 showProviderNameCheck.isSelected != settings.showProviderName ||
                 enableUncertaintyAnalysisCheck.isSelected != settings.enableUncertaintyAnalysis ||
                 maxContextTokensField.text != settings.maxContextTokens.toString() ||
-                enableAutoSummarizationCheck.isSelected != settings.enableAutoSummarization
+                enableAutoSummarizationCheck.isSelected != settings.enableAutoSummarization ||
+                enableRagEnrichmentCheck.isSelected != settings.enableRagEnrichment
     }
 
     override fun apply() {
@@ -242,6 +244,7 @@ class SettingsConfigurable : Configurable {
             settings.maxContextTokens = PluginSettingsState.DEFAULT_MAX_CONTEXT_TOKENS
         }
         settings.enableAutoSummarization = enableAutoSummarizationCheck.isSelected
+        settings.enableRagEnrichment = enableRagEnrichmentCheck.isSelected
 
         initialApiKey = apiKey
         apiKeyLoaded = true
@@ -305,6 +308,7 @@ class SettingsConfigurable : Configurable {
         enableUncertaintyAnalysisCheck.isSelected = settings.enableUncertaintyAnalysis
         maxContextTokensField.text = settings.maxContextTokens.toString()
         enableAutoSummarizationCheck.isSelected = settings.enableAutoSummarization
+        enableRagEnrichmentCheck.isSelected = settings.enableRagEnrichment
     }
 
     override fun disposeUIResources() {
@@ -570,6 +574,14 @@ class SettingsConfigurable : Configurable {
                 enableAutoSummarizationCheck = JBCheckBox("Включить автоматическое сжатие истории")
                 cell(enableAutoSummarizationCheck)
                     .comment("При превышении лимита токенов история будет автоматически сжиматься через SummarizerAgent")
+            }
+        }
+
+        group("RAG Enrichment") {
+            row {
+                enableRagEnrichmentCheck = JBCheckBox("Включить обогащение запросов через RAG")
+                cell(enableRagEnrichmentCheck)
+                    .comment("Добавлять релевантные фрагменты из индексированных файлов проекта в запросы к LLM")
             }
         }
     }

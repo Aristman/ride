@@ -229,6 +229,27 @@ class EmbeddingDatabaseService(private val dbPath: String) {
     }
 
     /**
+     * Получение пути файла по ID чанка
+     */
+    fun getFilePathByChunkId(chunkId: Long): String? {
+        val sql = """
+            SELECT f.file_path
+            FROM file_chunks c
+            JOIN indexed_files f ON c.file_id = f.id
+            WHERE c.id = ?
+        """.trimIndent()
+
+        connection?.prepareStatement(sql)?.use { stmt ->
+            stmt.setLong(1, chunkId)
+            val rs = stmt.executeQuery()
+            if (rs.next()) {
+                return rs.getString("file_path")
+            }
+        }
+        return null
+    }
+
+    /**
      * Удаление индекса для файла
      */
     fun deleteFileIndex(filePath: String) {

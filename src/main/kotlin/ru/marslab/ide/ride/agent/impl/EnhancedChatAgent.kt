@@ -104,8 +104,24 @@ class EnhancedChatAgent(
                 requestLower.contains("проект") ||
                 requestLower.contains("код")
 
-        // Длинный запрос обычно означает сложную задачу
-        val isLongRequest = request.length > 100
+        // Проверяем, является ли запрос RAG-обогащенным
+        val isRagEnriched = request.contains("=== Retrieved Context ===") ||
+                request.contains("Фрагмент из:") ||
+                request.contains("сходство:")
+
+        // Если это RAG обогащенный запрос без явных ключевых слов сложности - считаем простым
+        if (isRagEnriched && !hasComplexKeywords) {
+            logger.debug("RAG enriched query detected, treating as simple task")
+            return TaskComplexity(
+                isComplex = false,
+                estimatedSteps = 1,
+                taskType = TaskType.CODE_ANALYSIS,
+                requiresOrchestration = false
+            )
+        }
+
+        // Длинный запрос обычно означает сложную задачу (но не для RAG)
+        val isLongRequest = request.length > 100 && !isRagEnriched
 
         val isComplex = hasComplexKeywords && mentionsFiles || isLongRequest && mentionsFiles
 

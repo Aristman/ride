@@ -22,7 +22,8 @@ data class PluginSettingsState(
     var showProviderName: Boolean = false,
     var enableUncertaintyAnalysis: Boolean = true,
     var maxContextTokens: Int = DEFAULT_MAX_CONTEXT_TOKENS,
-    var enableAutoSummarization: Boolean = true
+    var enableAutoSummarization: Boolean = true,
+    var enableRagEnrichment: Boolean = false
 ) {
     companion object {
         const val DEFAULT_CHAT_FONT_SIZE = 9
