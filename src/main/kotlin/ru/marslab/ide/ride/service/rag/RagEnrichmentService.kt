@@ -83,7 +83,8 @@ class RagEnrichmentService {
                 findSimilarChunks(
                     projectPath,
                     queryEmbedding,
-                    candidateK
+                    candidateK,
+                    settings.ragSimilarityThreshold
                 )
             } catch (e: Exception) {
                 logger.error("Error finding similar chunks", e)
@@ -233,13 +234,14 @@ class RagEnrichmentService {
     private suspend fun findSimilarChunks(
         projectPath: String,
         queryEmbedding: List<Float>,
-        topK: Int
+        topK: Int,
+        minSimilarity: Float? = null
     ): List<Pair<Long, Float>> {
         val embeddingService = EmbeddingService.getInstance()
         val dbService = embeddingService.getDatabaseService(projectPath)
 
         return try {
-            val result = dbService?.findSimilarEmbeddings(queryEmbedding, topK) ?: emptyList()
+            val result = dbService?.findSimilarEmbeddings(queryEmbedding, topK, minSimilarity) ?: emptyList()
             dbService?.close()
             result
         } catch (e: Exception) {

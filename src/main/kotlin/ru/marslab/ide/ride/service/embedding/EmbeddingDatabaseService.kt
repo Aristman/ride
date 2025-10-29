@@ -191,12 +191,23 @@ class EmbeddingDatabaseService(private val dbPath: String) {
 
     /**
      * Поиск похожих эмбеддингов (косинусное сходство)
-     * Примечание: SQLite не поддерживает векторный поиск нативно,
-     * поэтому используется простой подход - загрузка всех эмбеддингов и вычисление в памяти
+     *
+     * Оптимизировано по памяти: поддерживается только topK кандидатов через min-heap.
+     * Можно задать минимальный порог схожести для раннего отсечения.
      */
-    fun findSimilarEmbeddings(queryEmbedding: List<Float>, topK: Int = 10): List<Pair<Long, Float>> {
-        val results = mutableListOf<Pair<Long, Float>>()
+    fun findSimilarEmbeddings(
+        queryEmbedding: List<Float>,
+        topK: Int = 10,
+        minSimilarity: Float? = null
+    ): List<Pair<Long, Float>> {
+        if (topK <= 0) return emptyList()
+
         val sql = "SELECT chunk_id, embedding FROM embeddings"
+
+        // Min-heap по схожести: на вершине минимальный элемент
+        val heap = java.util.PriorityQueue<Pair<Long, Float>>(topK) { a, b ->
+            a.second.compareTo(b.second)
+        }
 
         connection?.createStatement()?.use { stmt ->
             val rs = stmt.executeQuery(sql)
@@ -206,11 +217,23 @@ class EmbeddingDatabaseService(private val dbPath: String) {
                 val embedding = byteArrayToFloatList(embeddingBytes)
 
                 val similarity = cosineSimilarity(queryEmbedding, embedding)
-                results.add(chunkId to similarity)
+
+                // Отсечение по порогу (если задан)
+                if (minSimilarity != null && similarity < minSimilarity) continue
+
+                if (heap.size < topK) {
+                    heap.add(chunkId to similarity)
+                } else if (heap.peek().second < similarity) {
+                    heap.poll()
+                    heap.add(chunkId to similarity)
+                }
             }
         }
 
-        return results.sortedByDescending { it.second }.take(topK)
+        // Преобразуем heap в отсортированный по убыванию список
+        val result = ArrayList<Pair<Long, Float>>(heap.size)
+        while (heap.isNotEmpty()) result.add(heap.poll())
+        return result.sortedByDescending { it.second }
     }
 
     /**
