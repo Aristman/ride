@@ -227,6 +227,32 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
             state.enableRagEnrichment = value
         }
 
+    // --- RAG Reranker/Filter (THRESHOLD) ---
+    var ragTopK: Int
+        get() = state.ragTopK
+        set(value) {
+            state.ragTopK = value.coerceIn(1, 100)
+        }
+
+    var ragCandidateK: Int
+        get() = state.ragCandidateK
+        set(value) {
+            state.ragCandidateK = value.coerceIn(1, 200)
+        }
+
+    var ragSimilarityThreshold: Float
+        get() = state.ragSimilarityThreshold
+        set(value) {
+            state.ragSimilarityThreshold = value.coerceIn(0f, 1f)
+        }
+
+    var ragRerankerStrategy: String
+        get() = state.ragRerankerStrategy
+        set(value) {
+            // Поддерживаем только THRESHOLD на данном этапе
+            state.ragRerankerStrategy = if (value == "THRESHOLD") "THRESHOLD" else PluginSettingsState.DEFAULT_RAG_RERANKER_STRATEGY
+        }
+
     /**
      * Получает токен Hugging Face из безопасного хранилища
      */
@@ -313,6 +339,15 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
         state.huggingFaceModelId = normalizeHuggingFaceModelId(state.huggingFaceModelId)
         if (!AVAILABLE_PROVIDERS.containsKey(state.selectedProvider)) {
             state.selectedProvider = PluginSettingsState.DEFAULT_PROVIDER
+        }
+
+        // Normalize RAG params and set defaults if necessary
+        if (state.ragTopK <= 0) state.ragTopK = PluginSettingsState.DEFAULT_RAG_TOP_K
+        if (state.ragCandidateK < state.ragTopK) state.ragCandidateK = maxOf(PluginSettingsState.DEFAULT_RAG_CANDIDATE_K, state.ragTopK)
+        state.ragSimilarityThreshold = state.ragSimilarityThreshold.takeIf { it in 0f..1f }
+            ?: PluginSettingsState.DEFAULT_RAG_SIMILARITY_THRESHOLD
+        if (state.ragRerankerStrategy !in setOf("THRESHOLD")) {
+            state.ragRerankerStrategy = PluginSettingsState.DEFAULT_RAG_RERANKER_STRATEGY
         }
     }
 

@@ -53,6 +53,11 @@ class SettingsConfigurable : Configurable {
     private lateinit var maxContextTokensField: JBTextField
     private lateinit var enableAutoSummarizationCheck: JBCheckBox
     private lateinit var enableRagEnrichmentCheck: JBCheckBox
+    // RAG params UI
+    private lateinit var ragTopKField: JBTextField
+    private lateinit var ragCandidateKField: JBTextField
+    private lateinit var ragSimilarityThresholdField: JBTextField
+    private lateinit var ragRerankerStrategyComboBox: ComboBox<String>
 
     private var panel: DialogPanel? = null
     private var initialApiKey: String = ""
@@ -157,7 +162,11 @@ class SettingsConfigurable : Configurable {
                 enableUncertaintyAnalysisCheck.isSelected != settings.enableUncertaintyAnalysis ||
                 maxContextTokensField.text != settings.maxContextTokens.toString() ||
                 enableAutoSummarizationCheck.isSelected != settings.enableAutoSummarization ||
-                enableRagEnrichmentCheck.isSelected != settings.enableRagEnrichment
+                enableRagEnrichmentCheck.isSelected != settings.enableRagEnrichment ||
+                ragTopKField.text != settings.ragTopK.toString() ||
+                ragCandidateKField.text != settings.ragCandidateK.toString() ||
+                ragSimilarityThresholdField.text != settings.ragSimilarityThreshold.toString() ||
+                (ragRerankerStrategyComboBox.selectedItem as? String).orEmpty() != settings.ragRerankerStrategy
     }
 
     override fun apply() {
@@ -246,6 +255,27 @@ class SettingsConfigurable : Configurable {
         settings.enableAutoSummarization = enableAutoSummarizationCheck.isSelected
         settings.enableRagEnrichment = enableRagEnrichmentCheck.isSelected
 
+        // RAG parameters (with validation and coercion)
+        try {
+            val topK = ragTopKField.text.toInt()
+            settings.ragTopK = topK
+        } catch (_: NumberFormatException) {
+            settings.ragTopK = PluginSettingsState.DEFAULT_RAG_TOP_K
+        }
+        try {
+            val candidateK = ragCandidateKField.text.toInt()
+            settings.ragCandidateK = candidateK
+        } catch (_: NumberFormatException) {
+            settings.ragCandidateK = PluginSettingsState.DEFAULT_RAG_CANDIDATE_K
+        }
+        try {
+            val thr = ragSimilarityThresholdField.text.toFloat()
+            settings.ragSimilarityThreshold = thr
+        } catch (_: NumberFormatException) {
+            settings.ragSimilarityThreshold = PluginSettingsState.DEFAULT_RAG_SIMILARITY_THRESHOLD
+        }
+        settings.ragRerankerStrategy = (ragRerankerStrategyComboBox.selectedItem as? String) ?: PluginSettingsState.DEFAULT_RAG_RERANKER_STRATEGY
+
         initialApiKey = apiKey
         apiKeyLoaded = true
         initialHFToken = hfToken
@@ -309,6 +339,11 @@ class SettingsConfigurable : Configurable {
         maxContextTokensField.text = settings.maxContextTokens.toString()
         enableAutoSummarizationCheck.isSelected = settings.enableAutoSummarization
         enableRagEnrichmentCheck.isSelected = settings.enableRagEnrichment
+        // RAG params
+        ragTopKField.text = settings.ragTopK.toString()
+        ragCandidateKField.text = settings.ragCandidateK.toString()
+        ragSimilarityThresholdField.text = settings.ragSimilarityThreshold.toString()
+        ragRerankerStrategyComboBox.selectedItem = settings.ragRerankerStrategy
     }
 
     override fun disposeUIResources() {
@@ -582,6 +617,31 @@ class SettingsConfigurable : Configurable {
                 enableRagEnrichmentCheck = JBCheckBox("Включить обогащение запросов через RAG")
                 cell(enableRagEnrichmentCheck)
                     .comment("Добавлять релевантные фрагменты из индексированных файлов проекта в запросы к LLM")
+            }
+            row("Reranker Strategy:") {
+                // На данном этапе поддерживаем только THRESHOLD, но готовим селектор для будущего расширения
+                ragRerankerStrategyComboBox = ComboBox(arrayOf("THRESHOLD"))
+                cell(ragRerankerStrategyComboBox)
+                    .align(AlignX.LEFT)
+                    .comment("Стратегия второго этапа после поиска. В данной версии доступен только THRESHOLD")
+            }
+            row("Top K:") {
+                ragTopKField = JBTextField()
+                cell(ragTopKField)
+                    .columns(6)
+                    .comment("Сколько фрагментов оставить после фильтрации. По умолчанию 5")
+            }
+            row("Candidate K:") {
+                ragCandidateKField = JBTextField()
+                cell(ragCandidateKField)
+                    .columns(6)
+                    .comment("Сколько кандидатов запрашивать на первом этапе. По умолчанию 30")
+            }
+            row("Similarity threshold:") {
+                ragSimilarityThresholdField = JBTextField()
+                cell(ragSimilarityThresholdField)
+                    .columns(6)
+                    .comment("Порог релевантности (0..1). По умолчанию 0.25")
             }
         }
     }

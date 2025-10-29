@@ -26,9 +26,7 @@ class RagEnrichmentService {
     private val logger = Logger.getInstance(RagEnrichmentService::class.java)
     private val settings = service<PluginSettings>()
 
-    // Параметры RAG по умолчанию
-    private val defaultTopK = 5
-    private val defaultSimilarityThreshold = 0.25f
+    // Параметры берутся из PluginSettings (дефолты сконфигурированы в стейте)
 
     /**
      * Выполняет поиск релевантных фрагментов для запроса
@@ -80,11 +78,12 @@ class RagEnrichmentService {
             }
 
             // Выполняем поиск похожих фрагментов с обработкой ошибок
+            val candidateK = settings.ragCandidateK
             val similarChunks = try {
                 findSimilarChunks(
                     projectPath,
                     queryEmbedding,
-                    defaultTopK
+                    candidateK
                 )
             } catch (e: Exception) {
                 logger.error("Error finding similar chunks", e)
@@ -97,12 +96,13 @@ class RagEnrichmentService {
             }
 
             // Фильтруем по порогу схожести
+            val threshold = settings.ragSimilarityThreshold
             val filteredChunks = similarChunks.filter { (_, similarity) ->
-                similarity >= defaultSimilarityThreshold
+                similarity >= threshold
             }
 
             if (filteredChunks.isEmpty()) {
-                logger.info("No chunks found above similarity threshold $defaultSimilarityThreshold")
+                logger.info("No chunks found above similarity threshold $threshold")
                 return null
             }
 
@@ -142,6 +142,10 @@ class RagEnrichmentService {
 
             // Сортируем по релевантности и ограничиваем по токенам
             val sortedChunks = chunksWithContent.sortedByDescending { it.similarity }
+                .let { list ->
+                    val topK = settings.ragTopK
+                    if (list.size > topK) list.take(topK) else list
+                }
             val limitedChunks = try {
                 limitChunksByTokens(sortedChunks, maxTokens)
             } catch (e: Exception) {
@@ -155,7 +159,9 @@ class RagEnrichmentService {
                 return null
             }
 
-            logger.info("RAG enrichment successful: ${limitedChunks.size} chunks, ${estimateTokens(limitedChunks)} tokens")
+            logger.info(
+                "RAG enrichment successful: ${limitedChunks.size} chunks, ${estimateTokens(limitedChunks)} tokens (strategy=THRESHOLD, candidateK=$candidateK, topK=${settings.ragTopK}, threshold=$threshold)"
+            )
 
             RagResult(
                 chunks = limitedChunks,

@@ -23,7 +23,12 @@ data class PluginSettingsState(
     var enableUncertaintyAnalysis: Boolean = true,
     var maxContextTokens: Int = DEFAULT_MAX_CONTEXT_TOKENS,
     var enableAutoSummarization: Boolean = true,
-    var enableRagEnrichment: Boolean = false
+    var enableRagEnrichment: Boolean = false,
+    // --- RAG Reranker/Filter (THRESHOLD) ---
+    var ragTopK: Int = DEFAULT_RAG_TOP_K,
+    var ragCandidateK: Int = DEFAULT_RAG_CANDIDATE_K,
+    var ragSimilarityThreshold: Float = DEFAULT_RAG_SIMILARITY_THRESHOLD,
+    var ragRerankerStrategy: String = DEFAULT_RAG_RERANKER_STRATEGY
 ) {
     companion object {
         const val DEFAULT_CHAT_FONT_SIZE = 9
@@ -37,5 +42,11 @@ data class PluginSettingsState(
         const val DEFAULT_HUGGINGFACE_MODEL_ID = "deepseek-ai/DeepSeek-R1:fireworks-ai"
         const val DEFAULT_PROVIDER = "YandexGPT"
         const val DEFAULT_MAX_CONTEXT_TOKENS = 8000
+
+        // RAG defaults (согласованы в roadmap)
+        const val DEFAULT_RAG_TOP_K = 5
+        const val DEFAULT_RAG_CANDIDATE_K = 30
+        const val DEFAULT_RAG_RERANKER_STRATEGY = "THRESHOLD"
+        const val DEFAULT_RAG_SIMILARITY_THRESHOLD = 0.25f
     }
 }
