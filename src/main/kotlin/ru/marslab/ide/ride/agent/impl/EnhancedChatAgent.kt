@@ -288,6 +288,11 @@ class EnhancedChatAgent(
             registry.register(
                 LLMCodeReviewToolAgent(llmProvider)
             )
+
+            // File operations: открытие исходников по команде
+            registry.register(
+                OpenSourceFileToolAgent()
+            )
         }
     }
 }
