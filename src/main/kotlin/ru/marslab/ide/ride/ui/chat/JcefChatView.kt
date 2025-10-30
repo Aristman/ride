@@ -1,9 +1,9 @@
 package ru.marslab.ide.ride.ui.chat
 
 import com.intellij.ui.jcef.JBCefBrowser
+import com.intellij.ui.jcef.JBCefJSQuery
 import org.cef.browser.CefBrowser
 import org.cef.handler.CefLoadHandlerAdapter
-import ru.marslab.ide.ride.ui.bridge.SourceLinkBridge
 import java.awt.BorderLayout
 import javax.swing.JComponent
 import javax.swing.JPanel
@@ -15,7 +15,7 @@ import javax.swing.JPanel
  */
 class JcefChatView : JPanel(BorderLayout()) {
     private val browser = JBCefBrowser()
-    private val sourceLinkBridge = SourceLinkBridge()
+    private val openFileJsQuery: JBCefJSQuery = JBCefJSQuery.create(browser)
 
     // Флаг готовности страницы и очередь скриптов для выполнения после загрузки
     private var isReady: Boolean = false
@@ -40,15 +40,27 @@ class JcefChatView : JPanel(BorderLayout()) {
                     // Страница загружена — отмечаем готовность и выполняем очередь
                     isReady = true
                     flushPending()
-                    // Регистрируем JavaScript bridge для source links
-                    registerSourceLinkBridge()
+                    // Регистрируем JavaScript-функцию для открытия файлов из чата
+                    registerOpenFileHandler()
                 }
             }
 
         }, browser.cefBrowser)
 
-        // Регистрируем message router для source links
-        browser.jbCefClient.addMessageRouter(sourceLinkBridge, browser.cefBrowser)
+        // Обработчик вызова из JS: приходит строка команды open?path=...&startLine=...&endLine=...
+        openFileJsQuery.addHandler { command ->
+            try {
+                // Вызываем RagSourceLinkService для обработки команды
+                ru.marslab.ide.ride.service.rag.RagSourceLinkService.getInstance()
+                    .extractSourceInfo(command)?.let { openAction ->
+                        ru.marslab.ide.ride.service.rag.RagSourceLinkService.getInstance()
+                            .handleOpenAction(openAction)
+                    }
+            } catch (_: Exception) {
+                // no-op: ошибки логируются в сервисе
+            }
+            null
+        }
     }
 
     fun getComponent(): JComponent = this
@@ -158,22 +170,24 @@ class JcefChatView : JPanel(BorderLayout()) {
     }
 
     /**
-     * Регистрирует JavaScript bridge для source links
+     * Регистрирует JS-функцию window.openSourceFile, которая вызывает JBCefJSQuery
      */
-    fun registerSourceLinkBridge() {
-        exec(sourceLinkBridge.createBridgeJavaScript())
-    }
-
-    /**
-     * Обрабатывает клик по source link
-     */
-    fun handleSourceLinkClick(command: String) {
-        // Вызываем RagSourceLinkService для обработки команды
-        ru.marslab.ide.ride.service.rag.RagSourceLinkService.getInstance()
-            .extractSourceInfo(command)?.let { openAction ->
-                ru.marslab.ide.ride.service.rag.RagSourceLinkService.getInstance()
-                    .handleOpenAction(openAction)
-            }
+    private fun registerOpenFileHandler() {
+        val js = """
+            (function(){
+              // не перезаписываем, если уже есть
+              if (window.openSourceFile) return;
+              function __ride_escape(str){
+                return String(str).replace(/\\/g, "\\\\").replace(/'/g, "\\'")
+              }
+              window.openSourceFile = function(command){
+                try {
+                  ${openFileJsQuery.inject("' + __ride_escape(command) + '")}
+                } catch (e) { console.error(e); }
+              };
+            })();
+        """.trimIndent()
+        exec(js)
     }
 }
 private fun String.toJSString(): String =

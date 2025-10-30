@@ -40,30 +40,7 @@ object SourceLinkTemplate {
 
         html.appendLine("</div>")
 
-        // Добавляем JavaScript для обработки кликов
-        html.appendLine(createSourceLinksScript())
-
         return html.toString()
-    }
-
-    /**
-     * Создает JavaScript код для обработки source links
-     */
-    private fun createSourceLinksScript(): String {
-        return """
-        <script>
-        function openSourceFile(command) {
-            // Отправляем команду в Java через JCEF bridge
-            if (window.java && window.java.openSourceFile) {
-                window.java.openSourceFile(command);
-            } else {
-                console.log('Source link command:', command);
-                // Fallback: логируем для отладки
-                console.log('Bridge not available');
-            }
-        }
-        </script>
-        """.trimIndent()
     }
 
     /**
