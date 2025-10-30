@@ -425,7 +425,7 @@ class ChatService {
                 // Выполняем RAG обогащение если включено
                 val ragService = service<RagEnrichmentService>()
                 val maxRagTokens = (settings.maxContextTokens * 0.3).toInt() // 30% от контекста на RAG
-                val ragResult = ragService.enrichQuery(userMessage, maxRagTokens)
+                val ragResult = ragService.enrichQueryLegacy(userMessage, maxRagTokens)
 
                 // Обогащенный запрос с RAG контекстом
                 val enrichedRequest = if (ragResult != null && ragResult.chunks.isNotEmpty()) {

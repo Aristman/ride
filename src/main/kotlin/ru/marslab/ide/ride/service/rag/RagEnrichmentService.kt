@@ -11,6 +11,7 @@ import ru.marslab.ide.ride.service.embedding.EmbeddingDatabaseService
 import ru.marslab.ide.ride.service.embedding.EmbeddingService
 import ru.marslab.ide.ride.settings.PluginSettings
 import ru.marslab.ide.ride.util.TokenEstimator
+import ru.marslab.ide.ride.model.rag.RagResultWithSources
 import java.io.File
 import java.nio.file.Paths
 
@@ -33,9 +34,9 @@ class RagEnrichmentService {
      *
      * @param userQuery оригинальный запрос пользователя
      * @param maxTokens максимальное количество токенов для RAG контекста
-     * @return RAGResult с найденными фрагментами или null если RAG отключен
+     * @return RagResultWithSources с найденными фрагментами и source links или null если RAG отключен
      */
-    suspend fun enrichQuery(userQuery: String, maxTokens: Int = 4000): RagResult? {
+    suspend fun enrichQuery(userQuery: String, maxTokens: Int = 4000): RagResultWithSources? {
         if (!settings.enableRagEnrichment) {
             logger.debug("RAG enrichment is disabled")
             return null
@@ -187,10 +188,16 @@ class RagEnrichmentService {
                 "RAG enrichment successful: ${limitedChunks.size} chunks, ${estimateTokens(limitedChunks)} tokens (strategy=$strategy, candidateK=$candidateK, topK=$metaTopK, threshold=$threshold)"
             )
 
-            RagResult(
+            val ragResult = RagResult(
                 chunks = limitedChunks,
                 totalTokens = estimateTokens(limitedChunks),
                 query = userQuery
+            )
+
+            // Конвертируем в результат с source links если включено
+            return RagResultWithSources.fromRagResult(
+                ragResult = ragResult,
+                sourceLinksEnabled = settings.ragSourceLinksEnabled
             )
 
         } catch (e: TimeoutCancellationException) {
@@ -200,6 +207,34 @@ class RagEnrichmentService {
             logger.error("Unexpected error during RAG enrichment", e)
             null
         }
+    }
+
+    /**
+     * Обратная совместимость: возвращает базовый RagResult без source links
+     */
+    suspend fun enrichQueryLegacy(userQuery: String, maxTokens: Int = 4000): RagResult? {
+        return enrichQuery(userQuery, maxTokens)?.let { resultWithSources ->
+            RagResult(
+                chunks = resultWithSources.chunks.map { chunk ->
+                    RagChunk(
+                        content = chunk.content,
+                        filePath = chunk.source.path,
+                        startLine = chunk.source.startLine,
+                        endLine = chunk.source.endLine,
+                        similarity = chunk.similarity
+                    )
+                },
+                totalTokens = resultWithSources.totalTokens,
+                query = resultWithSources.query
+            )
+        }
+    }
+
+    /**
+     * Получает RAG результат с source links для UI отображения
+     */
+    suspend fun enrichQueryWithSources(userQuery: String, maxTokens: Int = 4000): RagResultWithSources? {
+        return enrichQuery(userQuery, maxTokens)
     }
 
     /**
