@@ -10,5 +10,5 @@ interface LlmReranker {
      * Возвращает список chunkId, отсортированный по релевантности убыв.
      * Если LLM недоступен — ожидается фоллбэк на исходный порядок.
      */
-    fun rerank(query: String, candidates: List<ChunkCandidate>, topN: Int): List<String>
+    suspend fun rerank(query: String, candidates: List<ChunkCandidate>, topN: Int): List<String>
 }
