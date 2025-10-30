@@ -7,5 +7,5 @@ interface ChunkEnricher {
     /**
      * Возвращает обогащённые чанки для дальнейшего включения в промпт.
      */
-    fun enrich(chunkIds: List<String>): List<EnrichedChunk>
+    suspend fun enrich(chunkIds: List<String>): List<EnrichedChunk>
 }
