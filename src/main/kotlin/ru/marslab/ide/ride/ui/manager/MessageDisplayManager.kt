@@ -9,6 +9,8 @@ import ru.marslab.ide.ride.service.ChatService
 import ru.marslab.ide.ride.settings.PluginSettings
 import ru.marslab.ide.ride.ui.config.ChatPanelConfig
 import ru.marslab.ide.ride.ui.renderer.ChatContentRenderer
+import ru.marslab.ide.ride.ui.templates.SourceLinkTemplate
+import ru.marslab.ide.ride.service.rag.RagSourceLinkService
 import java.util.*
 
 /**
@@ -146,6 +148,32 @@ class MessageDisplayManager(
         )
 
         htmlDocumentManager.appendHtml(messageHtml)
+
+        // Добавляем source links если они есть
+        val sourceLinksHtml = createSourceLinksHtml(message)
+        if (sourceLinksHtml.isNotEmpty()) {
+            htmlDocumentManager.appendHtml(sourceLinksHtml)
+        }
+    }
+
+    /**
+     * Создает HTML для source links если они есть в метаданных
+     */
+    private fun createSourceLinksHtml(message: Message): String {
+        val sourceLinkService = RagSourceLinkService.getInstance()
+        if (!sourceLinkService.isSourceLinksEnabled()) {
+            return ""
+        }
+
+        // Проверяем наличие RAG метаданных
+        val ragSources = message.metadata["ragSources"] as? List<*>
+        if (ragSources.isNullOrEmpty()) {
+            return ""
+        }
+
+        // TODO: В будущем здесь будет обработка RagResultWithSources
+        // Сейчас просто вернем пустую строку, так как метаданные еще не передаются
+        return ""
     }
 
     /**
