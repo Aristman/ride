@@ -3,6 +3,7 @@ package ru.marslab.ide.ride.ui.chat
 import com.intellij.ui.jcef.JBCefBrowser
 import org.cef.browser.CefBrowser
 import org.cef.handler.CefLoadHandlerAdapter
+import ru.marslab.ide.ride.ui.bridge.SourceLinkBridge
 import java.awt.BorderLayout
 import javax.swing.JComponent
 import javax.swing.JPanel
@@ -14,6 +15,7 @@ import javax.swing.JPanel
  */
 class JcefChatView : JPanel(BorderLayout()) {
     private val browser = JBCefBrowser()
+    private val sourceLinkBridge = SourceLinkBridge()
 
     // Флаг готовности страницы и очередь скриптов для выполнения после загрузки
     private var isReady: Boolean = false
@@ -38,10 +40,15 @@ class JcefChatView : JPanel(BorderLayout()) {
                     // Страница загружена — отмечаем готовность и выполняем очередь
                     isReady = true
                     flushPending()
+                    // Регистрируем JavaScript bridge для source links
+                    registerSourceLinkBridge()
                 }
             }
 
         }, browser.cefBrowser)
+
+        // Регистрируем message router для source links
+        browser.jbCefClient.addMessageRouter(sourceLinkBridge, browser.cefBrowser)
     }
 
     fun getComponent(): JComponent = this
@@ -148,6 +155,25 @@ class JcefChatView : JPanel(BorderLayout()) {
             browser.cefBrowser.executeJavaScript(s, browser.cefBrowser.url, 0)
         }
         pendingScripts.clear()
+    }
+
+    /**
+     * Регистрирует JavaScript bridge для source links
+     */
+    fun registerSourceLinkBridge() {
+        exec(sourceLinkBridge.createBridgeJavaScript())
+    }
+
+    /**
+     * Обрабатывает клик по source link
+     */
+    fun handleSourceLinkClick(command: String) {
+        // Вызываем RagSourceLinkService для обработки команды
+        ru.marslab.ide.ride.service.rag.RagSourceLinkService.getInstance()
+            .extractSourceInfo(command)?.let { openAction ->
+                ru.marslab.ide.ride.service.rag.RagSourceLinkService.getInstance()
+                    .handleOpenAction(openAction)
+            }
     }
 }
 private fun String.toJSString(): String =

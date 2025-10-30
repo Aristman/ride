@@ -425,15 +425,16 @@ class ChatService {
                 // Выполняем RAG обогащение если включено
                 val ragService = service<RagEnrichmentService>()
                 val maxRagTokens = (settings.maxContextTokens * 0.3).toInt() // 30% от контекста на RAG
-                val ragResult = ragService.enrichQueryLegacy(userMessage, maxRagTokens)
+                val ragResultLegacy = ragService.enrichQueryLegacy(userMessage, maxRagTokens)
+                val ragResultWithSources = ragService.enrichQueryWithSources(userMessage, maxRagTokens)
 
                 // Обогащенный запрос с RAG контекстом
-                val enrichedRequest = if (ragResult != null && ragResult.chunks.isNotEmpty()) {
-                    logger.info("RAG: enriched query with ${ragResult.chunks.size} chunks, ${ragResult.totalTokens} tokens")
+                val enrichedRequest = if (ragResultLegacy != null && ragResultLegacy.chunks.isNotEmpty()) {
+                    logger.info("RAG: enriched query with ${ragResultLegacy.chunks.size} chunks, ${ragResultLegacy.totalTokens} tokens")
                     ragService.createEnrichedPrompt(
                         systemPrompt = "", // Системный промпт будет добавлен агентом
                         userQuery = userMessage,
-                        ragResult = ragResult
+                        ragResult = ragResultLegacy
                     )
                 } else {
                     userMessage
@@ -453,12 +454,24 @@ class ChatService {
                 )
 
                 // Сохраняем RAG метаданные для добавления в ответ
-                val ragMetadata = if (ragResult != null) mapOf(
-                    "ragEnabled" to true,
-                    "ragChunksCount" to ragResult.chunks.size,
-                    "ragTokens" to ragResult.totalTokens,
-                    "ragSources" to ragResult.chunks.map { "${it.filePath}:${it.startLine}-${it.endLine}" }
-                ) else emptyMap()
+                val ragMetadata = if (ragResultLegacy != null) {
+                    val baseMetadata = mapOf(
+                        "ragEnabled" to true,
+                        "ragChunksCount" to ragResultLegacy.chunks.size,
+                        "ragTokens" to ragResultLegacy.totalTokens,
+                        "ragSources" to ragResultLegacy.chunks.map { "${it.filePath}:${it.startLine}-${it.endLine}" }
+                    )
+
+                    // Добавляем source links если включены
+                    if (ragResultWithSources != null && ragResultWithSources.sourceLinksEnabled) {
+                        baseMetadata + mapOf(
+                            "ragSourceLinksEnabled" to true,
+                            "ragSourceLinksChunks" to ragResultWithSources.chunks
+                        )
+                    } else {
+                        baseMetadata
+                    }
+                } else emptyMap()
 
                 // Измеряем время выполнения запроса к LLM
                 val startTime = System.currentTimeMillis()

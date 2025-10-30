@@ -165,15 +165,36 @@ class MessageDisplayManager(
             return ""
         }
 
-        // Проверяем наличие RAG метаданных
-        val ragSources = message.metadata["ragSources"] as? List<*>
-        if (ragSources.isNullOrEmpty()) {
+        // Проверяем наличие RAG метаданных с source links
+        val ragSourceLinksEnabled = message.metadata["ragSourceLinksEnabled"] as? Boolean ?: false
+        if (!ragSourceLinksEnabled) {
             return ""
         }
 
-        // TODO: В будущем здесь будет обработка RagResultWithSources
-        // Сейчас просто вернем пустую строку, так как метаданные еще не передаются
-        return ""
+        val ragSourceLinksChunks = message.metadata["ragSourceLinksChunks"] as? List<*>
+        if (ragSourceLinksChunks.isNullOrEmpty()) {
+            return ""
+        }
+
+        try {
+            // Конвертируем в List<RagChunkWithSource>
+            val chunksWithSources = ragSourceLinksChunks.mapNotNull { chunk ->
+                // Проверяем, что объект имеет нужные поля
+                if (chunk is ru.marslab.ide.ride.model.rag.RagChunkWithSource) {
+                    chunk
+                } else null
+            }
+
+            if (chunksWithSources.isEmpty()) {
+                return ""
+            }
+
+            // Создаем HTML для source links
+            return SourceLinkTemplate.createSourceLinksHtml(chunksWithSources)
+        } catch (e: Exception) {
+            // В случае ошибки логируем и возвращаем пустую строку
+            return ""
+        }
     }
 
     /**

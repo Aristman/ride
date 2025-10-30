@@ -39,6 +39,82 @@ object CommonStyles {
     }
 
     /**
+     * Загружает CSS стили для source links
+     */
+    fun loadSourceLinksCss(): String {
+        return """
+        .source-links-container {
+            margin: 12px 0;
+            padding: 12px;
+            background: rgba(109, 143, 216, 0.1);
+            border: 1px solid rgba(109, 143, 216, 0.3);
+            border-radius: 8px;
+            font-family: var(--font-family, JetBrains Mono, Consolas, Monaco, monospace);
+            font-size: var(--font-size, 12px);
+        }
+
+        .source-links-header {
+            font-weight: bold;
+            color: var(--text-primary, #e6e6e6);
+            margin-bottom: 8px;
+            font-size: 12px;
+        }
+
+        .source-link-item {
+            display: flex;
+            align-items: center;
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(109, 143, 216, 0.1);
+        }
+
+        .source-link-item:last-child {
+            border-bottom: none;
+        }
+
+        .source-link-index {
+            color: var(--text-secondary, #9aa0a6);
+            font-size: 11px;
+            width: 20px;
+            flex-shrink: 0;
+        }
+
+        .source-link-content {
+            flex-grow: 1;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .source-link-file {
+            color: var(--text-primary, #e6e6e6);
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        .source-link-lines {
+            color: var(--text-secondary, #9aa0a6);
+            font-size: 10px;
+        }
+
+        .source-link-action {
+            color: #6d8fd8;
+            font-size: 11px;
+            cursor: pointer;
+            padding: 2px 6px;
+            border-radius: 4px;
+            text-decoration: none;
+            white-space: nowrap;
+            transition: background-color 0.2s ease;
+        }
+
+        .source-link-action:hover {
+            background-color: rgba(109, 143, 216, 0.2);
+        }
+        """.trimIndent()
+    }
+
+    /**
      * Возвращает объединенные стили для JCEF режима
      */
     fun getJcefStyles(): String {
@@ -46,6 +122,8 @@ object CommonStyles {
             ${loadCommonCss()}
 
             ${loadAgentOutputCss()}
+
+            ${loadSourceLinksCss()}
         """.trimIndent()
     }
 

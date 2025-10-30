@@ -31,7 +31,7 @@ object SourceLinkTemplate {
             html.appendLine("<div class=\"${ChatPanelConfig.CSS.SOURCE_LINK_CONTENT}\">")
             html.appendLine("<div class=\"${ChatPanelConfig.CSS.SOURCE_LINK_FILE}\">$fileName</div>")
             html.appendLine("<div class=\"${ChatPanelConfig.CSS.SOURCE_LINK_LINES}\">$lineRange</div>")
-            html.appendLine("<div class=\"${ChatPanelConfig.CSS.SOURCE_LINK_ACTION}\" onclick=\"openSourceFile('${chunk.openAction.command}')\" title=\"Открыть файл\">")
+            html.appendLine("<div class=\"${ChatPanelConfig.CSS.SOURCE_LINK_ACTION}\" onclick=\"window.openSourceFile('${chunk.openAction.command}')\" title=\"Открыть файл\">")
             html.appendLine("🔗 Открыть")
             html.appendLine("</div>")
             html.appendLine("</div>")
@@ -54,10 +54,12 @@ object SourceLinkTemplate {
         <script>
         function openSourceFile(command) {
             // Отправляем команду в Java через JCEF bridge
-            if (window.java) {
+            if (window.java && window.java.openSourceFile) {
                 window.java.openSourceFile(command);
             } else {
                 console.log('Source link command:', command);
+                // Fallback: логируем для отладки
+                console.log('Bridge not available');
             }
         }
         </script>
