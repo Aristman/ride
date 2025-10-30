@@ -50,9 +50,14 @@ data class PluginSettingsState(
 
         // RAG defaults (согласованы в roadmap)
         const val DEFAULT_RAG_TOP_K = 5
-        const val DEFAULT_RAG_CANDIDATE_K = 30
+        const val DEFAULT_RAG_CANDIDATE_K = 60
         const val DEFAULT_RAG_RERANKER_STRATEGY = "THRESHOLD"
         const val DEFAULT_RAG_SIMILARITY_THRESHOLD = 0.25f
+        // RAG ranges (Phase 1 strict validation)
+        const val RAG_TOP_K_MIN = 1
+        const val RAG_TOP_K_MAX = 10
+        const val RAG_CANDIDATE_K_MIN = 30
+        const val RAG_CANDIDATE_K_MAX = 100
         // MMR defaults
         const val DEFAULT_RAG_MMR_LAMBDA = 0.5f
         const val DEFAULT_RAG_MMR_TOP_K = DEFAULT_RAG_TOP_K

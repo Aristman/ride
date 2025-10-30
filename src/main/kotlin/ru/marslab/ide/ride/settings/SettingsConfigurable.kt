@@ -656,13 +656,13 @@ class SettingsConfigurable : Configurable {
                 ragTopKField = JBTextField()
                 cell(ragTopKField)
                     .columns(6)
-                    .comment("Сколько фрагментов оставить после фильтрации. По умолчанию 5")
+                    .comment("Сколько фрагментов оставить после фильтрации. Диапазон: 1–10. По умолчанию 5")
             }
             row("Candidate K:") {
                 ragCandidateKField = JBTextField()
                 cell(ragCandidateKField)
                     .columns(6)
-                    .comment("Сколько кандидатов запрашивать на первом этапе. По умолчанию 30")
+                    .comment("Сколько кандидатов запрашивать на первом этапе. Диапазон: 30–100. По умолчанию 60")
             }
             row("Similarity threshold:") {
                 ragSimilarityThresholdField = JBTextField()
