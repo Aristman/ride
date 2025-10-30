@@ -2,6 +2,7 @@ package ru.marslab.ide.ride.mcp
 
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
+import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.diagnostic.Logger
 import java.io.File
 import java.net.URI
@@ -271,8 +272,9 @@ class MCPServerManager {
         return try {
             logger.info("Starting MCP Server: ${serverBinary.absolutePath}")
 
-            // Создать конфигурацию если не существует
-            createDefaultConfig()
+            // Создать конфигурацию если не существует (base_dir = корень текущего проекта)
+            val baseDir = resolveBaseDir()
+            createDefaultConfig(baseDir)
 
             // Запустить процесс
             serverProcess = ProcessBuilder()
@@ -323,22 +325,41 @@ class MCPServerManager {
     /**
      * Создать конфигурацию по умолчанию
      */
-    private fun createDefaultConfig(): File {
+    private fun createDefaultConfig(baseDirOverride: String? = null): File {
         val configFile = File(getServerDirectory(), "config.toml")
 
+        val effectiveBaseDir = baseDirOverride ?: "./data"
+
         if (!configFile.exists()) {
-            val defaultConfig = """
-                base_dir = "./data"
+            val config = """
+                base_dir = "${effectiveBaseDir}"
                 max_file_size = 10485760
                 allowed_extensions = []
                 blocked_paths = ["/etc", "/sys", "/proc", "C:\\Windows"]
                 verbose = false
             """.trimIndent()
 
-            configFile.writeText(defaultConfig)
+            configFile.writeText(config)
+        } else if (baseDirOverride != null) {
+            // Перезаписываем base_dir при наличии проекта
+            val lines = configFile.readLines()
+            val updated = lines.map { line ->
+                if (line.trim().startsWith("base_dir")) {
+                    "base_dir = \"${effectiveBaseDir}\""
+                } else line
+            }
+            configFile.writeText(updated.joinToString("\n"))
         }
 
         return configFile
+    }
+
+    private fun resolveBaseDir(): String? {
+        return try {
+            ProjectManager.getInstance().openProjects.firstOrNull()?.basePath
+        } catch (_: Exception) {
+            null
+        }
     }
 
     /**
@@ -353,6 +374,37 @@ class MCPServerManager {
         val serverDir = File(pluginDir, "mcp-server")
         serverDir.mkdirs()
         return serverDir
+    }
+
+    /**
+     * Прочитать текущий base_dir из config.toml
+     */
+    fun getConfiguredBaseDir(): String? {
+        return try {
+            val cfg = File(getServerDirectory(), "config.toml")
+            if (!cfg.exists()) return null
+            cfg.useLines { lines ->
+                lines.firstOrNull { it.trim().startsWith("base_dir") }
+            }?.substringAfter("=")?.trim()?.trim('"')
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Обеспечить установленный base_dir. Если сервер запущен и base_dir отличается — перезапускаем.
+     */
+    fun ensureBaseDir(baseDir: String?): Boolean {
+        if (baseDir.isNullOrBlank()) return false
+        val current = getConfiguredBaseDir()
+        if (current == baseDir) return true
+        // Перезаписываем конфиг
+        createDefaultConfig(baseDir)
+        // Если сервер запущен — перезапускаем
+        if (isServerRunning()) {
+            stopServer()
+        }
+        return ensureServerRunning()
     }
 
     private fun getServerBinaryName(): String {

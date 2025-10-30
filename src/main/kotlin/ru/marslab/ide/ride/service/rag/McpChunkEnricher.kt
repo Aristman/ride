@@ -1,7 +1,9 @@
 package ru.marslab.ide.ride.service.rag
 
 import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.project.ProjectManager
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import ru.marslab.ide.ride.domain.rag.ChunkEnricher
 import ru.marslab.ide.ride.domain.rag.EnrichedChunk
@@ -37,13 +39,17 @@ class McpChunkEnricher(
                     continue
                 }
 
-                val fileContent = fileCache.getOrPut(path) {
-                    try {
-                        runBlockingRead(path)
-                    } catch (t: Throwable) {
-                        logger.warn("MCP Enricher: failed to read file '$path': ${t.message}")
-                        ""
-                    }
+                val (baseForFile, relPath) = resolveBaseAndRel(path)
+                // Обеспечиваем base_dir для данного файла (best-effort)
+                if (baseForFile.isNotBlank()) {
+                    runCatching { MCPServerManager.getInstance().ensureBaseDir(baseForFile) }
+                }
+                val effectiveBase = baseForFile
+                val relToUse = relPath
+
+                val cacheKey = "$effectiveBase::$relToUse"
+                val fileContent = fileCache.getOrPut(cacheKey) {
+                    readWithRetry(effectiveBase, relToUse)
                 }
 
                 if (fileContent.isBlank()) {
@@ -52,7 +58,7 @@ class McpChunkEnricher(
                         EnrichedChunk(
                             chunkId = chunkId,
                             content = baseContent,
-                            filePath = path,
+                            filePath = relToUse,
                             anchors = emptyList()
                         )
                     )
@@ -64,7 +70,7 @@ class McpChunkEnricher(
                     EnrichedChunk(
                         chunkId = chunkId,
                         content = enriched,
-                        filePath = path,
+                        filePath = relToUse,
                         anchors = anchors
                     )
                 )
@@ -77,6 +83,64 @@ class McpChunkEnricher(
 
     private suspend fun runBlockingRead(path: String): String {
         return readFileFn(path)
+    }
+
+    private suspend fun readWithRetry(baseDir: String, relPath: String): String {
+        return try {
+            runBlockingRead(relPath)
+        } catch (t: Throwable) {
+            logger.warn("MCP Enricher: first read failed for '$relPath' (base=$baseDir): ${t.message}")
+            // Возможная гонка после смены base_dir — дождемся перезапуска и повторим
+            delay(300)
+            if (baseDir.isNotBlank()) {
+                runCatching { MCPServerManager.getInstance().ensureBaseDir(baseDir) }
+                waitForServerReady()
+            }
+            try {
+                runBlockingRead(relPath)
+            } catch (t2: Throwable) {
+                logger.warn("MCP Enricher: second read failed for '$relPath' (base=$baseDir): ${t2.message}")
+                ""
+            }
+        }
+    }
+
+    private suspend fun waitForServerReady(maxAttempts: Int = 10, delayMs: Long = 150) {
+        val client = mcpClientProvider()
+        repeat(maxAttempts) { attempt ->
+            runCatching { client.health() }
+                .onSuccess { return }
+            delay(delayMs)
+        }
+    }
+
+    private fun resolveBaseAndRel(originalPath: String): Pair<String, String> {
+        val normalized = originalPath.replace('\\', '/')
+        val isAbsolute = normalized.startsWith("/") || normalized.matches(Regex("^[A-Za-z]:/.*"))
+        if (!isAbsolute) {
+            // Для относительных путей не трогаем base_dir и не обращаемся к IDE API
+            return "" to normalized.trimStart('/')
+        }
+        val openBases = runCatching {
+            ProjectManager.getInstance().openProjects.mapNotNull { it.basePath?.replace('\\', '/') }
+        }.getOrElse { emptyList() }
+        val bestBase = openBases
+            .filter { normalized.startsWith(it.trimEnd('/')) }
+            .maxByOrNull { it.length }
+        if (bestBase != null) {
+            val baseNorm = bestBase.trimEnd('/')
+            val rel = normalized.removePrefix(baseNorm).trimStart('/')
+            return bestBase to rel
+        }
+        // Фоллбэк: нет совпадений среди открытых проектов — используем директорию файла как base_dir
+        val lastSlash = normalized.lastIndexOf('/')
+        return if (lastSlash > 0) {
+            val base = normalized.substring(0, lastSlash)
+            val rel = normalized.substring(lastSlash + 1)
+            base to rel
+        } else {
+            "" to normalized
+        }
     }
 
     private fun extractContextWithAnchors(snippet: String, fileContent: String, contextLines: Int): Pair<String, List<IntRange>> {
