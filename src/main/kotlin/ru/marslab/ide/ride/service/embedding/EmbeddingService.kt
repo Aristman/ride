@@ -4,6 +4,7 @@ import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.ProjectManager
+import org.jetbrains.annotations.TestOnly
 import ru.marslab.ide.ride.integration.llm.impl.OllamaConfig
 import ru.marslab.ide.ride.integration.llm.impl.OllamaEmbeddingProvider
 import ru.marslab.ide.ride.integration.llm.impl.OllamaEmbeddingModel
@@ -24,6 +25,11 @@ class EmbeddingService {
     private val ollamaConfig = OllamaConfig()
     private val ollamaProvider = OllamaEmbeddingProvider(ollamaConfig)
 
+    // Тестовый хук для подмены генерации эмбеддингов (без реального LLM)
+    // Если установлен, generateEmbedding будет использовать его вместо Ollama
+    @Volatile
+    private var testEmbeddingGenerator: (suspend (String) -> List<Float>)? = null
+
     companion object {
         fun getInstance(): EmbeddingService = service()
     }
@@ -41,6 +47,10 @@ class EmbeddingService {
         }
 
         return try {
+            // Если задан тестовый генератор, используем его и не обращаемся к Ollama
+            testEmbeddingGenerator?.let { mockGen ->
+                return mockGen.invoke(text.trim())
+            }
             // Проверяем доступность Ollama с таймаутом
             if (!ollamaProvider.isAvailable()) {
                 logger.warn("Ollama service is not available for embedding generation")
@@ -156,7 +166,8 @@ class EmbeddingService {
      * @return true если Ollama доступен
      */
     fun isOllamaAvailable(): Boolean {
-        return ollamaProvider.isAvailable()
+        // Если используется тестовый генератор — считаем доступным
+        return testEmbeddingGenerator != null || ollamaProvider.isAvailable()
     }
 
     // Приватные методы
@@ -169,5 +180,11 @@ class EmbeddingService {
             embeddingsDir.mkdirs()
         }
         return File(embeddingsDir, "embeddings.db").absolutePath
+    }
+
+    // --- Test hooks ---
+    @TestOnly
+    fun setTestEmbeddingGenerator(generator: (suspend (String) -> List<Float>)?) {
+        this.testEmbeddingGenerator = generator
     }
 }

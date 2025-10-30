@@ -227,6 +227,48 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
             state.enableRagEnrichment = value
         }
 
+    // --- RAG Reranker/Filter (THRESHOLD) ---
+    var ragTopK: Int
+        get() = state.ragTopK
+        set(value) {
+            state.ragTopK = value.coerceIn(1, 100)
+        }
+
+    var ragCandidateK: Int
+        get() = state.ragCandidateK
+        set(value) {
+            state.ragCandidateK = value.coerceIn(1, 200)
+        }
+
+    var ragSimilarityThreshold: Float
+        get() = state.ragSimilarityThreshold
+        set(value) {
+            state.ragSimilarityThreshold = value.coerceIn(0f, 1f)
+        }
+
+    var ragRerankerStrategy: String
+        get() = state.ragRerankerStrategy
+        set(value) {
+            // Поддерживаем THRESHOLD и MMR
+            state.ragRerankerStrategy = when (value) {
+                "THRESHOLD", "MMR" -> value
+                else -> PluginSettingsState.DEFAULT_RAG_RERANKER_STRATEGY
+            }
+        }
+
+    // --- MMR parameters ---
+    var ragMmrLambda: Float
+        get() = state.ragMmrLambda
+        set(value) {
+            state.ragMmrLambda = value.coerceIn(0f, 1f)
+        }
+
+    var ragMmrTopK: Int
+        get() = state.ragMmrTopK
+        set(value) {
+            state.ragMmrTopK = value.coerceIn(1, 200)
+        }
+
     /**
      * Получает токен Hugging Face из безопасного хранилища
      */
@@ -314,6 +356,22 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
         if (!AVAILABLE_PROVIDERS.containsKey(state.selectedProvider)) {
             state.selectedProvider = PluginSettingsState.DEFAULT_PROVIDER
         }
+
+        // Normalize RAG params and set defaults if necessary
+        if (state.ragTopK <= 0) state.ragTopK = PluginSettingsState.DEFAULT_RAG_TOP_K
+        if (state.ragCandidateK < state.ragTopK) state.ragCandidateK = maxOf(PluginSettingsState.DEFAULT_RAG_CANDIDATE_K, state.ragTopK)
+        state.ragSimilarityThreshold = state.ragSimilarityThreshold.takeIf { it in 0f..1f }
+            ?: PluginSettingsState.DEFAULT_RAG_SIMILARITY_THRESHOLD
+        if (state.ragRerankerStrategy !in setOf("THRESHOLD", "MMR")) {
+            state.ragRerankerStrategy = PluginSettingsState.DEFAULT_RAG_RERANKER_STRATEGY
+        }
+
+        // Normalize MMR
+        state.ragMmrLambda = state.ragMmrLambda.takeIf { it in 0f..1f } ?: PluginSettingsState.DEFAULT_RAG_MMR_LAMBDA
+        if (state.ragMmrTopK <= 0) state.ragMmrTopK = PluginSettingsState.DEFAULT_RAG_MMR_TOP_K
+        // ragMmrTopK должен быть не меньше ragTopK и не больше candidateK
+        if (state.ragMmrTopK < state.ragTopK) state.ragMmrTopK = state.ragTopK
+        if (state.ragMmrTopK > state.ragCandidateK) state.ragMmrTopK = state.ragCandidateK
     }
 
     private fun normalizeColor(value: String?, default: String): String {
