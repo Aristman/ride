@@ -137,6 +137,10 @@
                     class="ru.marslab.ide.ride.actions.OpenSettingsAction"
                     text="Settings"
                     description="Open Ride settings"/>
+            <action id="Ride.OpenDevToolsAction"
+                    class="ru.marslab.ide.ride.actions.OpenDevToolsAction"
+                    text="DevTools"
+                    description="Open JCEF DevTools"/>
         </group>
     </actions>
 </idea-plugin>

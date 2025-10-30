@@ -65,16 +65,23 @@ class JcefChatView : JPanel(BorderLayout()) {
 
     fun getComponent(): JComponent = this
 
+    /**
+     * Открывает DevTools для встроенного JCEF браузера
+     */
+    fun openDevTools() {
+        runCatching { browser.openDevtools() }
+    }
+
     fun clear() {
         exec("document.getElementById('messages').innerHTML = '';")
     }
 
     fun setBody(html: String) {
-        exec("window.__ride_setBody && window.__ride_setBody(${html.toJSString()});")
+        exec("window.__ride_setBody && window.__ride_setBody(${html.toJSString()}); window.__ride_enhanceAnchors && window.__ride_enhanceAnchors();")
     }
 
     fun appendHtml(html: String) {
-        exec("window.__ride_appendHtml && window.__ride_appendHtml(${html.toJSString()});")
+        exec("window.__ride_appendHtml && window.__ride_appendHtml(${html.toJSString()}); window.__ride_enhanceAnchors && window.__ride_enhanceAnchors();")
     }
 
     fun setTheme(tokens: Map<String, String>) {
@@ -175,21 +182,69 @@ class JcefChatView : JPanel(BorderLayout()) {
     private fun registerOpenFileHandler() {
         val js = """
             (function(){
-              // не перезаписываем, если уже есть
-              if (window.openSourceFile) return;
-              function __ride_escape(str){
-                return String(str).replace(/\\/g, "\\\\").replace(/'/g, "\\'")
+              // Определяем функцию, если её ещё нет
+              if (!window.openSourceFile) {
+                window.openSourceFile = function(command){
+                  try {
+                    ${openFileJsQuery.inject("command")}
+                  } catch (e) { console.error('[RIDE] openSourceFile error', e); }
+                };
               }
-              window.openSourceFile = function(command){
+
+              // Делегированный обработчик кликов по атрибуту data-open-command
+              document.addEventListener('click', function(e){
+                var el = e.target;
+                // Ищем ближайший элемент с data-open-command
+                while (el && el !== document) {
+                  try {
+                    if (el.getAttribute && el.getAttribute('data-open-command')) {
+                      var cmd = el.getAttribute('data-open-command');
+                      if (cmd) {
+                        console.debug('[RIDE] open link via delegate:', cmd);
+                        if (typeof window.openSourceFile === 'function') {
+                          window.openSourceFile(cmd);
+                        } else {
+                          console.warn('[RIDE] window.openSourceFile is not defined');
+                        }
+                        e.preventDefault();
+                        e.stopImmediatePropagation();
+                        e.stopPropagation();
+                        return false;
+                      }
+                    }
+                  } catch (err) { console.error('[RIDE] delegate click error', err); }
+                  el = el.parentNode;
+                }
+              }, true);
+              console.log('[RIDE] Source link handler initialized');
+
+              // Функция постпроцессинга якорных ссылок: дополняет <a href="path.ext"> атрибутами data-open-command/onclick
+              window.__ride_enhanceAnchors = function(){
                 try {
-                  ${openFileJsQuery.inject("' + __ride_escape(command) + '")}
-                } catch (e) { console.error(e); }
+                  var anchors = document.querySelectorAll('.msg.assistant .content a[href]');
+                  var fileExt = /(\.dart|\.kt|\.java|\.kts|\.md|\.markdown|\.yaml|\.yml|\.xml|\.gradle|\.rs|\.py|\.ts|\.tsx|\.js|\.jsx|\.go|\.rb|\.c|\.cpp|\.h|\.hpp|\.cs|\.json)$/i;
+                  anchors.forEach(function(a){
+                    var href = a.getAttribute('href') || '';
+                    var isExternal = /^(https?:|mailto:)/i.test(href);
+                    if (isExternal) return;
+                    if (!fileExt.test(href)) return;
+                    var cmd = 'open?path=' + href + '&startLine=1&endLine=1';
+                    a.setAttribute('href', '#');
+                    a.setAttribute('data-open-command', cmd);
+                    a.setAttribute('data-tooltip', href);
+                    a.setAttribute('onclick', "window.openSourceFile('"+cmd+"'); return false;");
+                  });
+                } catch (e) { console.error('[RIDE] enhanceAnchors error', e); }
               };
+
+              // Запускаем постпроцессор сразу после инициализации
+              window.__ride_enhanceAnchors();
             })();
         """.trimIndent()
         exec(js)
     }
 }
+
 private fun String.toJSString(): String =
     this.replace("\\", "\\\\")
         .replace("\n", "\\n")

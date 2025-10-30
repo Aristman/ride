@@ -31,7 +31,7 @@ object SourceLinkTemplate {
             html.appendLine("<div class=\"${ChatPanelConfig.CSS.SOURCE_LINK_CONTENT}\">")
             html.appendLine("<div class=\"${ChatPanelConfig.CSS.SOURCE_LINK_FILE}\">$fileName</div>")
             html.appendLine("<div class=\"${ChatPanelConfig.CSS.SOURCE_LINK_LINES}\">$lineRange</div>")
-            html.appendLine("<div class=\"${ChatPanelConfig.CSS.SOURCE_LINK_ACTION}\" onclick=\"window.openSourceFile('${chunk.openAction.command}')\" title=\"Открыть файл\">")
+            html.appendLine("<div class=\"${ChatPanelConfig.CSS.SOURCE_LINK_ACTION}\" data-open-command=\"${chunk.openAction.command}\" onclick=\"window.openSourceFile('${chunk.openAction.command}')\" title=\"Открыть файл\">")
             html.appendLine("🔗 Открыть")
             html.appendLine("</div>")
             html.appendLine("</div>")

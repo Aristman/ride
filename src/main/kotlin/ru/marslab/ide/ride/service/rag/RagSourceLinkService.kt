@@ -33,20 +33,25 @@ class RagSourceLinkService {
             return false
         }
 
-        val project = ProjectManager.getInstance().openProjects.firstOrNull()
-        if (project == null) {
-            logger.warn("No open project found for source link navigation")
+        val openProjects = ProjectManager.getInstance().openProjects
+        if (openProjects.isEmpty()) {
+            logger.warn("No open projects found for source link navigation")
             return false
         }
 
         return try {
-            val success = OpenFileAction.execute(project, openAction.command)
-            if (success) {
-                logger.info("Successfully opened file: ${openAction.path}:${openAction.startLine}-${openAction.endLine}")
-            } else {
-                logger.warn("Failed to open file: ${openAction.path}")
+            // Пробуем открыть файл в любом из открытых проектов
+            for (project in openProjects) {
+                val ok = OpenFileAction.execute(project, openAction.command)
+                if (ok) {
+                    logger.info("Successfully opened file in project '${project.name}': ${openAction.path}:${openAction.startLine}-${openAction.endLine}")
+                    return true
+                } else {
+                    logger.debug("File not found in project '${project.name}': ${openAction.path}")
+                }
             }
-            success
+            logger.warn("Failed to open file in all open projects: ${openAction.path}")
+            false
         } catch (e: Exception) {
             logger.error("Error opening file from source link: ${openAction.command}", e)
             false

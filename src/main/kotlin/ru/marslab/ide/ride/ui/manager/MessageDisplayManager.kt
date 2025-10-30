@@ -148,12 +148,7 @@ class MessageDisplayManager(
         )
 
         htmlDocumentManager.appendHtml(messageHtml)
-
-        // Добавляем source links если они есть
-        val sourceLinksHtml = createSourceLinksHtml(message)
-        if (sourceLinksHtml.isNotEmpty()) {
-            htmlDocumentManager.appendHtml(sourceLinksHtml)
-        }
+        // Отключено: не добавляем таблицу "Источники" под ответом
     }
 
     /**

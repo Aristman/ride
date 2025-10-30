@@ -232,6 +232,21 @@ class ChatService {
     }
 
     /**
+     * Открывает DevTools JCEF, если доступен JcefChatView
+     */
+    fun openDevToolsIfAvailable() {
+        val view = chatView
+        if (view == null) {
+            logger.warn("ChatService: JCEF view is not available; cannot open DevTools")
+            return
+        }
+        runCatching { view.openDevTools() }
+            .onFailure { logger.warn("ChatService: failed to open DevTools", it) }
+    }
+
+    fun isDevToolsAvailable(): Boolean = chatView != null
+
+    /**
      * Настраивает listener для tool agent progress
      */
     private fun setupProgressListener() {

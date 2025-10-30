@@ -173,6 +173,21 @@ html, body {
 .content {
 }
 
+/* Разрешаем клики по ссылкам внутри контента сообщений */
+.msg .content a {
+    pointer-events: auto;
+}
+
+/* Визуальный стиль для ссылок на файлы */
+a.source-link-action {
+    color: #6d8fd8;
+    text-decoration: underline;
+    cursor: pointer;
+}
+a.source-link-action:hover {
+    filter: brightness(1.1);
+}
+
 .msg.user {
     text-align: right;
 }
