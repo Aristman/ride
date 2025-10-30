@@ -60,6 +60,7 @@ class SettingsConfigurable : Configurable {
     private lateinit var ragRerankerStrategyComboBox: ComboBox<String>
     private lateinit var ragMmrLambdaField: JBTextField
     private lateinit var ragMmrTopKField: JBTextField
+    private lateinit var ragSourceLinksEnabledCheck: JBCheckBox
 
     private var panel: DialogPanel? = null
     private var initialApiKey: String = ""
@@ -170,7 +171,8 @@ class SettingsConfigurable : Configurable {
                 ragSimilarityThresholdField.text != settings.ragSimilarityThreshold.toString() ||
                 (ragRerankerStrategyComboBox.selectedItem as? String).orEmpty() != settings.ragRerankerStrategy ||
                 ragMmrLambdaField.text != settings.ragMmrLambda.toString() ||
-                ragMmrTopKField.text != settings.ragMmrTopK.toString()
+                ragMmrTopKField.text != settings.ragMmrTopK.toString() ||
+                ragSourceLinksEnabledCheck.isSelected != settings.ragSourceLinksEnabled
     }
 
     override fun apply() {
@@ -293,6 +295,9 @@ class SettingsConfigurable : Configurable {
             settings.ragMmrTopK = PluginSettingsState.DEFAULT_RAG_MMR_TOP_K
         }
 
+        // RAG Source Links
+        settings.ragSourceLinksEnabled = ragSourceLinksEnabledCheck.isSelected
+
         initialApiKey = apiKey
         apiKeyLoaded = true
         initialHFToken = hfToken
@@ -363,6 +368,7 @@ class SettingsConfigurable : Configurable {
         ragRerankerStrategyComboBox.selectedItem = settings.ragRerankerStrategy
         ragMmrLambdaField.text = settings.ragMmrLambda.toString()
         ragMmrTopKField.text = settings.ragMmrTopK.toString()
+        ragSourceLinksEnabledCheck.isSelected = settings.ragSourceLinksEnabled
         updateMmrVisibility()
     }
 
@@ -675,6 +681,11 @@ class SettingsConfigurable : Configurable {
                 cell(ragMmrTopKField)
                     .columns(6)
                     .comment("Размер результата после MMR. По умолчанию равен Top K")
+            }
+            row {
+                ragSourceLinksEnabledCheck = JBCheckBox("Включить ссылки на источники в ответах RAG")
+                cell(ragSourceLinksEnabledCheck)
+                    .comment("Добавлять кликабельные ссылки на исходный код в ответах RAG")
             }
         }
 

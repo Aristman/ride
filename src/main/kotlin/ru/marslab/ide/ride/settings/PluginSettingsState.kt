@@ -31,7 +31,9 @@ data class PluginSettingsState(
     var ragRerankerStrategy: String = DEFAULT_RAG_RERANKER_STRATEGY,
     // --- MMR parameters ---
     var ragMmrLambda: Float = DEFAULT_RAG_MMR_LAMBDA,
-    var ragMmrTopK: Int = DEFAULT_RAG_MMR_TOP_K
+    var ragMmrTopK: Int = DEFAULT_RAG_MMR_TOP_K,
+    // --- RAG Source Links ---
+    var ragSourceLinksEnabled: Boolean = DEFAULT_RAG_SOURCE_LINKS_ENABLED
 ) {
     companion object {
         const val DEFAULT_CHAT_FONT_SIZE = 9
@@ -54,5 +56,7 @@ data class PluginSettingsState(
         // MMR defaults
         const val DEFAULT_RAG_MMR_LAMBDA = 0.5f
         const val DEFAULT_RAG_MMR_TOP_K = DEFAULT_RAG_TOP_K
+        // RAG Source Links defaults
+        const val DEFAULT_RAG_SOURCE_LINKS_ENABLED = false
     }
 }

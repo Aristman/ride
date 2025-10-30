@@ -270,6 +270,15 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
         }
 
     /**
+     * Включение ссылок на источники в RAG ответах
+     */
+    var ragSourceLinksEnabled: Boolean
+        get() = state.ragSourceLinksEnabled
+        set(value) {
+            state.ragSourceLinksEnabled = value
+        }
+
+    /**
      * Получает токен Hugging Face из безопасного хранилища
      */
     fun getHuggingFaceToken(): String {
