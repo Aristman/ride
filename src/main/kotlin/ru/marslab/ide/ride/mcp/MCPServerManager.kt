@@ -58,7 +58,7 @@ class MCPServerManager {
     }
 
     /**
-     * Автоматическая установка и запуск сервера
+     * Автоматическая установка и запуск универсального MCP сервера
      */
     fun ensureServerRunning(): Boolean {
         if (isStarting) {
@@ -66,6 +66,7 @@ class MCPServerManager {
             return false
         }
 
+        // Проверяем, запущен ли уже сервер
         if (isServerRunning()) {
             logger.info("MCP Server already running")
             return true
@@ -73,14 +74,14 @@ class MCPServerManager {
 
         isStarting = true
         try {
-            // Получаем или устанавливаем бинарник
+            // Пытаемся получить встроенный бинарник
             val serverBinary = getOrInstallServerBinary()
             if (serverBinary == null) {
-                logger.error("Failed to obtain MCP Server binary")
+                logger.warn("No embedded MCP Server binary available. Please start external MCP server manually.")
                 return false
             }
 
-            // Запускаем сервер
+            // Запускаем универсальный сервер
             return startServer(serverBinary)
         } finally {
             isStarting = false
@@ -122,7 +123,7 @@ class MCPServerManager {
             return built
         }
 
-        logger.error("Failed to obtain MCP Server binary")
+        logger.info("No embedded MCP Server binary available. External server can be used instead.")
         return null
     }
 
@@ -266,29 +267,32 @@ class MCPServerManager {
     }
 
     /**
-     * Запустить сервер
+     * Запустить универсальный MCP сервер
      */
     private fun startServer(serverBinary: File): Boolean {
         return try {
-            logger.info("Starting MCP Server: ${serverBinary.absolutePath}")
+            logger.info("Starting universal MCP Server")
 
-            // Создать конфигурацию если не существует (base_dir = корень текущего проекта)
-            val baseDir = resolveBaseDir()
-            createDefaultConfig(baseDir)
+            // Создать универсальную конфигурацию
+            val configFile = createUniversalConfig()
 
-            // Запустить процесс
-            serverProcess = ProcessBuilder()
+            // Запустить процесс с указанием конфигурации
+            val processBuilder = ProcessBuilder()
                 .command(serverBinary.absolutePath)
                 .directory(serverBinary.parentFile)
                 .redirectErrorStream(true)
-                .start()
+            
+            // Передаем путь к конфигурации через переменную окружения
+            processBuilder.environment()["MCP_CONFIG_PATH"] = configFile.absolutePath
+            
+            serverProcess = processBuilder.start()
 
             // Ждем запуска (максимум 10 секунд)
             var attempts = 0
             while (attempts < 20) {
                 Thread.sleep(500)
                 if (isServerRunning()) {
-                    logger.info("MCP Server started successfully")
+                    logger.info("Universal MCP Server started successfully")
                     return true
                 }
                 attempts++
@@ -323,34 +327,39 @@ class MCPServerManager {
     }
 
     /**
-     * Создать конфигурацию по умолчанию
+     * Создать универсальную конфигурацию MCP сервера
      */
-    private fun createDefaultConfig(baseDirOverride: String? = null): File {
-        val configFile = File(getServerDirectory(), "config.toml")
+    private fun createUniversalConfig(): File {
+        val serverDir = getServerDirectory()
+        val configFile = File(serverDir, "mcp-config.toml")
 
-        val effectiveBaseDir = baseDirOverride ?: "./data"
+        val config = """
+            # MCP Server Configuration - Universal File System Access
+            # Plugin controls project paths, server provides file system access
+            base_dir = "/"
+            max_file_size = 10485760
+            
+            # Allowed file extensions for development
+            allowed_extensions = [
+                "txt", "md", "json", "yaml", "yml", "toml", "xml",
+                "kt", "java", "js", "ts", "py", "rs", "go", "cpp", "c", "h",
+                "html", "css", "scss", "sass", "vue", "jsx", "tsx",
+                "sql", "sh", "bat", "ps1", "dockerfile", "gitignore",
+                "properties", "gradle", "maven", "sbt", "lock"
+            ]
+            
+            # Blocked paths for security (system directories)
+            blocked_paths = [
+                "/etc", "/sys", "/proc", "/root", "/boot", "/dev",
+                "/var/log", "/usr/bin", "/usr/sbin", "/sbin",
+                "C:\\Windows", "C:\\System32", "C:\\Program Files"
+            ]
+            verbose = true
+        """.trimIndent()
 
-        if (!configFile.exists()) {
-            val config = """
-                base_dir = "${effectiveBaseDir}"
-                max_file_size = 10485760
-                allowed_extensions = []
-                blocked_paths = ["/etc", "/sys", "/proc", "C:\\Windows"]
-                verbose = false
-            """.trimIndent()
-
-            configFile.writeText(config)
-        } else if (baseDirOverride != null) {
-            // Перезаписываем base_dir при наличии проекта
-            val lines = configFile.readLines()
-            val updated = lines.map { line ->
-                if (line.trim().startsWith("base_dir")) {
-                    "base_dir = \"${effectiveBaseDir}\""
-                } else line
-            }
-            configFile.writeText(updated.joinToString("\n"))
-        }
-
+        configFile.writeText(config)
+        logger.info("Created universal MCP config: ${configFile.absolutePath}")
+        
         return configFile
     }
 
@@ -361,6 +370,8 @@ class MCPServerManager {
             null
         }
     }
+
+
 
     /**
      * Получить URL сервера
@@ -376,34 +387,13 @@ class MCPServerManager {
         return serverDir
     }
 
-    /**
-     * Прочитать текущий base_dir из config.toml
-     */
-    fun getConfiguredBaseDir(): String? {
-        return try {
-            val cfg = File(getServerDirectory(), "config.toml")
-            if (!cfg.exists()) return null
-            cfg.useLines { lines ->
-                lines.firstOrNull { it.trim().startsWith("base_dir") }
-            }?.substringAfter("=")?.trim()?.trim('"')
-        } catch (_: Exception) {
-            null
-        }
-    }
+
 
     /**
-     * Обеспечить установленный base_dir. Если сервер запущен и base_dir отличается — перезапускаем.
+     * Обеспечить запуск универсального MCP сервера
+     * Проектный путь теперь передается через MCPClient, а не через конфигурацию сервера
      */
-    fun ensureBaseDir(baseDir: String?): Boolean {
-        if (baseDir.isNullOrBlank()) return false
-        val current = getConfiguredBaseDir()
-        if (current == baseDir) return true
-        // Перезаписываем конфиг
-        createDefaultConfig(baseDir)
-        // Если сервер запущен — перезапускаем
-        if (isServerRunning()) {
-            stopServer()
-        }
+    fun ensureProjectServer(projectPath: String?): Boolean {
         return ensureServerRunning()
     }
 

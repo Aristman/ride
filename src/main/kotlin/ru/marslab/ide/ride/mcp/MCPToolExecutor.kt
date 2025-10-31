@@ -14,10 +14,32 @@ import ru.marslab.ide.ride.model.llm.ToolResult
  */
 class MCPToolExecutor(
     private val mcpClient: MCPClient,
-    private val pathNormalizer: PathNormalizer
+    private val pathNormalizer: PathNormalizer,
+    private val projectPath: String? = null
 ) {
 
     private val logger = Logger.getInstance(MCPToolExecutor::class.java)
+
+    /**
+     * Разрешает путь относительно проектной директории
+     * Если путь относительный - добавляет проектный путь
+     * Если путь абсолютный - использует как есть
+     */
+    private fun resolveProjectPath(path: String): String {
+        // Если путь уже абсолютный, используем как есть
+        if (path.startsWith("/") || path.contains(":\\")) {
+            return path
+        }
+        
+        // Если проектный путь не задан, используем путь как есть
+        if (projectPath == null) {
+            return path
+        }
+        
+        // Для относительных путей добавляем проектный путь
+        val normalizedProjectPath = projectPath.trimEnd('/')
+        return "$normalizedProjectPath/$path"
+    }
 
     /**
      * Выполнить tool call и вернуть результат
@@ -70,14 +92,18 @@ class MCPToolExecutor(
 
         // Нормализуем путь через LLM
         val normalizedPath = pathNormalizer.normalizePath(path, "create_file")
+        
+        // Разрешаем путь относительно проекта
+        val fullPath = resolveProjectPath(normalizedPath)
 
         println("🔧 MCPToolExecutor: create_file")
         println("  Original path: '$path'")
         println("  Normalized path: '$normalizedPath'")
+        println("  Full path: '$fullPath'")
         println("  Content length: ${content.length}")
 
-        val response = mcpClient.createFile(normalizedPath, content, overwrite)
-        return "File '$normalizedPath' created successfully. Size: ${response.size} bytes, Checksum: ${response.checksum}"
+        val response = mcpClient.createFile(fullPath, content, overwrite)
+        return "File '$fullPath' created successfully. Size: ${response.size} bytes, Checksum: ${response.checksum}"
     }
 
     private suspend fun executeReadFile(args: JsonObject): String {
@@ -86,12 +112,16 @@ class MCPToolExecutor(
 
         // Нормализуем путь через LLM
         val normalizedPath = pathNormalizer.normalizePath(path, "read_file")
+        
+        // Разрешаем путь относительно проекта
+        val fullPath = resolveProjectPath(normalizedPath)
 
         println("🔧 MCPToolExecutor: read_file")
         println("  Original path: '$path'")
         println("  Normalized path: '$normalizedPath'")
+        println("  Full path: '$fullPath'")
 
-        val response = mcpClient.readFile(normalizedPath)
+        val response = mcpClient.readFile(fullPath)
         return """
             File: ${response.path}
             Size: ${response.size} bytes
@@ -110,30 +140,57 @@ class MCPToolExecutor(
 
         // Нормализуем путь через LLM
         val normalizedPath = pathNormalizer.normalizePath(path, "update_file")
+        
+        // Разрешаем путь относительно проекта
+        val fullPath = resolveProjectPath(normalizedPath)
 
         println("🔧 MCPToolExecutor: update_file")
         println("  Original path: '$path'")
         println("  Normalized path: '$normalizedPath'")
+        println("  Full path: '$fullPath'")
         println("  Content length: ${content.length}")
 
-        val response = mcpClient.updateFile(normalizedPath, content)
-        return "File '$normalizedPath' updated successfully. New size: ${response.size} bytes"
+        val response = mcpClient.updateFile(fullPath, content)
+        return "File '$fullPath' updated successfully. New size: ${response.size} bytes"
     }
 
     private suspend fun executeDeleteFile(args: JsonObject): String {
         val path = args["path"]?.jsonPrimitive?.content
             ?: return "Error: 'path' parameter is required"
-        val normalizedPath = path.replace("\\", "/").replace("\u0001", "/")
+        
+        // Нормализуем путь через LLM
+        val normalizedPath = pathNormalizer.normalizePath(path, "delete_file")
+        
+        // Разрешаем путь относительно проекта
+        val fullPath = resolveProjectPath(normalizedPath)
 
-        val response = mcpClient.deleteFile(normalizedPath)
+        println("🔧 MCPToolExecutor: delete_file")
+        println("  Original path: '$path'")
+        println("  Normalized path: '$normalizedPath'")
+        println("  Full path: '$fullPath'")
+
+        val response = mcpClient.deleteFile(fullPath)
         return response.message
     }
 
     private suspend fun executeListFiles(args: JsonObject): String {
         val dir = args["dir"]?.jsonPrimitive?.contentOrNull
-        val normalizedDir = dir?.let { it.replace("\\", "/").replace("\u0001", "/") }
+        
+        val fullDir = if (dir != null) {
+            // Нормализуем путь через LLM
+            val normalizedDir = pathNormalizer.normalizePath(dir, "list_files")
+            // Разрешаем путь относительно проекта
+            resolveProjectPath(normalizedDir)
+        } else {
+            // Если директория не указана, используем проектную директорию
+            projectPath ?: "."
+        }
 
-        val response = mcpClient.listFiles(normalizedDir)
+        println("🔧 MCPToolExecutor: list_files")
+        println("  Original dir: '$dir'")
+        println("  Full dir: '$fullDir'")
+
+        val response = mcpClient.listFiles(fullDir)
 
         val filesText = if (response.files.isEmpty()) {
             "No files"

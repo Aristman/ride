@@ -1,0 +1,21 @@
+# MCP Server Configuration - Universal File System Access
+# Plugin controls project paths, server provides file system access
+base_dir = "/"
+max_file_size = 10485760
+
+# Allowed file extensions for development
+allowed_extensions = [
+    "txt", "md", "json", "yaml", "yml", "toml", "xml",
+    "kt", "java", "js", "ts", "py", "rs", "go", "cpp", "c", "h",
+    "html", "css", "scss", "sass", "vue", "jsx", "tsx",
+    "sql", "sh", "bat", "ps1", "dockerfile", "gitignore",
+    "properties", "gradle", "maven", "sbt", "lock"
+]
+
+# Blocked paths for security (system directories)
+blocked_paths = [
+    "/etc", "/sys", "/proc", "/root", "/boot", "/dev",
+    "/var/log", "/usr/bin", "/usr/sbin", "/sbin",
+    "C:\\Windows", "C:\\System32", "C:\\Program Files"
+]
+verbose = true

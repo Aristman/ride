@@ -591,14 +591,13 @@ class ChatService {
         println("🔧 ChatService: MCP Server running: ${serverManager.isServerRunning()}")
 
         if (!serverManager.isServerRunning()) {
-            println("🔧 ChatService: Starting MCP Server...")
+            println("🔧 ChatService: Trying to start MCP Server...")
             val started = serverManager.ensureServerRunning()
             println("🔧 ChatService: MCP Server start result: $started")
 
-            if (!started) {
-                logger.error("Failed to start MCP Server")
-                onError("Не удалось запустить MCP Server. Файловые операции недоступны.")
-                return
+            if (!started && !serverManager.isServerRunning()) {
+                logger.warn("MCP Server not available - file operations may be limited")
+                // Продолжаем работу без MCP сервера
             }
         }
 
@@ -634,7 +633,8 @@ class ChatService {
                 )
 
                 // Создаем агента с поддержкой tools
-                val mcpFileSystemAgent = MCPFileSystemAgent(config)
+                val projectPath = project.basePath
+                val mcpFileSystemAgent = MCPFileSystemAgent(config, projectPath = projectPath)
 
                 // Формируем историю для агента (включаем системные сообщения для контекста)
                 val allMessages = if (wasEmpty) {

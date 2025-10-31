@@ -9,6 +9,7 @@ pub fn calculate_checksum(content: &[u8]) -> String {
 }
 
 /// Sanitize path to prevent directory traversal attacks
+/// Now allows absolute paths when base_dir is root
 pub fn sanitize_path(path: &str) -> Result<PathBuf, String> {
     let path = PathBuf::from(path);
     
@@ -19,7 +20,8 @@ pub fn sanitize_path(path: &str) -> Result<PathBuf, String> {
                 return Err("Path traversal detected: '..' not allowed".to_string());
             }
             std::path::Component::RootDir => {
-                return Err("Absolute paths not allowed".to_string());
+                // Allow absolute paths - they will be validated against base_dir later
+                continue;
             }
             _ => {}
         }

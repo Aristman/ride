@@ -40,9 +40,9 @@ class McpChunkEnricher(
                 }
 
                 val (baseForFile, relPath) = resolveBaseAndRel(path)
-                // Обеспечиваем base_dir для данного файла (best-effort)
+                // Обеспечиваем MCP сервер для данного проекта (best-effort)
                 if (baseForFile.isNotBlank()) {
-                    runCatching { MCPServerManager.getInstance().ensureBaseDir(baseForFile) }
+                    runCatching { MCPServerManager.getInstance().ensureProjectServer(baseForFile) }
                 }
                 val effectiveBase = baseForFile
                 val relToUse = relPath
@@ -90,10 +90,10 @@ class McpChunkEnricher(
             runBlockingRead(relPath)
         } catch (t: Throwable) {
             logger.warn("MCP Enricher: first read failed for '$relPath' (base=$baseDir): ${t.message}")
-            // Возможная гонка после смены base_dir — дождемся перезапуска и повторим
+            // Возможная гонка после смены проекта — дождемся перезапуска и повторим
             delay(300)
             if (baseDir.isNotBlank()) {
-                runCatching { MCPServerManager.getInstance().ensureBaseDir(baseDir) }
+                runCatching { MCPServerManager.getInstance().ensureProjectServer(baseDir) }
                 waitForServerReady()
             }
             try {

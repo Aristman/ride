@@ -17,27 +17,28 @@ class RideStartupActivity : ProjectActivity {
     private val logger = Logger.getInstance(RideStartupActivity::class.java)
 
     override suspend fun execute(project: Project) {
-        logger.info("Ride plugin starting up...")
+        logger.info("Ride plugin starting up for project: ${project.basePath}")
 
-        // Запустить MCP сервер в фоне
+        // Не запускаем MCP сервер автоматически при старте плагина
+        // Сервер будет запущен по требованию при первом использовании файловых операций
         ApplicationManager.getApplication().executeOnPooledThread {
             try {
                 val serverManager = MCPServerManager.getInstance()
-                val started = serverManager.ensureServerRunning()
-
-                if (started) {
-                    logger.info("MCP Server started successfully")
+                
+                // Только проверяем, работает ли внешний сервер
+                if (serverManager.isServerRunning()) {
+                    logger.info("External MCP Server is already running")
                     showNotification(
-                        "MCP Server Started",
-                        "File system operations are now available",
+                        "Ride Plugin Ready",
+                        "MCP server detected - file operations available",
                         NotificationType.INFORMATION
                     )
                 } else {
-                    logger.warn("Failed to start MCP Server")
+                    logger.info("Ride plugin loaded for project: ${project.basePath}")
                     showNotification(
-                        "MCP Server Failed",
-                        "Some features may not work. Check logs for details.",
-                        NotificationType.WARNING
+                        "Ride Plugin Ready", 
+                        "File operations will be available when needed",
+                        NotificationType.INFORMATION
                     )
                 }
             } catch (e: Exception) {
