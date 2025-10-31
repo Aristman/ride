@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit
 class MCPServerManager {
     private val logger = Logger.getInstance(MCPServerManager::class.java)
     private var serverProcess: Process? = null
-    private val serverPort = 3000
+    private val serverPort = 3001
     private val serverUrl = "http://localhost:$serverPort"
 
     @Volatile
@@ -95,7 +95,17 @@ class MCPServerManager {
         val binaryName = getServerBinaryName()
         val serverBinary = File(serverDir, binaryName)
 
-        // 1. Проверяем существующий бинарник
+        // 1. Проверяем существующий бинарник или Python сервер
+        val pythonMarkerFile = File(serverDir, "python_server_path.txt")
+        if (pythonMarkerFile.exists()) {
+            val pythonPath = pythonMarkerFile.readText().trim()
+            val pythonDir = File(pythonPath)
+            if (pythonDir.exists() && File(pythonDir, "pyproject.toml").exists()) {
+                logger.info("Using existing Python MCP Server: ${pythonDir.absolutePath}")
+                return File(pythonDir, "src/filesystem_server/main.py")
+            }
+        }
+
         if (serverBinary.exists() && serverBinary.canExecute()) {
             logger.info("Using existing MCP Server binary: ${serverBinary.absolutePath}")
             return serverBinary
@@ -209,9 +219,89 @@ class MCPServerManager {
     }
 
     /**
-     * Собрать из исходников (если есть Rust)
+     * Собрать из исходников (Python или Rust)
      */
     private fun buildFromSource(targetFile: File): File? {
+        val sourceDir = findSourceDirectory()
+        if (sourceDir == null) {
+            logger.warn("Source directory not found")
+            return null
+        }
+
+        return try {
+            // Проверяем тип MCP сервера
+            if (File(sourceDir, "pyproject.toml").exists()) {
+                // Python MCP сервер
+                return buildPythonServer(sourceDir, targetFile)
+            } else if (File(sourceDir, "Cargo.toml").exists()) {
+                // Rust MCP сервер
+                return buildRustServer(sourceDir, targetFile)
+            } else {
+                logger.warn("Unknown MCP server type in directory: ${sourceDir.absolutePath}")
+                null
+            }
+        } catch (e: Exception) {
+            logger.error("Failed to build from source", e)
+            null
+        }
+    }
+
+    /**
+     * Собрать Python MCP сервер
+     */
+    private fun buildPythonServer(sourceDir: File, targetFile: File): File? {
+        return try {
+            logger.info("Installing Python MCP Server dependencies...")
+
+            // Проверяем наличие Python
+            val pythonCheck = ProcessBuilder("python", "--version")
+                .redirectErrorStream(true)
+                .start()
+
+            if (pythonCheck.waitFor() != 0) {
+                logger.warn("Python not found, trying python3...")
+                val python3Check = ProcessBuilder("python3", "--version")
+                    .redirectErrorStream(true)
+                    .start()
+
+                if (python3Check.waitFor() != 0) {
+                    logger.warn("Python3 not found, cannot build Python MCP server")
+                    return null
+                }
+            }
+
+            // Устанавливаем зависимости в режиме разработки
+            val installProcess = ProcessBuilder()
+                .command("pip", "install", "-e", ".")
+                .directory(sourceDir)
+                .redirectErrorStream(true)
+                .start()
+
+            val installExitCode = installProcess.waitFor()
+            if (installExitCode != 0) {
+                logger.error("Failed to install Python MCP server dependencies")
+                return null
+            }
+
+            // Создаем символическую ссылку на main.py или используем путь к исходникам
+            targetFile.parentFile.mkdirs()
+
+            // Для Python сервера сохраняем путь к директории исходников
+            val markerFile = File(targetFile.parent, "python_server_path.txt")
+            markerFile.writeText(sourceDir.absolutePath)
+
+            logger.info("Python MCP Server installed successfully")
+            targetFile
+        } catch (e: Exception) {
+            logger.error("Failed to build Python MCP server", e)
+            null
+        }
+    }
+
+    /**
+     * Собрать Rust MCP сервер
+     */
+    private fun buildRustServer(sourceDir: File, targetFile: File): File? {
         return try {
             // Проверяем наличие cargo
             val cargoCheck = ProcessBuilder("cargo", "--version")
@@ -219,18 +309,11 @@ class MCPServerManager {
                 .start()
 
             if (cargoCheck.waitFor() != 0) {
-                logger.warn("Cargo not found, cannot build from source")
+                logger.warn("Cargo not found, cannot build Rust MCP server")
                 return null
             }
 
-            // Найти директорию с исходниками
-            val sourceDir = findSourceDirectory()
-            if (sourceDir == null) {
-                logger.warn("Source directory not found")
-                return null
-            }
-
-            logger.info("Building MCP Server from source (this may take a few minutes)...")
+            logger.info("Building Rust MCP Server from source (this may take a few minutes)...")
 
             // Собрать проект
             val buildProcess = ProcessBuilder()
@@ -254,13 +337,14 @@ class MCPServerManager {
                         targetFile.toPath(),
                         StandardCopyOption.REPLACE_EXISTING
                     )
+                    logger.info("Rust MCP Server built successfully")
                     return targetFile
                 }
             }
 
             null
         } catch (e: Exception) {
-            logger.error("Failed to build from source", e)
+            logger.error("Failed to build Rust MCP server", e)
             null
         }
     }
@@ -276,19 +360,36 @@ class MCPServerManager {
             val baseDir = resolveBaseDir()
             createDefaultConfig(baseDir)
 
+            // Определяем команду запуска в зависимости от типа сервера
+            val command = if (serverBinary.name.endsWith(".py") || serverBinary.name == "main") {
+                // Python MCP сервер
+                listOf("python", "-m", "filesystem_server.main", "serve", "--port", serverPort.toString(), "--base-dir", baseDir ?: "./data")
+            } else {
+                // Бинарный сервер (Rust)
+                listOf(serverBinary.absolutePath)
+            }
+
             // Запустить процесс
-            serverProcess = ProcessBuilder()
-                .command(serverBinary.absolutePath)
+            val processBuilder = ProcessBuilder(command)
                 .directory(serverBinary.parentFile)
                 .redirectErrorStream(true)
-                .start()
 
-            // Ждем запуска (максимум 10 секунд)
+            // Добавляем переменные окружения для Python
+            if (command.first() == "python") {
+                val env = processBuilder.environment()
+                env["PYTHONPATH"] = serverBinary.parentFile.toString()
+                env["PYTHONUNBUFFERED"] = "1"
+            }
+
+            serverProcess = processBuilder.start()
+
+            // Ждем запуска (максимум 15 секунд для Python сервера)
+            val maxAttempts = if (command.first() == "python") 30 else 20
             var attempts = 0
-            while (attempts < 20) {
+            while (attempts < maxAttempts) {
                 Thread.sleep(500)
                 if (isServerRunning()) {
-                    logger.info("MCP Server started successfully")
+                    logger.info("MCP Server started successfully on port $serverPort")
                     return true
                 }
                 attempts++
@@ -332,23 +433,27 @@ class MCPServerManager {
 
         if (!configFile.exists()) {
             val config = """
+                [server]
+                host = "127.0.0.1"
+                port = ${serverPort}
+                log_level = "info"
                 base_dir = "${effectiveBaseDir}"
                 max_file_size = 10485760
-                allowed_extensions = []
-                blocked_paths = ["/etc", "/sys", "/proc", "C:\\Windows"]
-                verbose = false
+                allowed_extensions = ["txt", "md", "json", "kt", "java", "py", "js", "xml", "gradle"]
+                blocked_paths = ["/etc", "/sys", "/proc", "/boot", "/usr/bin", "/bin", "/sbin", "C:\\Windows", "C:\\Program Files"]
+                enable_file_watch = false
+                cors_origins = ["http://localhost:63342"]
             """.trimIndent()
 
             configFile.writeText(config)
         } else if (baseDirOverride != null) {
             // Перезаписываем base_dir при наличии проекта
-            val lines = configFile.readLines()
-            val updated = lines.map { line ->
-                if (line.trim().startsWith("base_dir")) {
-                    "base_dir = \"${effectiveBaseDir}\""
-                } else line
-            }
-            configFile.writeText(updated.joinToString("\n"))
+            var content = configFile.readText()
+            content = content.replace(
+                Regex("""base_dir\s*=\s*"[^"]*""""),
+                "base_dir = \"${effectiveBaseDir}\""
+            )
+            configFile.writeText(content)
         }
 
         return configFile
@@ -434,13 +539,36 @@ class MCPServerManager {
     }
 
     private fun findSourceDirectory(): File? {
-        // Попробовать найти исходники относительно плагина
-        val possiblePaths = listOf(
+        // Попробовать найти исходники Python MCP сервера относительно плагина
+        val pythonPaths = listOf(
+            File("../mcp-servers/filesystem-server"),
+            File("../../mcp-servers/filesystem-server"),
+            File("mcp-servers/filesystem-server"),
+            File(System.getProperty("user.home"), ".ride/mcp-servers/filesystem-server")
+        )
+
+        // Проверяем Python сервер (приоритет)
+        for (path in pythonPaths) {
+            if (path.exists() && File(path, "pyproject.toml").exists()) {
+                logger.info("Found Python MCP server at: ${path.absolutePath}")
+                return path
+            }
+        }
+
+        // Fallback к Rust серверу
+        val rustPaths = listOf(
             File("../mcp-server-rust"),
             File("../../mcp-server-rust"),
             File(System.getProperty("user.home"), ".ride/mcp-server-rust")
         )
 
-        return possiblePaths.firstOrNull { it.exists() && File(it, "Cargo.toml").exists() }
+        for (path in rustPaths) {
+            if (path.exists() && File(path, "Cargo.toml").exists()) {
+                logger.info("Found Rust MCP server at: ${path.absolutePath}")
+                return path
+            }
+        }
+
+        return null
     }
 }

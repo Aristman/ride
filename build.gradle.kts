@@ -5,6 +5,7 @@ plugins {
     id("org.jetbrains.kotlin.jvm") version "2.1.0"
     id("org.jetbrains.intellij.platform") version "2.7.1"
     kotlin("plugin.serialization") version "2.1.0"
+    // id("com.github.python-gradle-python") version "4.0.0" // Временно отключен - плагин не найден
 }
 
 group = "ru.marslab.ide"
@@ -57,6 +58,19 @@ dependencies {
     testImplementation("io.mockk:mockk:1.13.8")
 }
 
+// Конфигурация Python для MCP сервера
+// python {
+//     pip("fastapi>=0.104.0")
+//     pip("uvicorn[standard]>=0.24.0")
+//     pip("pydantic>=2.4.0")
+//     pip("aiofiles>=23.2.0")
+//     pip("python-multipart>=0.0.6")
+//     pip("watchdog>=3.0.0")
+//     pip("toml>=0.10.2")
+//     pip("click>=8.1.0")
+//     pip("httpx>=0.25.0")
+// }
+
 intellijPlatform {
     pluginConfiguration {
         ideaVersion {
@@ -67,6 +81,7 @@ intellijPlatform {
         changeNotes = """
             Initial version
             - Поддержка Android Studio 2024.2+
+            - Встроенный MCP сервер для файловой системы
         """.trimIndent()
     }
 }
@@ -77,6 +92,60 @@ tasks {
         sourceCompatibility = "21"
         targetCompatibility = "21"
     }
+
+    // TODO: Исправить задачи MCP сервера после обновления Gradle
+    // Задача для сборки MCP сервера
+    /*
+    val buildMcpServer by registering {
+        group = "build"
+        description = "Собрать MCP сервер файловой системы"
+        doLast {
+            val mcpServerDir = File(projectDir, "mcp-servers/filesystem-server")
+            if (!mcpServerDir.exists()) {
+                throw GradleException("MCP сервер не найден в ${mcpServerDir.absolutePath}")
+            }
+
+            // Устанавливаем зависимости и собираем пакет
+            exec {
+                workingDir = mcpServerDir
+                commandLine = listOf("pip", "install", "-e", ".")
+                standardOutput = System.out
+                errorOutput = System.err
+            }
+
+            println("✅ MCP сервер файловой системы собран")
+        }
+    }
+
+    // Задача для тестирования MCP сервера
+    val testMcpServer by registering {
+        group = "verification"
+        description = "Протестировать MCP сервер"
+        dependsOn(buildMcpServer)
+        doLast {
+            val mcpServerDir = File(projectDir, "mcp-servers/filesystem-server")
+
+            exec {
+                workingDir = mcpServerDir
+                commandLine = listOf("python", "-m", "filesystem_server.main", "validate")
+                standardOutput = System.out
+                errorOutput = System.err
+            }
+
+            println("✅ MCP сервер прошел валидацию")
+        }
+    }
+
+    // Добавляем зависимость к buildPlugin
+    tasks.named<org.jetbrains.intellij.platform.gradle.tasks.BuildPluginTask>("buildPlugin") {
+        dependsOn(buildMcpServer)
+    }
+
+    // Добавляем зависимость к test
+    tasks.named<Test>("test") {
+        dependsOn(testMcpServer)
+    }
+    */
 
     // Add system properties to workaround Gradle JVM compatibility issue
     runIde {
@@ -93,7 +162,7 @@ tasks {
 
         // Гарантированно отключаем bundled Gradle plugin через sandbox-конфиг
         doFirst {
-            val configDir = File(buildDir, "idea-sandbox/config").apply { mkdirs() }
+            val configDir = File(layout.buildDirectory.get().asFile, "idea-sandbox/config").apply { mkdirs() }
             val optionsDir = File(configDir, "options").apply { mkdirs() }
             // Перечень плагинов для отключения, по одному в строке (возможные ID)
             val entries = listOf(
