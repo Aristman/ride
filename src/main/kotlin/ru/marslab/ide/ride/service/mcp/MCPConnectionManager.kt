@@ -25,6 +25,7 @@ class MCPConnectionManager(private val project: Project) {
     private val logger = Logger.getInstance(MCPConnectionManager::class.java)
     private val configService = MCPConfigService.getInstance(project)
     private val persistenceService = MCPStatusPersistenceService.getInstance(project)
+    private val localServerManager = LocalMCPServerManager.getInstance(project)
 
     // Клиенты для каждого сервера
     private val clients = ConcurrentHashMap<String, MCPClient>()
@@ -81,6 +82,26 @@ class MCPConnectionManager(private val project: Project) {
         logger.info("Connecting to server: ${config.name}")
 
         try {
+            // Для HTTP серверов проверяем, нужно ли запускать локальный сервер
+            if (config.type.name == "HTTP" && shouldStartLocalServer(config)) {
+                logger.info("Starting local server: ${config.name}")
+                val serverStarted = localServerManager.startServer(config)
+                if (!serverStarted) {
+                    logger.error("Failed to start local server: ${config.name}")
+                    updateStatus(
+                        config.name, MCPServerStatus(
+                            name = config.name,
+                            connected = false,
+                            error = "Failed to start local server"
+                        )
+                    )
+                    return@withContext false
+                }
+
+                // Ждем запуск сервера
+                delay(3000)
+            }
+
             // Создаем клиент
             val client = MCPClientFactory.createClient(config)
 
@@ -301,6 +322,13 @@ class MCPConnectionManager(private val project: Project) {
 
             clients.clear()
             statuses.clear()
+
+            // Останавливаем все локальные MCP серверы
+            try {
+                localServerManager.stopAllServers()
+            } catch (e: Exception) {
+                logger.error("Error stopping local MCP servers", e)
+            }
         }
     }
 
@@ -327,6 +355,19 @@ class MCPConnectionManager(private val project: Project) {
             statuses[status.name] = status
         }
         logger.info("Loaded ${savedStatuses.size} server statuses from database")
+    }
+
+    /**
+     * Проверяет, нужно ли запускать локальный сервер для данной конфигурации
+     *
+     * @param config Конфигурация сервера
+     * @return true если нужно запускать локальный сервер
+     */
+    private fun shouldStartLocalServer(config: MCPServerConfig): Boolean {
+        // Запускаем локальный сервер для filesystem-server
+        return config.name == "filesystem-server" &&
+               config.type.name == "HTTP" &&
+               config.enabled
     }
 
     companion object {
