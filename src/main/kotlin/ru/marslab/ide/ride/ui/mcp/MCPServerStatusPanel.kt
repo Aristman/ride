@@ -6,8 +6,7 @@ import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBPanel
 import com.intellij.util.ui.JBUI
-import ru.marslab.ide.ride.service.mcp.MCPConnectionManager
-import ru.marslab.ide.ride.service.mcp.LocalMCPServerManager
+import ru.marslab.ide.ride.mcp.MCPServerManager
 import java.awt.BorderLayout
 import java.awt.FlowLayout
 import java.awt.GridBagConstraints
@@ -15,13 +14,11 @@ import java.awt.GridBagLayout
 import javax.swing.*
 
 /**
- * Панель отображения статуса MCP Server
+ * Панель отображения статуса MCP Server Rust
  */
 class MCPServerStatusPanel : JBPanel<MCPServerStatusPanel>(BorderLayout()) {
 
-    private lateinit var connectionManager: MCPConnectionManager
-    private lateinit var localServerManager: LocalMCPServerManager
-
+    private val serverManager = MCPServerManager.getInstance()
     private val statusLabel = JBLabel()
     private val startButton = JButton("Start")
     private val stopButton = JButton("Stop")
@@ -29,15 +26,6 @@ class MCPServerStatusPanel : JBPanel<MCPServerStatusPanel>(BorderLayout()) {
     private var toolsExpanded = false
 
     init {
-        // Получаем проект из текущего контекста
-        val project = com.intellij.openapi.project.ProjectManager.getInstance().openProjects.firstOrNull()
-        connectionManager = if (project != null) {
-            MCPConnectionManager.getInstance(project)
-        } else {
-            throw IllegalStateException("No open project found")
-        }
-        localServerManager = LocalMCPServerManager.getInstance(project)
-
         setupUI()
         updateStatus()
     }
@@ -49,7 +37,7 @@ class MCPServerStatusPanel : JBPanel<MCPServerStatusPanel>(BorderLayout()) {
         )
 
         // Заголовок
-        val titleLabel = JBLabel("MCP Server (Python)")
+        val titleLabel = JBLabel("MCP Server (Rust)")
         titleLabel.font = titleLabel.font.deriveFont(titleLabel.font.size + 2f)
 
         // Панель заголовка и статуса
@@ -78,7 +66,7 @@ class MCPServerStatusPanel : JBPanel<MCPServerStatusPanel>(BorderLayout()) {
         startButton.addActionListener {
             startButton.isEnabled = false
             ApplicationManager.getApplication().executeOnPooledThread {
-                connectionManager.initializeConnections()
+                serverManager.ensureServerRunning()
                 SwingUtilities.invokeLater {
                     updateStatus()
                 }
@@ -88,7 +76,7 @@ class MCPServerStatusPanel : JBPanel<MCPServerStatusPanel>(BorderLayout()) {
         stopButton.addActionListener {
             stopButton.isEnabled = false
             ApplicationManager.getApplication().executeOnPooledThread {
-                connectionManager.disconnectAll()
+                serverManager.stopServer()
                 SwingUtilities.invokeLater {
                     updateStatus()
                 }
@@ -181,7 +169,7 @@ class MCPServerStatusPanel : JBPanel<MCPServerStatusPanel>(BorderLayout()) {
     }
 
     private fun updateStatus() {
-        val isRunning = localServerManager.isServerRunning("filesystem-server")
+        val isRunning = serverManager.isServerRunning()
 
         if (isRunning) {
             statusLabel.text = "Status: Running"

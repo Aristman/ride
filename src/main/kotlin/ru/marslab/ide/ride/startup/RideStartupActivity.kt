@@ -7,7 +7,7 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.startup.ProjectActivity
-import ru.marslab.ide.ride.service.mcp.MCPConnectionManager
+import ru.marslab.ide.ride.mcp.MCPServerManager
 
 /**
  * Активность, выполняемая при запуске проекта
@@ -19,24 +19,35 @@ class RideStartupActivity : ProjectActivity {
     override suspend fun execute(project: Project) {
         logger.info("Ride plugin starting up...")
 
-        // Инициализировать MCP подключения
-        try {
-            val connectionManager = MCPConnectionManager.getInstance(project)
-            connectionManager.initializeConnections()
+        // Запустить MCP сервер в фоне
+        ApplicationManager.getApplication().executeOnPooledThread {
+            try {
+                val serverManager = MCPServerManager.getInstance()
+                val started = serverManager.ensureServerRunning()
 
-            logger.info("MCP connections initialized")
-            showNotification(
-                "MCP Ready",
-                "File system operations are now available",
-                NotificationType.INFORMATION
-            )
-        } catch (e: Exception) {
-            logger.error("Error initializing MCP connections", e)
-            showNotification(
-                "MCP Error",
-                "Failed to initialize: ${e.message}",
-                NotificationType.ERROR
-            )
+                if (started) {
+                    logger.info("MCP Server started successfully")
+                    showNotification(
+                        "MCP Server Started",
+                        "File system operations are now available",
+                        NotificationType.INFORMATION
+                    )
+                } else {
+                    logger.warn("Failed to start MCP Server")
+                    showNotification(
+                        "MCP Server Failed",
+                        "Some features may not work. Check logs for details.",
+                        NotificationType.WARNING
+                    )
+                }
+            } catch (e: Exception) {
+                logger.error("Error starting MCP Server", e)
+                showNotification(
+                    "MCP Server Error",
+                    "Failed to start: ${e.message}",
+                    NotificationType.ERROR
+                )
+            }
         }
     }
 
