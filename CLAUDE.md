@@ -1,10 +1,11 @@
+
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
 
-**Ride** is an advanced IntelliJ IDEA plugin that provides an AI-powered development assistant with multi-agent orchestration, RAG (Retrieval-Augmented Generation), and MCP (Model Context Protocol) integration. It's a Kotlin-based project using the IntelliJ Platform SDK with a modular architecture following clean architecture principles, evolved from a simple chat assistant into a comprehensive AI development platform.
+**Ride** is an IntelliJ IDEA plugin that provides an AI chat assistant integrated with Yandex GPT. It's a Kotlin-based project using the IntelliJ Platform SDK with a modular architecture following clean architecture principles.
 
 ## Common Development Commands
 
@@ -38,18 +39,16 @@ The plugin follows a layered architecture with clear separation of concerns:
 
 ### Core Layers (Bottom to Top)
 1. **Configuration Layer** - Plugin settings and state management
-2. **Integration Layer** - LLM providers, MCP servers, and external integrations
-3. **Agent Layer** - Multi-agent system with orchestration and tool agents
-4. **Service Layer** - Application services, RAG, and coordination
-5. **UI Layer** - Swing-based user interface with JCEF support
+2. **Integration Layer** - LLM provider abstractions and implementations
+3. **Agent Layer** - Business logic for request processing
+4. **Service Layer** - Application services and coordination
+5. **UI Layer** - Swing-based user interface components
 
 ### Key Design Patterns
 - **Dependency Inversion**: Dependencies flow through abstractions (interfaces)
-- **Factory Pattern**: AgentFactory, LLMProviderFactory, and MCPClientFactory for object creation
-- **Service Layer**: ChatService as central coordinator with RAG integration
+- **Factory Pattern**: AgentFactory and LLMProviderFactory for object creation
+- **Service Layer**: ChatService as central coordinator
 - **Repository Pattern**: MessageHistory for data management
-- **Orchestrator Pattern**: EnhancedAgentOrchestrator for multi-agent task coordination
-- **Tool Agent Pattern**: Specialized agents for specific development tasks
 
 ## Critical Architecture Principles
 
@@ -60,11 +59,10 @@ The plugin follows a layered architecture with clear separation of concerns:
 
 ### Agent System
 The core agent interface supports:
-- Request processing with chat context and RAG enrichment
+- Request processing with chat context
 - Response format configuration (JSON/XML/TEXT with schema validation)
 - Dynamic LLM provider switching
 - Structured response parsing and validation
-- Uncertainty analysis for clarifying question detection
 
 ### LLM Provider Abstraction
 The `LLMProvider` interface uses a modern message-based API with full dialogue history support:
@@ -115,12 +113,9 @@ if (response.isFinal) {
 ```
 src/main/kotlin/ru/marslab/ide/ride/
 ├── agent/              # Agent interfaces and implementations
-│   ├── orchestrator/   # Multi-agent orchestration system
-│   └── tool/           # Specialized tool agents
-├── integration/llm/    # LLM provider abstractions and implementations
-├── integration/mcp/    # MCP client and server management
+├── integration/llm/    # LLM provider abstractions and Yandex GPT
 ├── model/              # Data models and domain objects
-├── service/            # Application services and RAG system
+├── service/            # Application services
 ├── settings/           # Plugin configuration and persistence
 ├── ui/                 # Refactored UI components with composition pattern
 │   ├── config/         # Configuration and constants (ChatPanelConfig)
@@ -133,14 +128,10 @@ src/main/kotlin/ru/marslab/ide/ride/
 ```
 
 ### Key Components
-- **EnhancedAgentOrchestrator**: Multi-agent orchestration system with plan state management
-- **ChatAgent**: Universal agent implementation with uncertainty analysis and RAG integration
-- **Tool Agents**: Specialized agents (ProjectScanner, CodeAnalysis, BugDetection, UserInteraction)
-- **RagEnrichmentService**: RAG pipeline with retrieval → LLM reranking → MCP enrichment
-- **MCPServerManager**: MCP client and server management with STDIO/HTTP support
+- **ChatAgent**: Universal agent implementation with uncertainty analysis and full dialogue history
 - **YandexGPTProvider**: HTTP client for Yandex GPT API integration with conversation support
 - **UncertaintyAnalyzer**: Pattern-based uncertainty detection and question extraction
-- **ChatService**: Central service coordinating UI, agents, RAG, and orchestration
+- **ChatService**: Central service coordinating UI, agents, and message history
 - **MessageHistory**: In-memory storage for chat conversations with role-based messages
 - **PluginSettings**: Persistent configuration using IntelliJ's PersistentStateComponent
 - **ChatPanel**: Main UI component with refactored architecture (235 lines vs 958)
@@ -171,15 +162,12 @@ ChatPanel (coordinator)
 ## Technology Stack
 
 - **Language**: Kotlin 2.1.0
-- **Platform**: IntelliJ Platform 2024.2.5
-- **UI Framework**: Swing (IntelliJ UI components) with JCEF support and composition pattern
+- **Platform**: IntelliJ Platform 2025.1.4.1
+- **UI Framework**: Swing (IntelliJ UI components) with composition pattern
 - **Async**: Kotlin Coroutines
-- **HTTP**: Java HttpClient (JDK 21+) - *Note: Avoid Ktor due to coroutine conflicts*
+- **HTTP**: Java HttpClient (JDK 11+) - *Note: Avoid Ktor due to coroutine conflicts*
 - **JSON**: kotlinx.serialization 1.6.2
 - **XML**: xmlutil for XML serialization
-- **Database**: SQLite for embedding index
-- **Tokenization**: jtokkit for token counting
-- **MCP**: Model Context Protocol client implementation
 - **Testing**: JUnit + MockK
 
 ## Development Guidelines
@@ -189,17 +177,10 @@ ChatPanel (coordinator)
 2. Update `AgentFactory` to support the new provider
 3. Add configuration options to settings if needed
 
-### Adding New Tool Agents
-1. Extend `ToolAgent` base class or implement `Agent` interface
-2. Register in `ToolAgentRegistry`
-3. Define tool capabilities and execution logic
-4. Add to orchestrator's available tools
-
-### Adding MCP Servers
-1. Configure server in `.ride/mcp.json` or through UI
-2. Server automatically appears in MCPServerManager
-3. Tools are registered and available to agents
-4. Supports both STDIO (local) and HTTP (remote) servers
+### Adding New Agents
+1. Implement `Agent` interface
+2. Use dependency injection for LLM provider
+3. Register in `AgentFactory`
 
 ### UI Development (Post-Refactor)
 - Use IntelliJ UI components (com.intellij.ui.*)
@@ -217,8 +198,6 @@ ChatPanel (coordinator)
 - Conversation history validation tests
 - Pattern matching validation for Russian language uncertainty indicators
 - UI component tests for refactored architecture
-- RAG pipeline integration tests
-- MCP server integration tests
 
 ## Important Constraints
 
@@ -231,20 +210,18 @@ ChatPanel (coordinator)
 - Validate API keys before use
 
 ### Memory Management
-- Message history is stored in-memory only with automatic compression
-- RAG system uses top-N heap and pagination for memory efficiency
-- Component composition helps prevent memory leaks
-- Automatic token counting and history compression (default 8000 tokens)
+- Message history is stored in-memory only
 - Consider implementing persistence for chat history
+- Monitor memory usage with long conversations
+- Component composition helps prevent memory leaks
 
 ## Plugin Configuration
 
 The plugin is configured in `src/main/resources/META-INF/plugin.xml`:
 - Tool Window: "Ride Chat" anchored to right side
 - Settings: Available under Tools → Ride
-- Application Services: ChatService, PluginSettings, MCPServerManager
-- Actions: Response format configuration, MCP server management, DevTools
-- Commands: `/plan` for orchestrator-initiated tasks
+- Application Services: ChatService and PluginSettings
+- Actions: Response format configuration menu
 
 ## Response Format System
 
@@ -286,28 +263,7 @@ Response format is configured per agent through the `setResponseFormat()` method
 
 ## Advanced Features
 
-### RAG (Retrieval-Augmented Generation) System
-- **Complete Pipeline**: Retrieval → LLM Reranking → MCP Enrichment
-- **Semantic Search**: Embedding-based similarity search with configurable thresholds
-- **Source Links**: Clickable links in chat responses for quick navigation to source code
-- **Configuration**: `ragTopK` (1-10), `ragCandidateK` (30-100), `ragSimilarityThreshold`
-- **Integration**: Automatic enrichment of user queries with project context
-
-### Multi-Agent Orchestration
-- **EnhancedAgentOrchestrator**: Coordinates multiple specialized agents
-- **Tool Agents**: ProjectScanner, CodeAnalysis, BugDetection, UserInteraction
-- **Plan State Machine**: Tracks execution progress and manages task decomposition
-- **Interactive Execution**: Real-time progress updates and user feedback
-- **Command Integration**: Use `/plan` in chat to initiate orchestrated tasks
-
-### MCP (Model Context Protocol) Integration
-- **Server Management**: MCPServerManager handles multiple MCP servers
-- **Client Types**: STDIO (local) and HTTP (remote) server support
-- **Configuration**: `.ride/mcp.json` file or UI-based configuration
-- **Tool Registry**: Automatic registration and availability of MCP tools
-- **Headless Support**: Safe operation in environments without UI
-
-### Response Format System
+### Response Format Actions
 - **SetResponseFormatAction**: Unified dialog for format selection and schema input
 - **Individual format actions**: Quick access to JSON/XML formats
 - **ClearFormatAction**: Reset to default TEXT format
@@ -322,66 +278,42 @@ Response format is configured per agent through the `setResponseFormat()` method
 ### UI Features (Post-Refactor)
 - **Modular Design**: Each UI component has a single responsibility
 - **Code Block Processing**: Advanced markdown and code block rendering with syntax highlighting
-- **JCEF Support**: Enhanced HTML rendering with clickable source links
+- **JCEF Support**: Enhanced HTML rendering with JCEF integration
 - **Theme System**: Dynamic theme switching with proper CSS variable management
 - **Session Management**: Clean separation of session handling in UI components
-- **Interactive Elements**: Progress indicators and status updates for tool agents
 
 ### Extensibility
-- **Plugin architecture**: Easy addition of new formats, providers, and tool agents
+- **Plugin architecture**: Easy addition of new formats and providers
 - **Factory pattern**: Simplified extension of parsing and validation logic
 - **Interface-based design**: Clean separation of concerns
 - **Configuration-driven**: Runtime format switching without code changes
 - **Component composition**: Easy to extend UI with new features
-- **MCP Protocol**: Extensible through external MCP servers
 
-## Recent Development Highlights
+## Feature Roadmaps
 
-### Completed Major Features (2024-2025)
-
-**Advanced RAG System (Phase 5 - Completed)**
-- Complete RAG pipeline with semantic search, LLM reranking, and MCP enrichment
-- Clickable source links for quick navigation to relevant code
-- Configurable parameters for fine-tuning retrieval quality
-- Integration with embedding index for project context awareness
-
-**Multi-Agent Orchestration System**
-- EnhancedAgentOrchestrator for complex task decomposition
-- Specialized tool agents (ProjectScanner, CodeAnalysis, BugDetection)
-- Interactive plan execution with real-time progress tracking
-- Command integration via `/plan` in chat interface
-
-**MCP Integration**
-- Full Model Context Protocol client implementation
-- Support for both STDIO (local) and HTTP (remote) servers
-- Automatic tool registration and management
-- Headless-safe operations for CI/CD environments
-
-**UI Architecture Refactoring**
-- 75% reduction in ChatPanel code size (958 → 235 lines)
-- Component composition pattern with single responsibility principle
-- Enhanced JCEF support with interactive elements
-- Improved maintainability and testability
-
-### Feature Roadmaps
-
-**Uncertainty Analysis System (COMPLETED)**
+### Uncertainty Analysis System
 Документация по реализованной системе анализа неопределенности доступна в файле:
-- **[UNCERTAINTY_ANALYSIS_ROADMAP.md](docs/features/uncertainty-analysis-roadmap.md)** - Полный роудмап разработки
+- **[UNCERTAINTY_ANALYSIS_ROADMAP.md](UNCERTAINTY_ANALYSIS_ROADMAP.md)** - Полный роадмап разработки с техническими деталями
 
-**Quick Usage Reference:**
+**Краткая справка по использованию:**
 ```kotlin
-// Simple query - handled by ChatAgent with RAG
-val response = chatService.sendMessage("How does the authentication work?")
-
-// Complex task - handled by Orchestrator
-val planResponse = chatService.sendMessageWithOrchestrator("/plan Analyze the performance bottlenecks")
-
-// Check uncertainty and finality
+// Проверка типа ответа
 if (response.isFinal) {
+    // Окончательный ответ - можно визуально выделить в UI
     displayFinalAnswer(response.content)
 } else {
+    // Уточняющие вопросы - показать индикатор неопределенности
     val questions = UncertaintyAnalyzer.extractClarifyingQuestions(response.content)
     displayClarifyingQuestions(questions, response.uncertainty)
 }
 ```
+
+### UI Refactoring Roadmap (COMPLETED)
+UI refactoring was completed in 2025 with the following improvements:
+- **75% reduction in code size**: ChatPanel reduced from 958 to 235 lines
+- **Single Responsibility Principle**: Each class has one clear purpose
+- **Improved Testability**: Smaller, focused components are easier to test
+- **Enhanced Maintainability**: Changes in one area don't affect others
+- **Better Reusability**: Components can be used in other parts of the application
+- **Cleaner Architecture**: Clear separation between UI concerns
+- **Component Composition**: Flexible building block approach for UI development
