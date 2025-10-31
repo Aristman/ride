@@ -176,13 +176,13 @@ class MCPToolExecutor(
     private suspend fun executeListFiles(args: JsonObject): String {
         val dir = args["dir"]?.jsonPrimitive?.contentOrNull
         
-        val fullDir = if (dir != null) {
+        val fullDir = if (dir != null && dir.isNotBlank()) {
             // Нормализуем путь через LLM
             val normalizedDir = pathNormalizer.normalizePath(dir, "list_files")
             // Разрешаем путь относительно проекта
             resolveProjectPath(normalizedDir)
         } else {
-            // Если директория не указана, используем проектную директорию
+            // Если директория не указана или пустая, используем проектную директорию
             projectPath ?: "."
         }
 

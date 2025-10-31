@@ -371,23 +371,19 @@ class MCPServerManager {
         }
     }
 
-
-
     /**
      * Получить URL сервера
      */
     fun getServerUrl(): String = serverUrl
 
     // Вспомогательные методы
-
+`
     private fun getServerDirectory(): File {
         val pluginDir = File(System.getProperty("user.home"), ".ride")
         val serverDir = File(pluginDir, "mcp-server")
         serverDir.mkdirs()
         return serverDir
     }
-
-
 
     /**
      * Обеспечить запуск универсального MCP сервера
