@@ -5,6 +5,7 @@ import kotlin.test.assertTrue
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import ru.marslab.ide.ride.model.chat.ChatContext
+import ru.marslab.ide.ride.model.orchestrator.ComplexityLevel
 import com.intellij.openapi.project.Project
 import io.mockk.mockk
 
@@ -24,7 +25,7 @@ class RequestComplexityAnalyzerTest {
         val result = analyzer.analyzeUncertainty(request, context)
 
         assertEquals(0.0, result.score, 0.01)
-        assertEquals(ComplexityLevel.SIMPLE, result.complexity)
+        assertEquals(ComplexityLevel.LOW, result.complexity)
         assertTrue(result.suggestedActions.contains("прямой_ответ"))
         assertTrue(result.reasoning.contains("времени"))
         assertTrue(result.detectedFeatures.contains("вопрос_о_времени"))
@@ -38,7 +39,7 @@ class RequestComplexityAnalyzerTest {
         val result = analyzer.analyzeUncertainty(request, context)
 
         assertEquals(0.0, result.score, 0.01)
-        assertEquals(ComplexityLevel.SIMPLE, result.complexity)
+        assertEquals(ComplexityLevel.LOW, result.complexity)
         assertTrue(result.suggestedActions.contains("прямой_ответ"))
         assertTrue(result.reasoning.contains("погоде"))
     }
@@ -51,7 +52,7 @@ class RequestComplexityAnalyzerTest {
         val result = analyzer.analyzeUncertainty(request, context)
 
         assertTrue(result.score < 0.15)
-        assertEquals(ComplexityLevel.SIMPLE, result.complexity)
+        assertEquals(ComplexityLevel.LOW, result.complexity)
         assertTrue(result.suggestedActions.contains("прямой_ответ"))
     }
 
@@ -76,7 +77,7 @@ class RequestComplexityAnalyzerTest {
         val result = analyzer.analyzeUncertainty(request, context)
 
         assertTrue(result.score >= 0.7)
-        assertEquals(ComplexityLevel.COMPLEX, result.complexity)
+        assertEquals(ComplexityLevel.HIGH, result.complexity)
         assertTrue(result.suggestedActions.contains("создать_план"))
         assertTrue(result.suggestedActions.contains("использовать_оркестратор"))
         assertTrue(result.detectedFeatures.contains("требует_анализа"))
@@ -91,7 +92,7 @@ class RequestComplexityAnalyzerTest {
         val result = analyzer.analyzeUncertainty(request, context)
 
         assertTrue(result.score >= 0.6)
-        assertEquals(ComplexityLevel.COMPLEX, result.complexity)
+        assertEquals(ComplexityLevel.HIGH, result.complexity)
         assertTrue(result.suggestedActions.contains("использовать_оркестратор"))
     }
 
@@ -103,7 +104,7 @@ class RequestComplexityAnalyzerTest {
         val result = analyzer.analyzeUncertainty(request, context)
 
         assertTrue(result.score >= 0.7)
-        assertEquals(ComplexityLevel.COMPLEX, result.complexity)
+        assertEquals(ComplexityLevel.HIGH, result.complexity)
         assertTrue(result.suggestedActions.contains("создать_план"))
     }
 
@@ -175,7 +176,7 @@ class RequestComplexityAnalyzerTest {
         val result = analyzer.analyzeUncertainty(request, context)
 
         assertTrue(result.score > 0.3)
-        assertTrue(result.complexity != ComplexityLevel.SIMPLE)
+        assertTrue(result.complexity != ComplexityLevel.LOW)
     }
 
     @Test
@@ -186,7 +187,7 @@ class RequestComplexityAnalyzerTest {
         val result = analyzer.analyzeUncertainty(request, context)
 
         assertTrue(result.score < 0.1)
-        assertEquals(ComplexityLevel.SIMPLE, result.complexity)
+        assertEquals(ComplexityLevel.LOW, result.complexity)
         assertTrue(result.suggestedActions.contains("прямой_ответ"))
     }
 }

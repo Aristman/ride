@@ -5,6 +5,7 @@ import kotlin.test.assertTrue
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import ru.marslab.ide.ride.model.chat.ChatContext
+import ru.marslab.ide.ride.model.orchestrator.ComplexityLevel
 import com.intellij.openapi.project.Project
 import io.mockk.mockk
 import kotlin.system.measureTimeMillis
@@ -61,7 +62,7 @@ class RequestComplexityAnalyzerPerformanceTest {
 
             // Проверяем, что результат корректный
             assertTrue(result.score > 0.5)
-            assertEquals(ComplexityLevel.COMPLEX, result.complexity)
+            assertEquals(ComplexityLevel.HIGH, result.complexity)
         }
 
         // Даже очень длинные запросы должны обрабатываться быстро (< 50ms)

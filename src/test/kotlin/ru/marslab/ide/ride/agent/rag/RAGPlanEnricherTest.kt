@@ -4,7 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
-import kotlin.test.BeforeEach
+import kotlin.test.assertFalse
 import io.mockk.*
 import ru.marslab.ide.ride.model.orchestrator.ComplexityLevel
 import ru.marslab.ide.ride.agent.analyzer.UncertaintyResult
@@ -31,7 +31,7 @@ class RAGPlanEnricherTest {
     private lateinit var mockProject: Project
     private lateinit var context: ChatContext
 
-    @BeforeEach
+    init {
     fun setUp() {
         mockLLMProvider = mockk<LLMProvider>()
         mockRagService = mockk<RagEnrichmentService>()

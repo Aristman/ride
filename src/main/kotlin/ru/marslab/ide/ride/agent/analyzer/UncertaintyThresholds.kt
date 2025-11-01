@@ -34,8 +34,7 @@ object UncertaintyThresholds {
      */
     fun shouldUseOrchestrator(uncertaintyResult: UncertaintyResult): Boolean {
         return uncertaintyResult.score >= orchestratorThreshold ||
-               uncertaintyResult.complexity == ComplexityLevel.HIGH ||
-               uncertaintyResult.complexity == ComplexityLevel.VERY_HIGH
+               uncertaintyResult.complexity == ComplexityLevel.VERY_HIGH // Только VERY_HIGH требует оркестратора
     }
 
     /**
@@ -50,7 +49,7 @@ object UncertaintyThresholds {
      */
     fun isSimpleQuery(uncertaintyResult: UncertaintyResult): Boolean {
         return uncertaintyResult.complexity == ComplexityLevel.LOW &&
-               uncertaintyResult.score < complexityThreshold
+               uncertaintyResult.score < complexityThreshold + 0.2 // Более мягкий порог для LOW
     }
 
     /**

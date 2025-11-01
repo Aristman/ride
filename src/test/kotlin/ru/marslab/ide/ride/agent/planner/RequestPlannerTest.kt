@@ -1,12 +1,14 @@
 package ru.marslab.ide.ride.agent.planner
 
-import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.Assertions.*
+import kotlin.test.Test
+import kotlin.test.assertTrue
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import ru.marslab.ide.ride.agent.analyzer.*
 import ru.marslab.ide.ride.model.chat.ChatContext
 import ru.marslab.ide.ride.model.orchestrator.*
 import com.intellij.openapi.project.Project
-import org.mockito.Mockito.mock
+import io.mockk.mockk
 import java.util.*
 
 /**
@@ -15,7 +17,7 @@ import java.util.*
 class RequestPlannerTest {
 
     private val planner = RequestPlanner()
-    private val mockProject = mock(Project::class.java)
+    private val mockProject = mockk<Project>()
     private val context = ChatContext(project = mockProject, history = emptyList())
 
     @Test
@@ -23,7 +25,7 @@ class RequestPlannerTest {
         val request = "Какой сегодня день?"
         val uncertainty = UncertaintyResult(
             score = 0.0,
-            complexity = ComplexityLevel.SIMPLE,
+            complexity = ComplexityLevel.LOW,
             suggestedActions = listOf("прямой_ответ"),
             reasoning = "Простой вопрос о времени"
         )
@@ -78,7 +80,7 @@ class RequestPlannerTest {
         val request = "Найди и исправь баги в этом коде"
         val uncertainty = UncertaintyResult(
             score = 0.6,
-            complexity = ComplexityLevel.COMPLEX,
+            complexity = ComplexityLevel.HIGH,
             suggestedActions = listOf("создать_план", "использовать_оркестратор"),
             reasoning = "Сложный запрос на исправление багов"
         )
@@ -108,7 +110,7 @@ class RequestPlannerTest {
         val request = "Проанализируй архитектуру этого проекта"
         val uncertainty = UncertaintyResult(
             score = 0.8,
-            complexity = ComplexityLevel.COMPLEX,
+            complexity = ComplexityLevel.HIGH,
             suggestedActions = listOf("создать_план", "использовать_оркестратор", "поиск_контекста"),
             reasoning = "Сложный архитектурный анализ"
         )
@@ -133,7 +135,7 @@ class RequestPlannerTest {
         val request = "Сделай рефакторинг этого класса"
         val uncertainty = UncertaintyResult(
             score = 0.7,
-            complexity = ComplexityLevel.COMPLEX,
+            complexity = ComplexityLevel.HIGH,
             suggestedActions = listOf("создать_план", "использовать_оркестратор"),
             reasoning = "Сложный запрос на рефакторинг"
         )
@@ -160,7 +162,7 @@ class RequestPlannerTest {
         val request = "Проанализируй этот сложный проект и предложи улучшения"
         val uncertainty = UncertaintyResult(
             score = 0.7,
-            complexity = ComplexityLevel.COMPLEX,
+            complexity = ComplexityLevel.HIGH,
             suggestedActions = listOf("создать_план", "использовать_оркестратор", "поиск_контекста"),
             reasoning = "Сложный многошаговый запрос",
             detectedFeatures = listOf("связан_с_кодом", "подробный")
@@ -236,7 +238,7 @@ class RequestPlannerTest {
         val simpleRequest = "Что такое Kotlin?"
         val simpleUncertainty = UncertaintyResult(
             score = 0.1,
-            complexity = ComplexityLevel.SIMPLE,
+            complexity = ComplexityLevel.LOW,
             suggestedActions = listOf("прямой_ответ"),
             reasoning = "Простой вопрос"
         )
@@ -244,7 +246,7 @@ class RequestPlannerTest {
         val complexRequest = "Проанализируй архитектуру микросервисного приложения и предложи улучшения"
         val complexUncertainty = UncertaintyResult(
             score = 0.9,
-            complexity = ComplexityLevel.COMPLEX,
+            complexity = ComplexityLevel.HIGH,
             suggestedActions = listOf("создать_план", "использовать_оркестратор"),
             reasoning = "Очень сложный архитектурный запрос"
         )
@@ -266,7 +268,7 @@ class RequestPlannerTest {
         val request = "Найди баги и исправь их"
         val uncertainty = UncertaintyResult(
             score = 0.6,
-            complexity = ComplexityLevel.COMPLEX,
+            complexity = ComplexityLevel.HIGH,
             suggestedActions = listOf("создать_план"),
             reasoning = "Запрос на исправление багов"
         )
