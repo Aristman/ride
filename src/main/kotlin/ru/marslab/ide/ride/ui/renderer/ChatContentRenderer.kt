@@ -1,4 +1,4 @@
-﻿package ru.marslab.ide.ride.ui.renderer
+package ru.marslab.ide.ride.ui.renderer
 
 import ru.marslab.ide.ride.model.agent.AgentOutputType
 import ru.marslab.ide.ride.model.agent.FormattedOutput
@@ -26,26 +26,39 @@ class ChatContentRenderer {
      * Рендерит контент сообщения в HTML
      */
     fun renderContentToHtml(text: String, isJcefMode: Boolean): String {
-        var result = text
-
-        // Если контент уже представляет собой HTML - вставляем как есть
-        if (markdownProcessor.looksLikeHtml(result)) {
-            return result
+        // Если контент уже HTML — только линкуем пути и возвращаем
+        if (markdownProcessor.looksLikeHtml(text)) {
+            return linkifyFilePaths(text)
         }
+
+        var result = text
 
         // Экранируем HTML только для не-JCEF режима (до обработки markdown)
         if (!isJcefMode) {
             result = escapeHtml(result)
         }
 
+        // Помечаем пути токенами, чтобы markdown не ломал их (подчёркивания/курсив и т.п.)
+        result = markFilePaths(result)
+
         // Обрабатываем markdown-элементы
         result = markdownProcessor.processMarkdown(result, isJcefMode)
+
+        // Заменяем токены на кликабельные элементы
+        result = replaceFileTokensWithLinks(result)
+
+        // Доп. обработка (fallback): попытаться линковать оставшиеся совпадения в чистых сегментах HTML
+        result = linkifyFilePaths(result)
+
+        // Усиление: любые уже существующие <a href="path.ext"> помечаем internal-командой
+        result = enhanceAnchorFileLinks(result)
 
         return result
     }
 
     /**
      * Рендерит форматированный вывод агентов в HTML
+{{ ... }}
      */
     fun renderFormattedOutput(formattedOutput: FormattedOutput): String {
         return try {
@@ -72,6 +85,40 @@ class ChatContentRenderer {
         } catch (e: Exception) {
             // Fallback на сырой контент в случае ошибки
             formattedOutput.rawContent ?: "<div class=\"error\">Error rendering formatted output</div>"
+        }
+    }
+
+    /**
+     * Находит уже сформированные markdown/HTML ссылки <a href="...">, которые указывают на локальные пути,
+     * и дополняет их атрибутами data-open-command и onclick, чтобы клик обрабатывался нашим JS.
+     */
+    private fun enhanceAnchorFileLinks(html: String): String {
+        if (html.isBlank()) return html
+        // Поиск <a ... href="...ext" ...>...</a> где href без протокола и содержит допустимое расширение
+        val anchorRegex = Regex(
+            pattern = """
+                (?is)
+                <a\s+([^>]*?)href\s*=\s*"([^"]+)"([^>]*)>(.*?)</a>
+            """.trimIndent()
+        )
+        return anchorRegex.replace(html) { mr ->
+            val preAttrs = mr.groupValues[1]
+            val href = mr.groupValues[2]
+            val postAttrs = mr.groupValues[3]
+            val inner = mr.groupValues[4]
+
+            // Игнорируем внешние ссылки (http/https/mailto)
+            val lowerHref = href.lowercase()
+            val isExternal = lowerHref.startsWith("http:") || lowerHref.startsWith("https:") || lowerHref.startsWith("mailto:")
+            if (isExternal) return@replace mr.value
+
+            // Проверяем, что href выглядит как путь к файлу
+            if (!filePathRegex.containsMatchIn(href)) return@replace mr.value
+
+            val cmd = "open?path=${'$'}href&startLine=1&endLine=1"
+            """
+            <a ${preAttrs.trim()} href="#" data-open-command="${cmd}" data-tooltip="${href}" onclick="window.openSourceFile('${cmd}'); return false;" ${postAttrs.trim()}>${inner}</a>
+            """.trimIndent()
         }
     }
 
@@ -157,6 +204,120 @@ class ChatContentRenderer {
             "<div class=\"$cssClasses\">${block.content}</div>"
         } else {
             block.content
+        }
+    }
+
+    // =========================
+    // File path auto-linking
+    // =========================
+
+    private val filePathRegex: Regex by lazy {
+        Regex(
+            pattern = """
+                (?<![="'/])                    # не внутри атрибутов и не после слеша
+                \b
+                (?:[A-Za-z0-9_.-]+[/\\\\])* # ноль или более каталогов (/, \\)
+                [A-Za-z0-9_.-]+                # имя файла
+                \.
+                (?:dart|kt|java|kts|md|markdown|yaml|yml|xml|gradle|rs|py|ts|tsx|js|jsx|go|rb|c|cpp|h|hpp|cs|json)
+            """.trimIndent(),
+            options = setOf(RegexOption.IGNORE_CASE, RegexOption.COMMENTS)
+        )
+    }
+
+    private fun markFilePaths(text: String): String {
+        if (text.isBlank()) return text
+        return filePathRegex.replace(text) { mr ->
+            var path = mr.value
+            // Снимаем завершающую пунктуацию, если она прилипла к пути в тексте
+            val trailing = path.takeLast(1)
+            if (trailing in listOf(".", ",", ";", ":", ")")) {
+                path = path.dropLast(1)
+                "<!--RIDEFILE:${path}-->${trailing}"
+            } else {
+                "<!--RIDEFILE:${path}-->"
+            }
+        }
+    }
+
+    private fun replaceFileTokensWithLinks(html: String): String {
+        if (html.isBlank()) return html
+        val tokenRegex = Regex("<!--RIDEFILE:([^>]+?)-->")
+        return tokenRegex.replace(html) { mr ->
+            val raw = mr.groupValues[1]
+            val path = raw.trim()
+            val cmd = "open?path=${path}&startLine=1&endLine=1"
+            """
+            <a href="#"
+               class="${ChatPanelConfig.CSS.SOURCE_LINK_ACTION}"
+               data-open-command="${cmd}"
+               data-tooltip="${path}"
+               onclick="window.openSourceFile('${cmd}'); return false;">${path}</a>
+            """.trimIndent()
+        }
+    }
+
+    /**
+     * Ищет в HTML строке упоминания путей к файлам и оборачивает их в кликабельный элемент,
+     * который вызывает window.openSourceFile с командой open?path=...&startLine=1&endLine=1.
+     * Содержимое внутри <code> и <pre> не изменяется.
+     */
+    private fun linkifyFilePaths(html: String): String {
+        if (html.isBlank()) return html
+
+        // Регулярное выражение для путей к файлам
+        // Пример: lib/core/api/api_client.dart, src/main/kotlin/Foo.kt, README.md
+        val filePattern = Regex(
+            pattern = """
+                (?<![="'/])                    # не внутри атрибутов и не после слеша
+                \b
+                (?:[A-Za-z0-9_.-]+/)*          # каталоги
+                [A-Za-z0-9_.-]+                # имя файла
+                \.
+                (?:dart|kt|java|kts|md|markdown|yaml|yml|xml|gradle|rs|py|ts|tsx|js|jsx|go|rb|c|cpp|h|hpp|cs|json)
+            """.trimIndent(),
+            options = setOf(RegexOption.IGNORE_CASE, RegexOption.COMMENTS)
+        )
+
+        // Не трогаем содержимое <code> и <pre>
+        val codeTagRegex = Regex("(?is)<(code|pre)(?:\\b[^>]*)>.*?</\\1>")
+        val sb = StringBuilder()
+        var lastIndex = 0
+
+        for (m in codeTagRegex.findAll(html)) {
+            val before = html.substring(lastIndex, m.range.first)
+            sb.append(linkifyPlainHtml(before, filePattern))
+            sb.append(m.value) // оставляем код как есть
+            lastIndex = m.range.last + 1
+        }
+        // Хвост после последнего <code>/<pre>
+        if (lastIndex < html.length) {
+            sb.append(linkifyPlainHtml(html.substring(lastIndex), filePattern))
+        }
+
+        return sb.toString()
+    }
+
+    /**
+     * Заменяет все совпадения filePattern в plain HTML сегменте на кликабельные элементы.
+     */
+    private fun linkifyPlainHtml(segment: String, filePattern: Regex): String {
+        if (segment.isEmpty()) return segment
+        return filePattern.replace(segment) { mr ->
+            var path = mr.value
+            val trailing = path.takeLast(1)
+            var suffix = ""
+            if (trailing in listOf(".", ",", ";", ":", ")")) {
+                path = path.dropLast(1)
+                suffix = trailing
+            }
+            val cmd = "open?path=$path&startLine=1&endLine=1"
+            """
+            <a href="#" class="${ChatPanelConfig.CSS.SOURCE_LINK_ACTION}" 
+               data-open-command="${cmd}" 
+               data-tooltip="${path}" 
+               onclick="window.openSourceFile('${cmd}'); return false;">${path}</a>${suffix}
+            """.trimIndent()
         }
     }
 

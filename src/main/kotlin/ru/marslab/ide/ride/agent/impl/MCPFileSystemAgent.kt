@@ -20,7 +20,8 @@ import ru.marslab.ide.ride.model.llm.*
 class MCPFileSystemAgent(
     private val config: YandexGPTConfig,
     private val systemPrompt: String = DEFAULT_SYSTEM_PROMPT,
-    private val llmProvider: LLMProvider? = null
+    private val llmProvider: LLMProvider? = null,
+    private val projectPath: String? = null
 ) {
 
     private val logger = Logger.getInstance(MCPFileSystemAgent::class.java)
@@ -29,12 +30,14 @@ class MCPFileSystemAgent(
     private val toolResultFormatter = ToolResultFormatter()
 
     private val mcpClient by lazy {
+        // Запускаем универсальный MCP сервер
+        serverManager.ensureProjectServer(projectPath)
         MCPClient(serverManager.getServerUrl())
     }
 
     private val toolExecutor by lazy {
         val pathNormalizer = llmProvider?.let { PathNormalizer(it) }
-        MCPToolExecutor(mcpClient, pathNormalizer ?: PathNormalizer(createFallbackProvider()))
+        MCPToolExecutor(mcpClient, pathNormalizer ?: PathNormalizer(createFallbackProvider()), projectPath)
     }
 
     companion object {

@@ -57,6 +57,18 @@ object ChatPanelConfig {
         const val AFTER_SYSTEM = "after-system"
     }
 
+    // CSS классы для source links
+    object CSS {
+        const val SOURCE_LINKS_CONTAINER = "source-links-container"
+        const val SOURCE_LINKS_HEADER = "source-links-header"
+        const val SOURCE_LINK_ITEM = "source-link-item"
+        const val SOURCE_LINK_INDEX = "source-link-index"
+        const val SOURCE_LINK_CONTENT = "source-link-content"
+        const val SOURCE_LINK_FILE = "source-link-file"
+        const val SOURCE_LINK_LINES = "source-link-lines"
+        const val SOURCE_LINK_ACTION = "source-link-action"
+    }
+
     // Иконки для индикаторов
     object Icons {
         const val USER = "👤"
@@ -108,5 +120,11 @@ object ChatPanelConfig {
         const val ANSWER_WITH_PARSING = "Ответ с парсингом"
         const val LOW_CONFIDENCE_ANSWER = "Ответ с низкой уверенностью"
         const val UNCERTAINTY_TEMPLATE = "(неопределенность: %d%%)"
+    }
+
+    // Шрифты
+    object Fonts {
+        const val DEFAULT_FAMILY = "JetBrains Mono, Consolas, Monaco, monospace"
+        const val DEFAULT_SIZE = 12
     }
 }

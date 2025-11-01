@@ -14,8 +14,11 @@ import java.time.Duration
 
 /**
  * HTTP клиент для взаимодействия с MCP Server
+ * MCP сервер работает с файловой системой напрямую
  */
-class MCPClient(private val baseUrl: String = "http://localhost:3000") {
+class MCPClient(
+    private val baseUrl: String = "http://localhost:3000"
+) {
 
     private val logger = Logger.getInstance(MCPClient::class.java)
     private val client = HttpClient.newBuilder()
@@ -28,10 +31,22 @@ class MCPClient(private val baseUrl: String = "http://localhost:3000") {
     }
 
     /**
+     * MCP сервер работает с файловой системой напрямую
+     * Пути передаются как есть
+     */
+    private fun resolvePath(path: String): String {
+        return path
+    }
+
+    /**
      * Создать файл
      */
     suspend fun createFile(path: String, content: String, overwrite: Boolean = false): FileResponse {
-        val request = CreateFileRequest(path, content, overwrite)
+        val resolvedPath = resolvePath(path)
+        println("🌐 MCPClient: createFile")
+        println("  Path: '$resolvedPath'")
+        
+        val request = CreateFileRequest(resolvedPath, content, overwrite)
         val response = post("/files", request)
         return json.decodeFromString(FileResponse.serializer(), response)
     }
@@ -40,7 +55,8 @@ class MCPClient(private val baseUrl: String = "http://localhost:3000") {
      * Прочитать файл
      */
     suspend fun readFile(path: String): FileContentResponse {
-        val encodedPath = URLEncoder.encode(path, StandardCharsets.UTF_8)
+        val resolvedPath = resolvePath(path)
+        val encodedPath = URLEncoder.encode(resolvedPath, StandardCharsets.UTF_8)
         val response = get("/files/$encodedPath")
         return json.decodeFromString(FileContentResponse.serializer(), response)
     }
@@ -49,11 +65,13 @@ class MCPClient(private val baseUrl: String = "http://localhost:3000") {
      * Обновить файл
      */
     suspend fun updateFile(path: String, content: String): FileResponse {
+        val resolvedPath = resolvePath(path)
         println("🌐 MCPClient: updateFile")
-        println("  Path: '$path'")
+        println("  Original path: '$path'")
+        println("  Resolved path: '$resolvedPath'")
         println("  Content length: ${content.length}")
 
-        val encodedPath = URLEncoder.encode(path, StandardCharsets.UTF_8)
+        val encodedPath = URLEncoder.encode(resolvedPath, StandardCharsets.UTF_8)
         val endpoint = "/files/$encodedPath"
 
         println("  Encoded path: '$encodedPath'")
@@ -68,7 +86,8 @@ class MCPClient(private val baseUrl: String = "http://localhost:3000") {
      * Удалить файл
      */
     suspend fun deleteFile(path: String): DeleteResponse {
-        val encodedPath = URLEncoder.encode(path, StandardCharsets.UTF_8)
+        val resolvedPath = resolvePath(path)
+        val encodedPath = URLEncoder.encode(resolvedPath, StandardCharsets.UTF_8)
         val response = delete("/files/$encodedPath")
         return json.decodeFromString(DeleteResponse.serializer(), response)
     }
@@ -77,8 +96,9 @@ class MCPClient(private val baseUrl: String = "http://localhost:3000") {
      * Список файлов
      */
     suspend fun listFiles(dir: String? = null): DirectoryListResponse {
-        val url = if (dir != null) {
-            val encodedDir = URLEncoder.encode(dir, StandardCharsets.UTF_8)
+        val resolvedDir = dir?.let { resolvePath(it) }
+        val url = if (resolvedDir != null) {
+            val encodedDir = URLEncoder.encode(resolvedDir, StandardCharsets.UTF_8)
             "/files?dir=$encodedDir"
         } else {
             "/files"
@@ -91,7 +111,8 @@ class MCPClient(private val baseUrl: String = "http://localhost:3000") {
      * Создать директорию
      */
     suspend fun createDirectory(path: String, recursive: Boolean = false): DirectoryResponse {
-        val request = CreateDirectoryRequest(path, recursive)
+        val resolvedPath = resolvePath(path)
+        val request = CreateDirectoryRequest(resolvedPath, recursive)
         val response = post("/directories", request)
         return json.decodeFromString(DirectoryResponse.serializer(), response)
     }
@@ -100,7 +121,8 @@ class MCPClient(private val baseUrl: String = "http://localhost:3000") {
      * Удалить директорию
      */
     suspend fun deleteDirectory(path: String): DeleteResponse {
-        val encodedPath = URLEncoder.encode(path, StandardCharsets.UTF_8)
+        val resolvedPath = resolvePath(path)
+        val encodedPath = URLEncoder.encode(resolvedPath, StandardCharsets.UTF_8)
         val response = delete("/directories/$encodedPath")
         return json.decodeFromString(DeleteResponse.serializer(), response)
     }

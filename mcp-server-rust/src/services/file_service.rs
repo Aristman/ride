@@ -11,6 +11,22 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 pub struct FileService;
 
 impl FileService {
+    /// Resolve path relative to base_dir, handling both absolute and relative paths
+    fn resolve_path(config: &Config, sanitized_path: &Path) -> PathBuf {
+        if sanitized_path.is_absolute() {
+            // For absolute paths, use as-is when base_dir is root
+            if config.base_dir == Path::new("/") || config.base_dir.as_os_str().is_empty() {
+                sanitized_path.to_path_buf()
+            } else {
+                // For non-root base_dir, strip leading slash and join
+                let relative_path = sanitized_path.strip_prefix("/").unwrap_or(sanitized_path);
+                config.base_dir.join(relative_path)
+            }
+        } else {
+            // For relative paths, always join with base_dir
+            config.base_dir.join(sanitized_path)
+        }
+    }
     /// Create a new file
     pub async fn create_file(
         config: &Config,
@@ -20,7 +36,7 @@ impl FileService {
         let sanitized_path = security::sanitize_path(&request.path)
             .map_err(|e| AppError::InvalidInput(e))?;
         
-        let full_path = config.base_dir.join(&sanitized_path);
+        let full_path = Self::resolve_path(config, &sanitized_path);
         
         // Validate path is allowed
         if !config.is_path_allowed(&full_path) {
@@ -84,7 +100,7 @@ impl FileService {
         let sanitized_path = security::sanitize_path(path)
             .map_err(|e| AppError::InvalidInput(e))?;
         
-        let full_path = config.base_dir.join(&sanitized_path);
+        let full_path = Self::resolve_path(config, &sanitized_path);
         
         if !config.is_path_allowed(&full_path) {
             return Err(AppError::PermissionDenied(format!(
@@ -131,7 +147,7 @@ impl FileService {
         let sanitized_path = security::sanitize_path(path)
             .map_err(|e| AppError::InvalidInput(e))?;
         
-        let full_path = config.base_dir.join(&sanitized_path);
+        let full_path = Self::resolve_path(config, &sanitized_path);
         
         if !config.is_path_allowed(&full_path) {
             return Err(AppError::PermissionDenied(format!(
@@ -175,7 +191,7 @@ impl FileService {
         let sanitized_path = security::sanitize_path(path)
             .map_err(|e| AppError::InvalidInput(e))?;
         
-        let full_path = config.base_dir.join(&sanitized_path);
+        let full_path = Self::resolve_path(config, &sanitized_path);
         
         if !config.is_path_allowed(&full_path) {
             return Err(AppError::PermissionDenied(format!(
@@ -201,7 +217,7 @@ impl FileService {
         let base_path = if let Some(path) = dir_path {
             let sanitized = security::sanitize_path(path)
                 .map_err(|e| AppError::InvalidInput(e))?;
-            config.base_dir.join(sanitized)
+            Self::resolve_path(config, &sanitized)
         } else {
             config.base_dir.clone()
         };
@@ -258,7 +274,7 @@ impl FileService {
         let sanitized_path = security::sanitize_path(&request.path)
             .map_err(|e| AppError::InvalidInput(e))?;
         
-        let full_path = config.base_dir.join(&sanitized_path);
+        let full_path = Self::resolve_path(config, &sanitized_path);
         
         if !config.is_path_allowed(&full_path) {
             return Err(AppError::PermissionDenied(format!(
@@ -293,7 +309,7 @@ impl FileService {
         let sanitized_path = security::sanitize_path(path)
             .map_err(|e| AppError::InvalidInput(e))?;
         
-        let full_path = config.base_dir.join(&sanitized_path);
+        let full_path = Self::resolve_path(config, &sanitized_path);
         
         if !config.is_path_allowed(&full_path) {
             return Err(AppError::PermissionDenied(format!(

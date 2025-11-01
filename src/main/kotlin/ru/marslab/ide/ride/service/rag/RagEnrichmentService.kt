@@ -6,11 +6,17 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.ProjectManager
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeoutOrNull
+import ru.marslab.ide.ride.agent.LLMProviderFactory
 import ru.marslab.ide.ride.model.embedding.FileChunkData
+import ru.marslab.ide.ride.integration.embedding.EmbeddingIndexClientImpl
+import ru.marslab.ide.ride.service.rag.DefaultRagRetriever
+import ru.marslab.ide.ride.service.rag.DefaultLlmReranker
+import ru.marslab.ide.ride.service.rag.McpChunkEnricher
 import ru.marslab.ide.ride.service.embedding.EmbeddingDatabaseService
 import ru.marslab.ide.ride.service.embedding.EmbeddingService
 import ru.marslab.ide.ride.settings.PluginSettings
 import ru.marslab.ide.ride.util.TokenEstimator
+import ru.marslab.ide.ride.model.rag.RagResultWithSources
 import java.io.File
 import java.nio.file.Paths
 
@@ -33,9 +39,9 @@ class RagEnrichmentService {
      *
      * @param userQuery оригинальный запрос пользователя
      * @param maxTokens максимальное количество токенов для RAG контекста
-     * @return RAGResult с найденными фрагментами или null если RAG отключен
+     * @return RagResultWithSources с найденными фрагментами и source links или null если RAG отключен
      */
-    suspend fun enrichQuery(userQuery: String, maxTokens: Int = 4000): RagResult? {
+    suspend fun enrichQuery(userQuery: String, maxTokens: Int = 4000): RagResultWithSources? {
         if (!settings.enableRagEnrichment) {
             logger.debug("RAG enrichment is disabled")
             return null
@@ -187,10 +193,16 @@ class RagEnrichmentService {
                 "RAG enrichment successful: ${limitedChunks.size} chunks, ${estimateTokens(limitedChunks)} tokens (strategy=$strategy, candidateK=$candidateK, topK=$metaTopK, threshold=$threshold)"
             )
 
-            RagResult(
+            val ragResult = RagResult(
                 chunks = limitedChunks,
                 totalTokens = estimateTokens(limitedChunks),
                 query = userQuery
+            )
+
+            // Конвертируем в результат с source links если включено
+            return RagResultWithSources.fromRagResult(
+                ragResult = ragResult,
+                sourceLinksEnabled = settings.ragSourceLinksEnabled
             )
 
         } catch (e: TimeoutCancellationException) {
@@ -200,6 +212,34 @@ class RagEnrichmentService {
             logger.error("Unexpected error during RAG enrichment", e)
             null
         }
+    }
+
+    /**
+     * Обратная совместимость: возвращает базовый RagResult без source links
+     */
+    suspend fun enrichQueryLegacy(userQuery: String, maxTokens: Int = 4000): RagResult? {
+        return enrichQuery(userQuery, maxTokens)?.let { resultWithSources ->
+            RagResult(
+                chunks = resultWithSources.chunks.map { chunk ->
+                    RagChunk(
+                        content = chunk.content,
+                        filePath = chunk.source.path,
+                        startLine = chunk.source.startLine,
+                        endLine = chunk.source.endLine,
+                        similarity = chunk.similarity
+                    )
+                },
+                totalTokens = resultWithSources.totalTokens,
+                query = resultWithSources.query
+            )
+        }
+    }
+
+    /**
+     * Получает RAG результат с source links для UI отображения
+     */
+    suspend fun enrichQueryWithSources(userQuery: String, maxTokens: Int = 4000): RagResultWithSources? {
+        return enrichQuery(userQuery, maxTokens)
     }
 
     /**
@@ -250,6 +290,100 @@ class RagEnrichmentService {
             - Укажите на конкретные фрагменты кода из контекста, когда это релевантно
             - Если нужно уточнить детали вопроса на основе контекста, задайте уточняющие вопросы
         """.trimIndent()
+    }
+
+    /**
+     * Продвинутый пайплайн RAG: wide retrieval → LLM rerank → MCP enrichment
+     */
+    suspend fun enrichQueryAdvanced(userQuery: String, maxTokens: Int = 4000): RagResultWithSources? {
+        if (!settings.enableRagEnrichment) {
+            logger.debug("RAG advanced is disabled")
+            return null
+        }
+
+        val project = ProjectManager.getInstance().openProjects.firstOrNull() ?: return null
+        val projectPath = project.basePath ?: return null
+
+        // Проверяем индекс эмбеддингов
+        val embeddingService = EmbeddingService.getInstance()
+        if (!embeddingService.hasIndex(projectPath)) return null
+
+        val candidateK = settings.ragCandidateK
+        val topN = settings.ragTopK
+
+        val indexClient = EmbeddingIndexClientImpl()
+        val retriever = DefaultRagRetriever(indexClient, settings)
+        val reranker = DefaultLlmReranker(LLMProviderFactory.createLLMProvider())
+        val enricher = McpChunkEnricher(indexClient)
+
+        val t0 = System.currentTimeMillis()
+        val candidates = retriever.retrieveCandidates(userQuery, candidateK)
+        val t1 = System.currentTimeMillis()
+
+        val rerankedIds = try {
+            reranker.rerank(userQuery, candidates, topN)
+        } catch (e: Exception) {
+            logger.warn("RAG rerank failed, fallback to similarity order", e)
+            candidates.map { it.chunkId }.take(topN)
+        }
+        val t2 = System.currentTimeMillis()
+
+        val enriched = try {
+            enricher.enrich(rerankedIds)
+        } catch (e: Exception) {
+            logger.warn("RAG MCP enrichment failed, fallback to base chunks", e)
+            emptyList()
+        }
+        val t3 = System.currentTimeMillis()
+
+        // Сопоставляем обратно к RagChunk
+        val simMap = candidates.associate { it.chunkId to it.similarity.toFloat() }
+        val chunks = enriched.map { ec ->
+            val range = ec.anchors.firstOrNull()
+            RagChunk(
+                content = ec.content,
+                filePath = ec.filePath ?: "unknown_file",
+                startLine = range?.first ?: 1,
+                endLine = range?.last ?: (range?.first ?: 1),
+                similarity = simMap[ec.chunkId] ?: 0f
+            )
+        }
+
+        val limited = if (chunks.isNotEmpty()) limitChunksByTokens(chunks, maxTokens) else emptyList()
+        if (limited.isEmpty()) return null
+
+        val result = RagResult(
+            chunks = limited,
+            totalTokens = estimateTokens(limited),
+            query = userQuery
+        )
+
+        logger.info(
+            "RAG advanced completed: cands=${candidates.size}, final=${limited.size}, times ms: retrieval=${t1 - t0}, rerank=${t2 - t1}, enrich=${t3 - t2}"
+        )
+
+        return RagResultWithSources.fromRagResult(
+            ragResult = result,
+            sourceLinksEnabled = settings.ragSourceLinksEnabled
+        )
+    }
+
+    /**
+     * Преобразует расширенный результат к базовому для форматирования промпта
+     */
+    fun toLegacyResult(result: RagResultWithSources): RagResult {
+        val legacyChunks = if (result.chunks.isNotEmpty()) {
+            result.chunks.map { c ->
+                RagChunk(
+                    content = c.content,
+                    filePath = c.source.path,
+                    startLine = c.source.startLine,
+                    endLine = c.source.endLine,
+                    similarity = c.similarity
+                )
+            }
+        } else emptyList()
+        return RagResult(chunks = legacyChunks, totalTokens = result.totalTokens, query = result.query)
     }
 
     // Приватные методы

@@ -9,6 +9,8 @@ import ru.marslab.ide.ride.service.ChatService
 import ru.marslab.ide.ride.settings.PluginSettings
 import ru.marslab.ide.ride.ui.config.ChatPanelConfig
 import ru.marslab.ide.ride.ui.renderer.ChatContentRenderer
+import ru.marslab.ide.ride.ui.templates.SourceLinkTemplate
+import ru.marslab.ide.ride.service.rag.RagSourceLinkService
 import java.util.*
 
 /**
@@ -146,6 +148,48 @@ class MessageDisplayManager(
         )
 
         htmlDocumentManager.appendHtml(messageHtml)
+        // Отключено: не добавляем таблицу "Источники" под ответом
+    }
+
+    /**
+     * Создает HTML для source links если они есть в метаданных
+     */
+    private fun createSourceLinksHtml(message: Message): String {
+        val sourceLinkService = RagSourceLinkService.getInstance()
+        if (!sourceLinkService.isSourceLinksEnabled()) {
+            return ""
+        }
+
+        // Проверяем наличие RAG метаданных с source links
+        val ragSourceLinksEnabled = message.metadata["ragSourceLinksEnabled"] as? Boolean ?: false
+        if (!ragSourceLinksEnabled) {
+            return ""
+        }
+
+        val ragSourceLinksChunks = message.metadata["ragSourceLinksChunks"] as? List<*>
+        if (ragSourceLinksChunks.isNullOrEmpty()) {
+            return ""
+        }
+
+        try {
+            // Конвертируем в List<RagChunkWithSource>
+            val chunksWithSources = ragSourceLinksChunks.mapNotNull { chunk ->
+                // Проверяем, что объект имеет нужные поля
+                if (chunk is ru.marslab.ide.ride.model.rag.RagChunkWithSource) {
+                    chunk
+                } else null
+            }
+
+            if (chunksWithSources.isEmpty()) {
+                return ""
+            }
+
+            // Создаем HTML для source links
+            return SourceLinkTemplate.createSourceLinksHtml(chunksWithSources)
+        } catch (e: Exception) {
+            // В случае ошибки логируем и возвращаем пустую строку
+            return ""
+        }
     }
 
     /**

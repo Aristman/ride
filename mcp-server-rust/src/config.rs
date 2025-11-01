@@ -43,14 +43,21 @@ impl Config {
         let config_path = std::env::var("MCP_CONFIG_PATH")
             .unwrap_or_else(|_| "config.toml".to_string());
 
-        if std::path::Path::new(&config_path).exists() {
+        let mut config = if std::path::Path::new(&config_path).exists() {
             let content = std::fs::read_to_string(&config_path)?;
-            let config: Config = toml::from_str(&content)?;
-            Ok(config)
+            toml::from_str(&content)?
         } else {
             tracing::warn!("Config file not found, using defaults");
-            Ok(Self::default())
+            Self::default()
+        };
+
+        // Override base_dir with environment variable if set
+        if let Ok(base_dir_env) = std::env::var("MCP_BASE_DIR") {
+            config.base_dir = PathBuf::from(base_dir_env);
+            tracing::info!("Base directory overridden by MCP_BASE_DIR: {:?}", config.base_dir);
         }
+
+        Ok(config)
     }
 
     /// Validate if path is allowed

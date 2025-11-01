@@ -231,13 +231,19 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
     var ragTopK: Int
         get() = state.ragTopK
         set(value) {
-            state.ragTopK = value.coerceIn(1, 100)
+            state.ragTopK = value.coerceIn(
+                PluginSettingsState.RAG_TOP_K_MIN,
+                PluginSettingsState.RAG_TOP_K_MAX
+            )
         }
 
     var ragCandidateK: Int
         get() = state.ragCandidateK
         set(value) {
-            state.ragCandidateK = value.coerceIn(1, 200)
+            state.ragCandidateK = value.coerceIn(
+                PluginSettingsState.RAG_CANDIDATE_K_MIN,
+                PluginSettingsState.RAG_CANDIDATE_K_MAX
+            )
         }
 
     var ragSimilarityThreshold: Float
@@ -267,6 +273,15 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
         get() = state.ragMmrTopK
         set(value) {
             state.ragMmrTopK = value.coerceIn(1, 200)
+        }
+
+    /**
+     * Включение ссылок на источники в RAG ответах
+     */
+    var ragSourceLinksEnabled: Boolean
+        get() = state.ragSourceLinksEnabled
+        set(value) {
+            state.ragSourceLinksEnabled = value
         }
 
     /**
@@ -358,8 +373,22 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
         }
 
         // Normalize RAG params and set defaults if necessary
-        if (state.ragTopK <= 0) state.ragTopK = PluginSettingsState.DEFAULT_RAG_TOP_K
-        if (state.ragCandidateK < state.ragTopK) state.ragCandidateK = maxOf(PluginSettingsState.DEFAULT_RAG_CANDIDATE_K, state.ragTopK)
+        state.ragTopK = state.ragTopK
+            .takeIf { it in PluginSettingsState.RAG_TOP_K_MIN..PluginSettingsState.RAG_TOP_K_MAX }
+            ?: PluginSettingsState.DEFAULT_RAG_TOP_K
+
+        state.ragCandidateK = state.ragCandidateK
+            .takeIf { it in PluginSettingsState.RAG_CANDIDATE_K_MIN..PluginSettingsState.RAG_CANDIDATE_K_MAX }
+            ?: PluginSettingsState.DEFAULT_RAG_CANDIDATE_K
+
+        // candidateK должен быть не меньше ragTopK
+        if (state.ragCandidateK < state.ragTopK) {
+            state.ragCandidateK = state.ragTopK.coerceAtLeast(PluginSettingsState.RAG_CANDIDATE_K_MIN)
+        }
+        // и не больше предельного значения
+        if (state.ragCandidateK > PluginSettingsState.RAG_CANDIDATE_K_MAX) {
+            state.ragCandidateK = PluginSettingsState.RAG_CANDIDATE_K_MAX
+        }
         state.ragSimilarityThreshold = state.ragSimilarityThreshold.takeIf { it in 0f..1f }
             ?: PluginSettingsState.DEFAULT_RAG_SIMILARITY_THRESHOLD
         if (state.ragRerankerStrategy !in setOf("THRESHOLD", "MMR")) {
