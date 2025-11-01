@@ -33,7 +33,13 @@ data class PluginSettingsState(
     var ragMmrLambda: Float = DEFAULT_RAG_MMR_LAMBDA,
     var ragMmrTopK: Int = DEFAULT_RAG_MMR_TOP_K,
     // --- RAG Source Links ---
-    var ragSourceLinksEnabled: Boolean = DEFAULT_RAG_SOURCE_LINKS_ENABLED
+    var ragSourceLinksEnabled: Boolean = DEFAULT_RAG_SOURCE_LINKS_ENABLED,
+    // --- Пороги анализа неопределенности ---
+    var uncertaintyComplexityThreshold: Double = DEFAULT_UNCERTAINTY_COMPLEXITY_THRESHOLD,
+    var uncertaintyOrchestratorThreshold: Double = DEFAULT_UNCERTAINTY_ORCHESTRATOR_THRESHOLD,
+    var uncertaintyClarificationThreshold: Double = DEFAULT_UNCERTAINTY_CLARIFICATION_THRESHOLD,
+    var uncertaintyRagEnrichmentThreshold: Double = DEFAULT_UNCERTAINTY_RAG_ENRICHMENT_THRESHOLD,
+    var uncertaintyMaxSimpleQueryLength: Int = DEFAULT_UNCERTAINTY_MAX_SIMPLE_QUERY_LENGTH
 ) {
     companion object {
         const val DEFAULT_CHAT_FONT_SIZE = 9
@@ -63,5 +69,12 @@ data class PluginSettingsState(
         const val DEFAULT_RAG_MMR_TOP_K = DEFAULT_RAG_TOP_K
         // RAG Source Links defaults
         const val DEFAULT_RAG_SOURCE_LINKS_ENABLED = false
+
+        // Пороги анализа неопределенности defaults
+        const val DEFAULT_UNCERTAINTY_COMPLEXITY_THRESHOLD = 0.3
+        const val DEFAULT_UNCERTAINTY_ORCHESTRATOR_THRESHOLD = 0.7
+        const val DEFAULT_UNCERTAINTY_CLARIFICATION_THRESHOLD = 0.2
+        const val DEFAULT_UNCERTAINTY_RAG_ENRICHMENT_THRESHOLD = 0.5
+        const val DEFAULT_UNCERTAINTY_MAX_SIMPLE_QUERY_LENGTH = 100
     }
 }
