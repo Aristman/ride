@@ -12,6 +12,22 @@ class ClosableTabbedPane : JBTabbedPane() {
 
     var closeListener: CloseListener? = null
 
+    override fun getPreferredSize(): Dimension {
+        val d = super.getPreferredSize()
+        // Ограничиваем высоту только высотой заголовка вкладок,
+        // чтобы таб-панель не резервировала место под контент
+        val fm = getFontMetrics(font)
+        val headerHeight = fm.height + 24
+        return Dimension(d.width, headerHeight)
+    }
+
+    override fun getMinimumSize(): Dimension {
+        val d = super.getMinimumSize()
+        val fm = getFontMetrics(font)
+        val headerHeight = fm.height + 8
+        return Dimension(d.width, headerHeight)
+    }
+
     fun addClosableTab(title: String, component: JPanel) {
         val idx = this.tabCount
         this.addTab(title, component)
