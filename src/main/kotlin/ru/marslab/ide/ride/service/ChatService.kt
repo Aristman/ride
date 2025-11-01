@@ -31,7 +31,6 @@ import ru.marslab.ide.ride.model.tool.StepInput
 import ru.marslab.ide.ride.model.tool.ToolPlanStep
 import ru.marslab.ide.ride.model.orchestrator.AgentType
 import ru.marslab.ide.ride.service.storage.ChatStorageService
-import ru.marslab.ide.ride.service.rag.RagEnrichmentService
 import ru.marslab.ide.ride.settings.PluginSettings
 import ru.marslab.ide.ride.ui.chat.JcefChatView
 import ru.marslab.ide.ride.util.TokenEstimator
@@ -437,23 +436,8 @@ class ChatService {
                     maxTokens = settings.maxTokens
                 )
 
-                // Выполняем RAG обогащение (advanced: retrieval → LLM rerank → MCP enrich)
-                val ragService = service<RagEnrichmentService>()
-                val maxRagTokens = (settings.maxContextTokens * 0.3).toInt() // 30% от контекста на RAG
-                val ragResultAdvanced = ragService.enrichQueryAdvanced(userMessage, maxRagTokens)
-                val ragResultLegacy = ragResultAdvanced?.let { ragService.toLegacyResult(it) }
-
-                // Обогащенный запрос с RAG контекстом
-                val enrichedRequest = if (ragResultLegacy != null && ragResultLegacy.chunks.isNotEmpty()) {
-                    logger.info("RAG(adv): enriched query with ${ragResultLegacy.chunks.size} chunks, ${ragResultLegacy.totalTokens} tokens")
-                    ragService.createEnrichedPrompt(
-                        systemPrompt = "", // Системный промпт будет добавлен агентом
-                        userQuery = userMessage,
-                        ragResult = ragResultLegacy
-                    )
-                } else {
-                    userMessage
-                }
+                // БЕЗ прямого RAG обогащения - простые запросы обрабатываются напрямую
+                val enrichedRequest = userMessage
 
                 // Формируем контекст
                 val context = ChatContext(
@@ -468,23 +452,8 @@ class ChatService {
                     parameters = llmParameters
                 )
 
-                // Сохраняем RAG метаданные для добавления в ответ
-                val ragMetadata = if (ragResultAdvanced != null && ragResultLegacy != null) {
-                    val baseMetadata = mapOf(
-                        "ragEnabled" to true,
-                        "ragMethod" to "LLM_RERANK_MCP",
-                        "ragChunksCount" to ragResultLegacy.chunks.size,
-                        "ragTokens" to ragResultLegacy.totalTokens,
-                        "ragSources" to ragResultLegacy.chunks.map { "${it.filePath}:${it.startLine}-${it.endLine}" }
-                    )
-
-                    if (ragResultAdvanced.sourceLinksEnabled) {
-                        baseMetadata + mapOf(
-                            "ragSourceLinksEnabled" to true,
-                            "ragSourceLinksChunks" to ragResultAdvanced.chunks
-                        )
-                    } else baseMetadata
-                } else emptyMap()
+                // RAG метаданные отключены
+                val ragMetadata = emptyMap<String, Any>()
 
                 // Измеряем время выполнения запроса к LLM
                 val startTime = System.currentTimeMillis()
