@@ -2,22 +2,9 @@ package ru.marslab.ide.ride.agent.analyzer
 
 import com.intellij.openapi.diagnostic.Logger
 import ru.marslab.ide.ride.model.chat.ChatContext
+import ru.marslab.ide.ride.model.orchestrator.ComplexityLevel
 import kotlin.math.max
 import kotlin.math.min
-
-/**
- * Уровень сложности запроса
- */
-enum class ComplexityLevel {
-    /** Простой запрос (факты, погода, время) */
-    SIMPLE,
-
-    /** Средняя сложность (оптимизация метода, простые вопросы по коду) */
-    MEDIUM,
-
-    /** Сложный запрос (анализ архитектуры, рефакторинг, баги) */
-    COMPLEX
-}
 
 /**
  * Результат анализа неопределенности запроса
@@ -94,7 +81,7 @@ class RequestComplexityAnalyzer {
         if (requestLower.length < 20 && requestLower.matches(Regex("^(как|что|когда|где|почему|кто).*\\??$"))) {
             return UncertaintyResult(
                 score = 0.05,
-                complexity = ComplexityLevel.SIMPLE,
+                complexity = ComplexityLevel.LOW,
                 suggestedActions = listOf("прямой_ответ"),
                 reasoning = "Очень короткий общий вопрос",
                 detectedFeatures = listOf("короткий_вопрос", "общий_вопрос")
@@ -105,7 +92,7 @@ class RequestComplexityAnalyzer {
         if (requestLower.matches(Regex(".*который час.*|.*сколько времени.*|.*текущее время.*"))) {
             return UncertaintyResult(
                 score = 0.0,
-                complexity = ComplexityLevel.SIMPLE,
+                complexity = ComplexityLevel.LOW,
                 suggestedActions = listOf("прямой_ответ"),
                 reasoning = "Вопрос о текущем времени",
                 detectedFeatures = listOf("вопрос_о_времени")
@@ -116,7 +103,7 @@ class RequestComplexityAnalyzer {
         if (requestLower.matches(Regex(".*какая погода.*|.*погода сегодня.*|.*температура.*"))) {
             return UncertaintyResult(
                 score = 0.0,
-                complexity = ComplexityLevel.SIMPLE,
+                complexity = ComplexityLevel.LOW,
                 suggestedActions = listOf("прямой_ответ"),
                 reasoning = "Вопрос о погоде",
                 detectedFeatures = listOf("вопрос_о_погоде")
@@ -128,7 +115,7 @@ class RequestComplexityAnalyzer {
             requestLower.length < 50) {
             return UncertaintyResult(
                 score = 0.1,
-                complexity = ComplexityLevel.SIMPLE,
+                complexity = ComplexityLevel.LOW,
                 suggestedActions = listOf("прямой_ответ"),
                 reasoning = "Вопрос о простом факте",
                 detectedFeatures = listOf("вопрос_о_факте")
@@ -214,9 +201,9 @@ class RequestComplexityAnalyzer {
      */
     private fun determineComplexityLevel(score: Double): ComplexityLevel {
         return when {
-            score < 0.3 -> ComplexityLevel.SIMPLE
+            score < 0.3 -> ComplexityLevel.LOW
             score < 0.7 -> ComplexityLevel.MEDIUM
-            else -> ComplexityLevel.COMPLEX
+            else -> ComplexityLevel.HIGH
         }
     }
 
@@ -322,7 +309,7 @@ class RequestComplexityAnalyzer {
         val actions = mutableListOf<String>()
 
         when (complexity) {
-            ComplexityLevel.SIMPLE -> {
+            ComplexityLevel.LOW -> {
                 actions.add("прямой_ответ")
                 if (uncertainty > 0.1) {
                     actions.add("уточнить_если_нужно")
@@ -337,12 +324,23 @@ class RequestComplexityAnalyzer {
                 actions.add("проверить_доступность_контекста")
             }
 
-            ComplexityLevel.COMPLEX -> {
+            ComplexityLevel.HIGH -> {
                 actions.add("создать_план")
                 actions.add("использовать_оркестратор")
                 actions.add("поиск_контекста")
                 if (uncertainty > 0.3) {
                     actions.add("уточнить_требования")
+                }
+            }
+
+            ComplexityLevel.VERY_HIGH -> {
+                actions.add("создать_детальный_план")
+                actions.add("использовать_оркестратор")
+                actions.add("поиск_контекста")
+                actions.add("сегментация_задачи")
+                if (uncertainty > 0.2) {
+                    actions.add("уточнить_требования")
+                    actions.add("консультация_с_пользователем")
                 }
             }
         }

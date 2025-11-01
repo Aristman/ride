@@ -42,7 +42,7 @@ class AdaptiveRequestPlanner {
         val basePlan = basePlanner.createPlan(request, uncertainty, context, userRequestId)
 
         // Добавляем условные шаги если это сложный запрос
-        val enrichedPlan = if (uncertainty.complexity == ru.marslab.ide.ride.agent.analyzer.ComplexityLevel.COMPLEX) {
+        val enrichedPlan = if (uncertainty.complexity == ComplexityLevel.HIGH || uncertainty.complexity == ComplexityLevel.VERY_HIGH) {
             addConditionalSteps(basePlan, uncertainty, context)
         } else {
             basePlan

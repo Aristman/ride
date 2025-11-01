@@ -2,7 +2,7 @@ package ru.marslab.ide.ride.agent.planner
 
 import com.intellij.openapi.diagnostic.Logger
 import ru.marslab.ide.ride.agent.analyzer.UncertaintyResult
-import ru.marslab.ide.ride.agent.analyzer.ComplexityLevel
+import ru.marslab.ide.ride.model.orchestrator.ComplexityLevel
 import ru.marslab.ide.ride.model.chat.ChatContext
 import ru.marslab.ide.ride.model.orchestrator.*
 import kotlinx.datetime.Clock
@@ -65,7 +65,7 @@ class RequestPlanner {
     private fun analyzeRequest(request: String, uncertainty: UncertaintyResult, context: ChatContext): RequestAnalysis {
         val taskType = determineTaskType(request, uncertainty)
         val requiredTools = determineRequiredTools(taskType, uncertainty)
-        val estimatedComplexity = mapComplexityLevel(uncertainty.complexity)
+        val estimatedComplexity = uncertainty.complexity
         val estimatedSteps = estimateSteps(taskType, uncertainty.complexity)
         val requiresUserInput = determineUserInputRequirement(taskType, uncertainty)
 
@@ -116,7 +116,7 @@ class RequestPlanner {
             requestLower.contains("миграц") -> TaskType.MIGRATION
             requestLower.contains("качеств") || requestLower.contains("code review") -> TaskType.CODE_ANALYSIS
             requestLower.contains("отчет") || requestLower.contains("report") -> TaskType.REPORT_GENERATION
-            uncertainty.complexity == ComplexityLevel.SIMPLE -> TaskType.SIMPLE_QUERY
+            uncertainty.complexity == ComplexityLevel.LOW -> TaskType.SIMPLE_QUERY
             else -> TaskType.COMPLEX_MULTI_STEP
         }
     }
@@ -194,17 +194,7 @@ class RequestPlanner {
         return tools
     }
 
-    /**
-     * Преобразует ComplexityLevel в ComplexityLevel из RequestAnalysis
-     */
-    private fun mapComplexityLevel(level: ru.marslab.ide.ride.agent.analyzer.ComplexityLevel): ru.marslab.ide.ride.model.orchestrator.ComplexityLevel {
-        return when (level) {
-            ru.marslab.ide.ride.agent.analyzer.ComplexityLevel.SIMPLE -> ru.marslab.ide.ride.model.orchestrator.ComplexityLevel.LOW
-            ru.marslab.ide.ride.agent.analyzer.ComplexityLevel.MEDIUM -> ru.marslab.ide.ride.model.orchestrator.ComplexityLevel.MEDIUM
-            ru.marslab.ide.ride.agent.analyzer.ComplexityLevel.COMPLEX -> ru.marslab.ide.ride.model.orchestrator.ComplexityLevel.HIGH
-        }
-    }
-
+    
     /**
      * Оценивает количество шагов для задачи
      */
@@ -226,9 +216,10 @@ class RequestPlanner {
 
         // Корректируем на основе сложности
         return when (complexity) {
-            ru.marslab.ide.ride.agent.analyzer.ComplexityLevel.SIMPLE -> baseSteps
-            ru.marslab.ide.ride.agent.analyzer.ComplexityLevel.MEDIUM -> baseSteps + 1
-            ru.marslab.ide.ride.agent.analyzer.ComplexityLevel.COMPLEX -> baseSteps + 2
+            ComplexityLevel.LOW -> baseSteps
+            ComplexityLevel.MEDIUM -> baseSteps + 1
+            ComplexityLevel.HIGH -> baseSteps + 2
+            ComplexityLevel.VERY_HIGH -> baseSteps + 3
         }
     }
 

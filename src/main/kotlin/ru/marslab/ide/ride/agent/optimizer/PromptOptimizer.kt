@@ -1,6 +1,6 @@
 package ru.marslab.ide.ride.agent.optimizer
 
-import ru.marslab.ide.ride.agent.analyzer.ComplexityLevel
+import ru.marslab.ide.ride.model.orchestrator.ComplexityLevel
 import ru.marslab.ide.ride.agent.analyzer.UncertaintyResult
 import ru.marslab.ide.ride.model.chat.ChatContext
 
@@ -21,9 +21,10 @@ object PromptOptimizer {
         context: ChatContext
     ): String {
         return when (uncertainty.complexity) {
-            ComplexityLevel.SIMPLE -> getSimplePrompt(baseSystemPrompt, uncertainty, context)
+            ComplexityLevel.LOW -> getSimplePrompt(baseSystemPrompt, uncertainty, context)
             ComplexityLevel.MEDIUM -> getMediumPrompt(baseSystemPrompt, uncertainty, context)
-            ComplexityLevel.COMPLEX -> getComplexPrompt(baseSystemPrompt, uncertainty, context)
+            ComplexityLevel.HIGH -> getComplexPrompt(baseSystemPrompt, uncertainty, context)
+            ComplexityLevel.VERY_HIGH -> getComplexPrompt(baseSystemPrompt, uncertainty, context) // Используем тот же метод
         }
     }
 

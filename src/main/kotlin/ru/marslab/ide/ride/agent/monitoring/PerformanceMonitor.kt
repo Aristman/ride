@@ -1,6 +1,6 @@
 package ru.marslab.ide.ride.agent.monitoring
 
-import ru.marslab.ide.ride.agent.analyzer.ComplexityLevel
+import ru.marslab.ide.ride.model.orchestrator.ComplexityLevel
 import com.intellij.openapi.diagnostic.Logger
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
@@ -231,9 +231,10 @@ class PerformanceMonitor {
      */
     private fun getExpectedTime(complexity: ComplexityLevel): Long {
         return when (complexity) {
-            ComplexityLevel.SIMPLE -> 500    // 0.5 секунды
-            ComplexityLevel.MEDIUM -> 2000   // 2 секунды
-            ComplexityLevel.COMPLEX -> 5000  // 5 секунд
+            ComplexityLevel.LOW -> 500        // 0.5 секунды
+            ComplexityLevel.MEDIUM -> 2000    // 2 секунды
+            ComplexityLevel.HIGH -> 5000      // 5 секунд
+            ComplexityLevel.VERY_HIGH -> 8000 // 8 секунд
         }
     }
 

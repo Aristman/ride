@@ -1,6 +1,6 @@
 package ru.marslab.ide.ride.agent.cache
 
-import ru.marslab.ide.ride.agent.analyzer.ComplexityLevel
+import ru.marslab.ide.ride.model.orchestrator.ComplexityLevel
 import ru.marslab.ide.ride.agent.analyzer.UncertaintyResult
 import ru.marslab.ide.ride.model.chat.ChatContext
 import java.util.concurrent.ConcurrentHashMap

@@ -6,7 +6,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.BeforeEach
 import io.mockk.*
-import ru.marslab.ide.ride.agent.analyzer.ComplexityLevel
+import ru.marslab.ide.ride.model.orchestrator.ComplexityLevel
 import ru.marslab.ide.ride.agent.analyzer.UncertaintyResult
 import ru.marslab.ide.ride.agent.analyzer.RequestComplexityAnalyzer
 import ru.marslab.ide.ride.integration.llm.LLMProvider

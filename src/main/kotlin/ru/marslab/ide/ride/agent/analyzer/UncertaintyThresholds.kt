@@ -2,6 +2,7 @@ package ru.marslab.ide.ride.agent.analyzer
 
 import com.intellij.openapi.components.service
 import ru.marslab.ide.ride.settings.PluginSettings
+import ru.marslab.ide.ride.model.orchestrator.ComplexityLevel
 
 /**
  * Конфигурируемые пороги для анализа неопределенности
@@ -33,7 +34,8 @@ object UncertaintyThresholds {
      */
     fun shouldUseOrchestrator(uncertaintyResult: UncertaintyResult): Boolean {
         return uncertaintyResult.score >= orchestratorThreshold ||
-               uncertaintyResult.complexity == ComplexityLevel.COMPLEX
+               uncertaintyResult.complexity == ComplexityLevel.HIGH ||
+               uncertaintyResult.complexity == ComplexityLevel.VERY_HIGH
     }
 
     /**
@@ -47,7 +49,7 @@ object UncertaintyThresholds {
      * Проверяет, является ли запрос простым
      */
     fun isSimpleQuery(uncertaintyResult: UncertaintyResult): Boolean {
-        return uncertaintyResult.complexity == ComplexityLevel.SIMPLE &&
+        return uncertaintyResult.complexity == ComplexityLevel.LOW &&
                uncertaintyResult.score < complexityThreshold
     }
 
