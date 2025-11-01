@@ -183,12 +183,12 @@ class AdaptiveRequestPlanner {
         result: ru.marslab.ide.ride.model.tool.StepOutput
     ): Boolean {
         return when {
-            result.contains("findings") -> {
-                val findings = result.get<List<*>>("findings") ?: emptyList()
+            result.data.containsKey("findings") -> {
+                val findings = result.get("findings") as? List<*> ?: emptyList()
                 findings.size > 5 // Много находок → нужен детальный анализ
             }
 
-            result.contains("issues") -> {
+            result.data.containsKey("issues") -> {
                 val issues = result.get<List<*>>("issues") ?: emptyList()
                 issues.any { issue ->
                     issue.toString().lowercase().contains("critical") ||
@@ -196,7 +196,7 @@ class AdaptiveRequestPlanner {
                 }
             }
 
-            result.contains("complexity_score") -> {
+            result.data.containsKey("complexity_score") -> {
                 val score = result.get<Double>("complexity_score") ?: 0.0
                 score > 0.7 // Высокая сложность → нужен детальный анализ
             }
@@ -210,10 +210,10 @@ class AdaptiveRequestPlanner {
         result: ru.marslab.ide.ride.model.tool.StepOutput
     ): Boolean {
         return when {
-            result.contains("performance_issues") -> true
-            result.contains("bottlenecks") -> true
-            result.contains("slow_operations") -> true
-            result.contains("memory_issues") -> true
+            result.data.containsKey("performance_issues") -> true
+            result.data.containsKey("bottlenecks") -> true
+            result.data.containsKey("slow_operations") -> true
+            result.data.containsKey("memory_issues") -> true
             else -> false
         }
     }
@@ -223,11 +223,11 @@ class AdaptiveRequestPlanner {
         result: ru.marslab.ide.ride.model.tool.StepOutput
     ): Boolean {
         return when {
-            result.contains("security_issues") -> true
-            result.contains("vulnerabilities") -> true
-            result.contains("authentication") -> true
-            result.contains("authorization") -> true
-            result.contains("encryption") -> true
+            result.data.containsKey("security_issues") -> true
+            result.data.containsKey("vulnerabilities") -> true
+            result.data.containsKey("authentication") -> true
+            result.data.containsKey("authorization") -> true
+            result.data.containsKey("encryption") -> true
             else -> false
         }
     }
@@ -237,13 +237,13 @@ class AdaptiveRequestPlanner {
         result: ru.marslab.ide.ride.model.tool.StepOutput
     ): Boolean {
         return when {
-            result.contains("test_coverage") -> {
+            result.data.containsKey("test_coverage") -> {
                 val coverage = result.get<Double>("test_coverage") ?: 100.0
                 coverage < 80.0 // Низкое покрытие → нужны дополнительные тесты
             }
 
-            result.contains("missing_tests") -> true
-            result.contains("edge_cases") -> true
+            result.data.containsKey("missing_tests") -> true
+            result.data.containsKey("edge_cases") -> true
             else -> false
         }
     }
@@ -257,7 +257,7 @@ class AdaptiveRequestPlanner {
         val condition: (ExecutionContext, Map<String, ru.marslab.ide.ride.model.tool.StepOutput>) -> Boolean = { ctx, results ->
             val analysisResult = results["analysis"]
             analysisResult?.let { result ->
-                val findings = result.get<List<*>>("findings") ?: emptyList()
+                val findings = result.get("findings") as? List<*> ?: emptyList()
                 findings.any { finding ->
                     finding.toString().lowercase().contains("critical") ||
                     finding.toString().lowercase().contains("severe")

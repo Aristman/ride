@@ -2,6 +2,7 @@ package ru.marslab.ide.ride.agent.planner
 
 import com.intellij.openapi.diagnostic.Logger
 import ru.marslab.ide.ride.agent.analyzer.UncertaintyResult
+import ru.marslab.ide.ride.agent.analyzer.ComplexityLevel
 import ru.marslab.ide.ride.model.chat.ChatContext
 import ru.marslab.ide.ride.model.orchestrator.*
 import kotlinx.datetime.Clock
@@ -75,7 +76,7 @@ class RequestPlanner {
             gitBranch = null, // Можно добавить в будущем
             additionalContext = mapOf(
                 "conversation_history_size" to context.history.size,
-                "has_code_context" to request.contains("код") || request.contains("файл"),
+                "has_code_context" to (request.contains("код") || request.contains("файл")),
                 "uncertainty_score" to uncertainty.score
             )
         )
@@ -196,11 +197,11 @@ class RequestPlanner {
     /**
      * Преобразует ComplexityLevel в ComplexityLevel из RequestAnalysis
      */
-    private fun mapComplexityLevel(level: ComplexityLevel): ComplexityLevel {
+    private fun mapComplexityLevel(level: ru.marslab.ide.ride.agent.analyzer.ComplexityLevel): ru.marslab.ide.ride.model.orchestrator.ComplexityLevel {
         return when (level) {
-            ComplexityLevel.SIMPLE -> ComplexityLevel.LOW
-            ComplexityLevel.MEDIUM -> ComplexityLevel.MEDIUM
-            ComplexityLevel.COMPLEX -> ComplexityLevel.HIGH
+            ru.marslab.ide.ride.agent.analyzer.ComplexityLevel.SIMPLE -> ru.marslab.ide.ride.model.orchestrator.ComplexityLevel.LOW
+            ru.marslab.ide.ride.agent.analyzer.ComplexityLevel.MEDIUM -> ru.marslab.ide.ride.model.orchestrator.ComplexityLevel.MEDIUM
+            ru.marslab.ide.ride.agent.analyzer.ComplexityLevel.COMPLEX -> ru.marslab.ide.ride.model.orchestrator.ComplexityLevel.HIGH
         }
     }
 
@@ -225,9 +226,9 @@ class RequestPlanner {
 
         // Корректируем на основе сложности
         return when (complexity) {
-            ComplexityLevel.SIMPLE -> baseSteps
-            ComplexityLevel.MEDIUM -> baseSteps + 1
-            ComplexityLevel.COMPLEX -> baseSteps + 2
+            ru.marslab.ide.ride.agent.analyzer.ComplexityLevel.SIMPLE -> baseSteps
+            ru.marslab.ide.ride.agent.analyzer.ComplexityLevel.MEDIUM -> baseSteps + 1
+            ru.marslab.ide.ride.agent.analyzer.ComplexityLevel.COMPLEX -> baseSteps + 2
         }
     }
 
@@ -327,7 +328,7 @@ class RequestPlanner {
             title = "Обработка простого запроса",
             description = "Прямой ответ на простой запрос без дополнительного анализа",
             agentType = AgentType.USER_INTERACTION,
-            input = mapOf<String, Any>(
+            input = mapOf(
                 "request" to (analysis.parameters["original_request"] ?: ""),
                 "complexity" to "low"
             ),
@@ -341,7 +342,7 @@ class RequestPlanner {
             title = "Сканирование проекта",
             description = "Анализ структуры проекта и поиск релевантных файлов",
             agentType = AgentType.PROJECT_SCANNER,
-            input = mapOf<String, Any>(
+            input = mapOf(
                 "project_path" to (analysis.context.projectPath ?: "."),
                 "task_type" to analysis.taskType.name
             ),
@@ -355,7 +356,7 @@ class RequestPlanner {
             title = "Анализ кода",
             description = "Детальный анализ кода и выявление проблем",
             agentType = AgentType.LLM_REVIEW,
-            input = mapOf<String, Any>(
+            input = mapOf(
                 "request" to analysis.parameters["original_request"],
                 "context" to analysis.context,
                 "task_type" to analysis.taskType.name
@@ -371,7 +372,7 @@ class RequestPlanner {
             title = "Проверка качества кода",
             description = "Анализ качества кода и поиск потенциальных проблем",
             agentType = AgentType.CODE_QUALITY,
-            input = mapOf<String, Any>(
+            input = mapOf(
                 "project_path" to (analysis.context.projectPath ?: "."),
                 "severity" to "medium"
             ),
@@ -386,7 +387,7 @@ class RequestPlanner {
             title = "Поиск багов",
             description = "Поиск потенциальных ошибок в коде",
             agentType = AgentType.BUG_DETECTION,
-            input = mapOf<String, Any>(
+            input = mapOf(
                 "project_path" to (analysis.context.projectPath ?: "."),
                 "scan_depth" to "deep"
             ),
@@ -400,7 +401,7 @@ class RequestPlanner {
             title = "Исправление багов",
             description = "Предложения по исправлению найденных проблем",
             agentType = AgentType.CODE_FIXER,
-            input = mapOf<String, Any>(
+            input = mapOf(
                 "fix_strategy" to "suggestions_only" // Только предложения, не автоправки
             ),
             dependencies = dependencies,
@@ -414,7 +415,7 @@ class RequestPlanner {
             title = "Рефакторинг",
             description = "Анализ и предложения по рефакторингу кода",
             agentType = AgentType.LLM_REVIEW,
-            input = mapOf<String, Any>(
+            input = mapOf(
                 "refactor_type" to "suggestions",
                 "focus_areas" to listOf("readability", "performance", "maintainability")
             ),
@@ -429,7 +430,7 @@ class RequestPlanner {
             title = "Анализ архитектуры",
             description = "Оценка архитектуры проекта и выявление проблем",
             agentType = AgentType.ARCHITECTURE_ANALYSIS,
-            input = mapOf<String, Any>(
+            input = mapOf(
                 "analysis_depth" to "comprehensive",
                 "focus_patterns" to listOf("layering", "dependencies", "design_patterns")
             ),
@@ -444,7 +445,7 @@ class RequestPlanner {
             title = "Валидация изменений",
             description = "Проверка корректности предложенных изменений",
             agentType = AgentType.LLM_REVIEW,
-            input = mapOf<String, Any>(
+            input = mapOf(
                 "validation_type" to "comprehensive"
             ),
             dependencies = dependencies,
@@ -458,7 +459,7 @@ class RequestPlanner {
             title = "Поиск релевантного контекста",
             description = "Поиск и анализ релевантных фрагментов кода",
             agentType = AgentType.EMBEDDING_INDEXER,
-            input = mapOf<String, Any>(
+            input = mapOf(
                 "query" to analysis.parameters["original_request"],
                 "max_chunks" to 10
             ),
@@ -473,7 +474,7 @@ class RequestPlanner {
             title = "Создание отчета",
             description = "Генерация отчета на основе анализа",
             agentType = AgentType.REPORT_GENERATOR,
-            input = mapOf<String, Any>(
+            input = mapOf(
                 "report_type" to "comprehensive",
                 "format" to "markdown"
             ),
@@ -488,7 +489,7 @@ class RequestPlanner {
             title = "Создание документации",
             description = "Генерация документации по результатам анализа",
             agentType = AgentType.DOCUMENTATION_GENERATOR,
-            input = mapOf<String, Any>(
+            input = mapOf(
                 "doc_type" to "analysis_report",
                 "include_examples" to true
             ),
@@ -503,7 +504,7 @@ class RequestPlanner {
             title = "Обработка запроса",
             description = "Стандартная обработка запроса",
             agentType = AgentType.USER_INTERACTION,
-            input = mapOf<String, Any>(
+            input = mapOf(
                 "request" to analysis.parameters["original_request"],
                 "task_type" to analysis.taskType.name
             ),

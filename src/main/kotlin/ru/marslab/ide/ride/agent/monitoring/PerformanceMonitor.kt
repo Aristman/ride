@@ -275,6 +275,14 @@ class PerformanceMonitor {
     }
 }
 
+/**
+ * Метрики запроса для отслеживания производительности
+ */
+data class RequestMetrics(
+    val requestId: String,
+    val startTime: Long,
+    val complexity: ComplexityLevel
+)
 
 /**
  * Статистика времени обработки для уровня сложности
@@ -306,8 +314,8 @@ class ProcessingTimeStats {
         return TimeStats(
             count = c,
             averageTime = if (c > 0) totalTime.sum() / c else 0.0,
-            minTime = if (minTime.get() == Long.MAX_VALUE) 0 else minTime.get(),
-            maxTime = maxTime.get()
+            minTime = if (minTime.get() == Long.MAX_VALUE) 0.0 else minTime.get().toDouble(),
+            maxTime = maxTime.get().toDouble()
         )
     }
 

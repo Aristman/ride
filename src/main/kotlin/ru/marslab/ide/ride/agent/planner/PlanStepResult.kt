@@ -39,14 +39,14 @@ data class PlanStepResult(
      * Проверяет есть ли в выводе определенный ключ
      */
     fun hasOutputData(key: String): Boolean {
-        return output.contains(key)
+        return output.data.containsKey(key)
     }
 
     /**
      * Возвращает все ключи из вывода
      */
     fun getOutputKeys(): Set<String> {
-        return output.keys
+        return output.data.keys
     }
 
     companion object {

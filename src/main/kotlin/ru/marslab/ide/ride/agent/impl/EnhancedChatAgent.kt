@@ -185,7 +185,7 @@ class EnhancedChatAgent(
         val optimizedPrompt = PromptOptimizer.getFastPathPrompt(baseChatAgent.capabilities.systemPrompt)
         val optimizedRequest = request.copy(
             context = request.context.copy(
-                additionalContext = request.context.additionalContext + ("optimized_prompt" to (optimizedPrompt))
+                additionalContext = request.context.additionalContext + ("optimized_prompt" to (optimizedPrompt ?: ""))
             )
         )
 
