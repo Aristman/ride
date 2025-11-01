@@ -356,8 +356,8 @@ class RequestPlanner {
             title = "Анализ кода",
             description = "Детальный анализ кода и выявление проблем",
             agentType = AgentType.LLM_REVIEW,
-            input = mapOf(
-                "request" to analysis.parameters["original_request"],
+            input = mapOf<String, Any>(
+                "request" to (analysis.parameters["original_request"] ?: ""),
                 "context" to analysis.context,
                 "task_type" to analysis.taskType.name
             ),
@@ -459,8 +459,8 @@ class RequestPlanner {
             title = "Поиск релевантного контекста",
             description = "Поиск и анализ релевантных фрагментов кода",
             agentType = AgentType.EMBEDDING_INDEXER,
-            input = mapOf(
-                "query" to analysis.parameters["original_request"],
+            input = mapOf<String, Any>(
+                "query" to (analysis.parameters["original_request"] ?: ""),
                 "max_chunks" to 10
             ),
             dependencies = dependencies,
@@ -504,8 +504,8 @@ class RequestPlanner {
             title = "Обработка запроса",
             description = "Стандартная обработка запроса",
             agentType = AgentType.USER_INTERACTION,
-            input = mapOf(
-                "request" to analysis.parameters["original_request"],
+            input = mapOf<String, Any>(
+                "request" to (analysis.parameters["original_request"] ?: ""),
                 "task_type" to analysis.taskType.name
             ),
             estimatedDurationMs = 5000

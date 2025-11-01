@@ -177,12 +177,12 @@ class EnhancedChatAgent(
     private suspend fun handleSimpleQuery(
         request: AgentRequest,
         uncertaintyResult: UncertaintyResult,
-        metrics: PerformanceMonitor.RequestMetrics
+        metrics: RequestMetrics
     ): AgentResponse {
         logger.info("Processing simple query with uncertainty: ${uncertaintyResult.score}")
 
         // Оптимизируем промпт для простого запроса
-        val optimizedPrompt = PromptOptimizer.getFastPathPrompt(baseChatAgent.capabilities.systemPrompt)
+        val optimizedPrompt = PromptOptimizer.getFastPathPrompt(baseChatAgent.capabilities.systemPrompt ?: "")
         val optimizedRequest = request.copy(
             context = request.context.copy(
                 additionalContext = request.context.additionalContext + ("optimized_prompt" to (optimizedPrompt ?: ""))
@@ -215,14 +215,14 @@ class EnhancedChatAgent(
     private suspend fun handleMediumQueryWithPlanning(
         request: AgentRequest,
         uncertaintyResult: UncertaintyResult,
-        metrics: PerformanceMonitor.RequestMetrics
+        metrics: RequestMetrics
     ): AgentResponse {
         logger.info("Processing medium complexity query with planning")
 
         try {
             // Оптимизируем промпт для запроса средней сложности
             val optimizedPrompt = PromptOptimizer.getOptimizedSystemPrompt(
-                baseChatAgent.capabilities.systemPrompt,
+                baseChatAgent.capabilities.systemPrompt ?: "",
                 uncertaintyResult,
                 request.context
             )
@@ -232,7 +232,7 @@ class EnhancedChatAgent(
                 request = request.request,
                 uncertainty = uncertaintyResult,
                 context = request.context,
-                userRequestId = request.context.additionalContext["user_request_id"] as? String
+                userRequestId = request.context.additionalContext["user_request_id"] as? String ?: ""
             )
 
             logger.info("Created plan with ${plan.steps.size} steps")
@@ -262,14 +262,14 @@ class EnhancedChatAgent(
     private suspend fun handleComplexQueryWithPlanning(
         request: AgentRequest,
         uncertaintyResult: UncertaintyResult,
-        metrics: PerformanceMonitor.RequestMetrics
+        metrics: RequestMetrics
     ): AgentResponse {
         logger.info("Processing complex query with adaptive planning")
 
         try {
             // Оптимизируем промпт для сложного запроса
             val optimizedPrompt = PromptOptimizer.getOptimizedSystemPrompt(
-                baseChatAgent.capabilities.systemPrompt,
+                baseChatAgent.capabilities.systemPrompt ?: "",
                 uncertaintyResult,
                 request.context
             )
@@ -279,7 +279,7 @@ class EnhancedChatAgent(
                 request = request.request,
                 uncertainty = uncertaintyResult,
                 context = request.context,
-                userRequestId = request.context.additionalContext["user_request_id"] as? String
+                userRequestId = request.context.additionalContext["user_request_id"] as? String ?: ""
             )
 
             logger.info("Created adaptive plan with ${adaptivePlan.steps.size} steps")

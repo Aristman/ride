@@ -67,7 +67,7 @@ class PerformanceMonitor {
         val processingTime = System.currentTimeMillis() - metrics.startTime
 
         // Общее время обработки
-        totalProcessingTime.add(processingTime)
+        totalProcessingTime.add(processingTime.toDouble())
 
         // Время по сложности
         processingTimesByComplexity[metrics.complexity]?.addTime(processingTime)
@@ -295,7 +295,7 @@ class ProcessingTimeStats {
 
     fun addTime(time: Long) {
         count.incrementAndGet()
-        totalTime.add(time)
+        totalTime.add(time.toDouble())
 
         // Обновляем минимум и максимум
         var currentMin = minTime.get()
@@ -336,7 +336,7 @@ class HourlyStats {
 
     fun addRequest(time: Long) {
         requestCount.incrementAndGet()
-        totalTime.add(time)
+        totalTime.add(time.toDouble())
     }
 
     fun getStats(): HourlyPerformanceStats {
@@ -367,8 +367,8 @@ data class PerformanceStats(
 data class TimeStats(
     val count: Long,
     val averageTime: Double,
-    val minTime: Long,
-    val maxTime: Long
+    val minTime: Double,
+    val maxTime: Double
 )
 
 /**

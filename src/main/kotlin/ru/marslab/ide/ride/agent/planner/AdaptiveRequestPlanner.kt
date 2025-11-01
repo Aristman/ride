@@ -3,6 +3,7 @@ package ru.marslab.ide.ride.agent.planner
 import com.intellij.openapi.diagnostic.Logger
 import ru.marslab.ide.ride.agent.DynamicPlanModifier
 import ru.marslab.ide.ride.agent.analyzer.UncertaintyResult
+import ru.marslab.ide.ride.agent.ToolAgentRegistry
 import ru.marslab.ide.ride.model.chat.ChatContext
 import ru.marslab.ide.ride.model.orchestrator.*
 import ru.marslab.ide.ride.agent.ConditionalStep
@@ -157,7 +158,7 @@ class AdaptiveRequestPlanner {
         // Условие: если найдены критические проблемы → добавить детальный анализ
         if (plan.analysis.taskType == TaskType.BUG_FIX || plan.analysis.taskType == TaskType.CODE_ANALYSIS) {
             val criticalIssuesStep = createCriticalIssuesConditionalStep(plan, context)
-            enrichedPlan = dynamicModifier.addStepBefore(enrichedPlan, criticalIssuesStep, "analysis")
+            enrichedPlan = dynamicModifier.addStepBefore(enrichedPlan, criticalIssuesStep as PlanStep, "analysis")
         }
 
         // Условие: если большой проект → добавить сегментацию
@@ -170,7 +171,7 @@ class AdaptiveRequestPlanner {
         // Условие: если много тестов → добавить анализ покрытия
         if (shouldAnalyzeTestCoverage(plan, context)) {
             val testCoverageStep = createTestCoverageConditionalStep(plan, context)
-            enrichedPlan = dynamicModifier.addStepAfter(enrichedPlan, testCoverageStep, "project_scan")
+            enrichedPlan = dynamicModifier.addStepAfter(enrichedPlan, testCoverageStep as PlanStep, "project_scan")
         }
 
         return enrichedPlan
@@ -184,12 +185,12 @@ class AdaptiveRequestPlanner {
     ): Boolean {
         return when {
             result.data.containsKey("findings") -> {
-                val findings = result.get("findings") as? List<*> ?: emptyList()
+                val findings = result.data["findings"] as? List<*> ?: emptyList<Any>()
                 findings.size > 5 // Много находок → нужен детальный анализ
             }
 
             result.data.containsKey("issues") -> {
-                val issues = result.get<List<*>>("issues") ?: emptyList()
+                val issues = result.data["issues"] as? List<*> ?: emptyList<Any>()
                 issues.any { issue ->
                     issue.toString().lowercase().contains("critical") ||
                     issue.toString().lowercase().contains("high")
@@ -257,7 +258,7 @@ class AdaptiveRequestPlanner {
         val condition: (ExecutionContext, Map<String, ru.marslab.ide.ride.model.tool.StepOutput>) -> Boolean = { ctx, results ->
             val analysisResult = results["analysis"]
             analysisResult?.let { result ->
-                val findings = result.get("findings") as? List<*> ?: emptyList()
+                val findings = result.data["findings"] as? List<*> ?: emptyList<Any>()
                 findings.any { finding ->
                     finding.toString().lowercase().contains("critical") ||
                     finding.toString().lowercase().contains("severe")
@@ -435,8 +436,8 @@ class AdaptiveRequestPlanner {
      * Mock ToolAgentRegistry для тестирования
      * В реальной реализации здесь будет настоящая зависимость
      */
-    private fun mockToolAgentRegistry(): Any {
+    private fun mockToolAgentRegistry(): ToolAgentRegistry {
         // Заглушка - в реальном коде будет инъекция зависимости
-        return object {}
+        return ToolAgentRegistry()
     }
 }
