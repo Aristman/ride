@@ -1,10 +1,12 @@
 package ru.marslab.ide.ride.agent.analyzer
 
-import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.Assertions.*
+import kotlin.test.Test
+import kotlin.test.assertTrue
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import ru.marslab.ide.ride.model.chat.ChatContext
 import com.intellij.openapi.project.Project
-import org.mockito.Mockito.mock
+import io.mockk.mockk
 import kotlin.system.measureTimeMillis
 
 /**
@@ -13,7 +15,7 @@ import kotlin.system.measureTimeMillis
 class RequestComplexityAnalyzerPerformanceTest {
 
     private val analyzer = RequestComplexityAnalyzer()
-    private val mockProject = mock(Project::class.java)
+    private val mockProject = mockk<Project>()
     private val context = ChatContext(project = mockProject, history = emptyList())
 
     @Test

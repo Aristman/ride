@@ -1,10 +1,14 @@
 package ru.marslab.ide.ride.agent.rag
 
-import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.Assertions.*
-import org.junit.jupiter.api.BeforeEach
-import org.mockito.Mockito.*
-import ru.marslab.ide.ride.agent.analyzer.*
+import kotlin.test.Test
+import kotlin.test.assertTrue
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.BeforeEach
+import io.mockk.*
+import ru.marslab.ide.ride.agent.analyzer.ComplexityLevel
+import ru.marslab.ide.ride.agent.analyzer.UncertaintyResult
+import ru.marslab.ide.ride.agent.analyzer.RequestComplexityAnalyzer
 import ru.marslab.ide.ride.integration.llm.LLMProvider
 import ru.marslab.ide.ride.model.chat.ChatContext
 import ru.marslab.ide.ride.model.orchestrator.*
@@ -13,8 +17,6 @@ import ru.marslab.ide.ride.service.rag.RagResult
 import ru.marslab.ide.ride.service.rag.RagChunk
 import ru.marslab.ide.ride.settings.PluginSettings
 import com.intellij.openapi.project.Project
-import org.mockito.kotlin.mock
-import org.mockito.kotlin.whenever
 import kotlinx.coroutines.runBlocking
 
 /**
@@ -31,23 +33,23 @@ class RAGPlanEnricherTest {
 
     @BeforeEach
     fun setUp() {
-        mockLLMProvider = mock()
-        mockRagService = mock()
-        mockSettings = mock()
-        mockProject = mock()
+        mockLLMProvider = mockk<LLMProvider>()
+        mockRagService = mockk<RagEnrichmentService>()
+        mockSettings = mockk<PluginSettings>()
+        mockProject = mockk<Project>()
         context = ChatContext(project = mockProject, history = emptyList())
 
         ragEnricher = RAGPlanEnricher(mockLLMProvider)
 
         // Настройка моков
-        whenever(mockProject.basePath).thenReturn("/test/project")
-        whenever(mockSettings.enableRagEnrichment).thenReturn(true)
-        whenever(mockSettings.maxContextTokens).thenReturn(8000)
+        every { mockProject.basePath } returns "/test/project"
+        every { mockSettings.enableRagEnrichment } returns true
+        every { mockSettings.maxContextTokens } returns 8000
     }
 
     @Test
     fun `should not enrich plan when RAG is disabled`() = runBlocking {
-        whenever(mockSettings.enableRagEnrichment).thenReturn(false)
+        every { mockSettings.enableRagEnrichment } returns false
 
         val plan = createTestPlan()
         val enrichedPlan = ragEnricher.enrichPlan(plan, "test request", context)
@@ -269,7 +271,7 @@ class RAGPlanEnricherTest {
     }
 
     private fun createTestRagResult(
-        chunks: List<RagChunk> = emptyList()
+        chunks: List<RagChunk> = emptyList<RagChunk>()
     ): RagResult {
         return RagResult(
             chunks = chunks,
