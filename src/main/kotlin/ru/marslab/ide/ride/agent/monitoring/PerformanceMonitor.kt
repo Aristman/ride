@@ -275,14 +275,6 @@ class PerformanceMonitor {
     }
 }
 
-/**
- * Метрики запроса
- */
-data class RequestMetrics(
-    val requestId: String,
-    val startTime: Long,
-    val complexity: ComplexityLevel
-)
 
 /**
  * Статистика времени обработки для уровня сложности

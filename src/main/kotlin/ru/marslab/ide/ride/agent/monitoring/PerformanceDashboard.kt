@@ -6,9 +6,11 @@ import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBPanel
 import com.intellij.util.ui.FormBuilder
 import com.intellij.util.ui.JBUI
+import com.intellij.ui.border.IdeBorderFactory
+import javax.swing.Timer
+import java.awt.GridLayout
 import ru.marslab.ide.ride.agent.cache.UncertaintyAnalysisCache
 import java.awt.BorderLayout
-import java.awt.GridLayout
 import java.text.SimpleDateFormat
 import java.util.*
 import javax.swing.*
@@ -122,7 +124,7 @@ class PerformanceDashboard(
      */
     private fun createMetricsPanel(): JPanel {
         val panel = JPanel(GridLayout(3, 3, 10, 10))
-        panel.border = JBUI.Borders.titledBorder("Основные метрики")
+        panel.border = IdeBorderFactory.createTitledBorder("Основные метрики")
 
         // Первая строка - общие метрики
         panel.add(createMetricPanel("Всего запросов", totalRequestsLabel))
@@ -148,12 +150,12 @@ class PerformanceDashboard(
     private fun createMetricPanel(title: String, valueLabel: JBLabel): JPanel {
         val panel = JPanel(BorderLayout())
         panel.border = JBUI.Borders.compound(
-            JBUI.Borders.line(JBUI.CurrentTheme.ToolWindow.borderColor()),
+            IdeBorderFactory.createBorder(),
             JBUI.Borders.empty(5)
         )
 
         val titleLabel = JBLabel(title).apply {
-            font = font.deriveFont(font.style or java.awt.Font.BOLD, font.size - 2)
+            font = font.deriveFont(java.awt.Font.BOLD, font.size - 2)
         }
         valueLabel.font = valueLabel.font.deriveFont(java.awt.Font.PLAIN, valueLabel.size + 2)
 
@@ -168,7 +170,7 @@ class PerformanceDashboard(
      */
     private fun createRecommendationsPanel(): JPanel {
         val panel = JPanel(BorderLayout())
-        panel.border = JBUI.Borders.titledBorder("Рекомендации по оптимизации")
+        panel.border = IdeBorderFactory.createTitledBorder("Рекомендации по оптимизации")
 
         val scrollPane = JScrollPane(recommendationsArea)
         panel.add(scrollPane, BorderLayout.CENTER)
@@ -181,7 +183,7 @@ class PerformanceDashboard(
      */
     private fun createDetailedStatsPanel(): JPanel {
         val panel = JPanel(BorderLayout())
-        panel.border = JBUI.Borders.titledBorder("Детальная статистика")
+        panel.border = IdeBorderFactory.createTitledBorder("Детальная статистика")
 
         val textArea = JTextArea(15, 40).apply {
             isEditable = false

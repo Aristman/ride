@@ -15,6 +15,7 @@ import ru.marslab.ide.ride.agent.cache.UncertaintyAnalysisCache
 import ru.marslab.ide.ride.agent.cache.PredictiveCacheManager
 import ru.marslab.ide.ride.agent.optimizer.PromptOptimizer
 import ru.marslab.ide.ride.agent.monitoring.PerformanceMonitor
+import ru.marslab.ide.ride.agent.monitoring.RequestMetrics
 import ru.marslab.ide.ride.integration.llm.LLMProvider
 import ru.marslab.ide.ride.model.agent.AgentCapabilities
 import ru.marslab.ide.ride.model.agent.AgentRequest
@@ -184,7 +185,7 @@ class EnhancedChatAgent(
         val optimizedPrompt = PromptOptimizer.getFastPathPrompt(baseChatAgent.capabilities.systemPrompt)
         val optimizedRequest = request.copy(
             context = request.context.copy(
-                additionalContext = request.context.additionalContext + ("optimized_prompt" to optimizedPrompt)
+                additionalContext = request.context.additionalContext + ("optimized_prompt" to (optimizedPrompt))
             )
         )
 

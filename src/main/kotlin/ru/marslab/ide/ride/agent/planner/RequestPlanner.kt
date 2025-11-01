@@ -273,42 +273,42 @@ class RequestPlanner {
 
             TaskType.CODE_ANALYSIS -> {
                 steps.add(createAnalysisStep(requestAnalysis, stepIdCounter))
-                steps.add(createQualityCheckStep(requestAnalysis, stepIdCounter, listOf("analysis")))
+                steps.add(createQualityCheckStep(requestAnalysis, stepIdCounter, setOf("analysis")))
             }
 
             TaskType.BUG_FIX -> {
                 steps.add(createBugDetectionStep(requestAnalysis, stepIdCounter))
-                steps.add(createQualityCheckStep(requestAnalysis, stepIdCounter, listOf("bug_detection")))
-                steps.add(createBugFixStep(requestAnalysis, stepIdCounter, listOf("bug_detection", "quality_check")))
+                steps.add(createQualityCheckStep(requestAnalysis, stepIdCounter, setOf("bug_detection")))
+                steps.add(createBugFixStep(requestAnalysis, stepIdCounter, setOf("bug_detection", "quality_check")))
             }
 
             TaskType.REFACTORING -> {
                 steps.add(createQualityCheckStep(requestAnalysis, stepIdCounter))
-                steps.add(createRefactorStep(requestAnalysis, stepIdCounter, listOf("quality_check")))
-                steps.add(createValidationStep(requestAnalysis, stepIdCounter, listOf("quality_check", "refactor")))
+                steps.add(createRefactorStep(requestAnalysis, stepIdCounter, setOf("quality_check")))
+                steps.add(createValidationStep(requestAnalysis, stepIdCounter, setOf("quality_check", "refactor")))
             }
 
             TaskType.ARCHITECTURE_ANALYSIS -> {
                 steps.add(createProjectScanStep(requestAnalysis, stepIdCounter))
-                steps.add(createArchitectureStep(requestAnalysis, stepIdCounter, listOf("project_scan")))
-                steps.add(createQualityCheckStep(requestAnalysis, stepIdCounter, listOf("project_scan", "architecture")))
-                steps.add(createDocumentationStep(requestAnalysis, stepIdCounter, listOf("architecture", "quality_check")))
+                steps.add(createArchitectureStep(requestAnalysis, stepIdCounter, setOf("project_scan")))
+                steps.add(createQualityCheckStep(requestAnalysis, stepIdCounter, setOf("project_scan", "architecture")))
+                steps.add(createDocumentationStep(requestAnalysis, stepIdCounter, setOf("architecture", "quality_check")))
             }
 
             TaskType.REPORT_GENERATION -> {
                 steps.add(createProjectScanStep(requestAnalysis, stepIdCounter))
-                steps.add(createAnalysisStep(requestAnalysis, stepIdCounter, listOf("project_scan")))
-                steps.add(createReportStep(requestAnalysis, stepIdCounter, listOf("project_scan", "analysis")))
+                steps.add(createAnalysisStep(requestAnalysis, stepIdCounter, setOf("project_scan")))
+                steps.add(createReportStep(requestAnalysis, stepIdCounter, setOf("project_scan", "analysis")))
             }
 
             TaskType.COMPLEX_MULTI_STEP -> {
                 steps.add(createProjectScanStep(requestAnalysis, stepIdCounter))
                 if (uncertainty.suggestedActions.contains("поиск_контекста")) {
-                    steps.add(createRagEnrichmentStep(requestAnalysis, stepIdCounter, listOf("project_scan")))
+                    steps.add(createRagEnrichmentStep(requestAnalysis, stepIdCounter, setOf("project_scan")))
                 }
-                steps.add(createAnalysisStep(requestAnalysis, stepIdCounter, listOf("project_scan")))
-                steps.add(createQualityCheckStep(requestAnalysis, stepIdCounter, listOf("analysis")))
-                steps.add(createDocumentationStep(requestAnalysis, stepIdCounter, listOf("analysis", "quality_check")))
+                steps.add(createAnalysisStep(requestAnalysis, stepIdCounter, setOf("project_scan")))
+                steps.add(createQualityCheckStep(requestAnalysis, stepIdCounter, setOf("analysis")))
+                steps.add(createDocumentationStep(requestAnalysis, stepIdCounter, setOf("analysis", "quality_check")))
             }
 
             else -> {
@@ -327,8 +327,8 @@ class RequestPlanner {
             title = "Обработка простого запроса",
             description = "Прямой ответ на простой запрос без дополнительного анализа",
             agentType = AgentType.USER_INTERACTION,
-            input = mapOf(
-                "request" to analysis.parameters["original_request"],
+            input = mapOf<String, Any>(
+                "request" to (analysis.parameters["original_request"] ?: ""),
                 "complexity" to "low"
             ),
             estimatedDurationMs = 1000
@@ -341,7 +341,7 @@ class RequestPlanner {
             title = "Сканирование проекта",
             description = "Анализ структуры проекта и поиск релевантных файлов",
             agentType = AgentType.PROJECT_SCANNER,
-            input = mapOf(
+            input = mapOf<String, Any>(
                 "project_path" to (analysis.context.projectPath ?: "."),
                 "task_type" to analysis.taskType.name
             ),
@@ -355,7 +355,7 @@ class RequestPlanner {
             title = "Анализ кода",
             description = "Детальный анализ кода и выявление проблем",
             agentType = AgentType.LLM_REVIEW,
-            input = mapOf(
+            input = mapOf<String, Any>(
                 "request" to analysis.parameters["original_request"],
                 "context" to analysis.context,
                 "task_type" to analysis.taskType.name
@@ -371,7 +371,7 @@ class RequestPlanner {
             title = "Проверка качества кода",
             description = "Анализ качества кода и поиск потенциальных проблем",
             agentType = AgentType.CODE_QUALITY,
-            input = mapOf(
+            input = mapOf<String, Any>(
                 "project_path" to (analysis.context.projectPath ?: "."),
                 "severity" to "medium"
             ),
@@ -386,7 +386,7 @@ class RequestPlanner {
             title = "Поиск багов",
             description = "Поиск потенциальных ошибок в коде",
             agentType = AgentType.BUG_DETECTION,
-            input = mapOf(
+            input = mapOf<String, Any>(
                 "project_path" to (analysis.context.projectPath ?: "."),
                 "scan_depth" to "deep"
             ),
@@ -400,7 +400,7 @@ class RequestPlanner {
             title = "Исправление багов",
             description = "Предложения по исправлению найденных проблем",
             agentType = AgentType.CODE_FIXER,
-            input = mapOf(
+            input = mapOf<String, Any>(
                 "fix_strategy" to "suggestions_only" // Только предложения, не автоправки
             ),
             dependencies = dependencies,
@@ -414,7 +414,7 @@ class RequestPlanner {
             title = "Рефакторинг",
             description = "Анализ и предложения по рефакторингу кода",
             agentType = AgentType.LLM_REVIEW,
-            input = mapOf(
+            input = mapOf<String, Any>(
                 "refactor_type" to "suggestions",
                 "focus_areas" to listOf("readability", "performance", "maintainability")
             ),
@@ -429,7 +429,7 @@ class RequestPlanner {
             title = "Анализ архитектуры",
             description = "Оценка архитектуры проекта и выявление проблем",
             agentType = AgentType.ARCHITECTURE_ANALYSIS,
-            input = mapOf(
+            input = mapOf<String, Any>(
                 "analysis_depth" to "comprehensive",
                 "focus_patterns" to listOf("layering", "dependencies", "design_patterns")
             ),
@@ -444,7 +444,7 @@ class RequestPlanner {
             title = "Валидация изменений",
             description = "Проверка корректности предложенных изменений",
             agentType = AgentType.LLM_REVIEW,
-            input = mapOf(
+            input = mapOf<String, Any>(
                 "validation_type" to "comprehensive"
             ),
             dependencies = dependencies,
@@ -458,7 +458,7 @@ class RequestPlanner {
             title = "Поиск релевантного контекста",
             description = "Поиск и анализ релевантных фрагментов кода",
             agentType = AgentType.EMBEDDING_INDEXER,
-            input = mapOf(
+            input = mapOf<String, Any>(
                 "query" to analysis.parameters["original_request"],
                 "max_chunks" to 10
             ),
@@ -473,7 +473,7 @@ class RequestPlanner {
             title = "Создание отчета",
             description = "Генерация отчета на основе анализа",
             agentType = AgentType.REPORT_GENERATOR,
-            input = mapOf(
+            input = mapOf<String, Any>(
                 "report_type" to "comprehensive",
                 "format" to "markdown"
             ),
@@ -488,7 +488,7 @@ class RequestPlanner {
             title = "Создание документации",
             description = "Генерация документации по результатам анализа",
             agentType = AgentType.DOCUMENTATION_GENERATOR,
-            input = mapOf(
+            input = mapOf<String, Any>(
                 "doc_type" to "analysis_report",
                 "include_examples" to true
             ),
@@ -503,7 +503,7 @@ class RequestPlanner {
             title = "Обработка запроса",
             description = "Стандартная обработка запроса",
             agentType = AgentType.USER_INTERACTION,
-            input = mapOf(
+            input = mapOf<String, Any>(
                 "request" to analysis.parameters["original_request"],
                 "task_type" to analysis.taskType.name
             ),

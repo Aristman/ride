@@ -300,7 +300,7 @@ class RequestComplexityAnalyzer {
                 reasoning.append("архитектурный, ")
                 features.add("архитектурный")
             }
-            if (request.length > 100) {
+            if (requestLower.length > 100) {
                 reasoning.append("подробный, ")
                 features.add("подробный")
             }

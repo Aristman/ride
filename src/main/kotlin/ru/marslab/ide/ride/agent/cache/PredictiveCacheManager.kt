@@ -282,7 +282,8 @@ class PredictiveCacheManager(
         popularPatterns.forEach { pattern ->
             // Создаем базовый контекст для прогрева
             val context = ChatContext(
-                project = null,
+                project = com.intellij.openapi.project.ProjectManager.getInstance().openProjects.firstOrNull()
+                    ?: throw IllegalStateException("No open project found"),
                 history = emptyList()
             )
 
