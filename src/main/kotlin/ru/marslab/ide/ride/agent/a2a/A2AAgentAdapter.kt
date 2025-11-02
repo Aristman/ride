@@ -13,6 +13,9 @@ import ru.marslab.ide.ride.model.orchestrator.AgentType
 import ru.marslab.ide.ride.model.orchestrator.ExecutionContext
 import ru.marslab.ide.ride.model.chat.ChatContext
 import ru.marslab.ide.ride.model.llm.LLMParameters
+import ru.marslab.ide.ride.agent.ToolAgent
+import ru.marslab.ide.ride.model.tool.ToolPlanStep
+import ru.marslab.ide.ride.model.tool.StepInput
 
 /**
  * Адаптер для преобразования legacy Agent в A2AAgent
@@ -22,11 +25,14 @@ import ru.marslab.ide.ride.model.llm.LLMParameters
  */
 class A2AAgentAdapter(
     private val legacyAgent: Agent,
+    private val adapterAgentType: AgentType = (legacyAgent as? ToolAgent)?.agentType
+        ?: AgentType.PROJECT_SCANNER,
     override val a2aAgentId: String = legacyAgent.javaClass.simpleName,
     override val supportedMessageTypes: Set<String> = setOf(
         "AGENT_REQUEST",
         "AGENT_RESPONSE",
-        "EXECUTION_STATUS"
+        "EXECUTION_STATUS",
+        "TOOL_EXECUTION_REQUEST"
     ),
     override val publishedEventTypes: Set<String> = setOf(
         "EXECUTION_STARTED",
@@ -36,7 +42,7 @@ class A2AAgentAdapter(
     override val messageProcessingPriority: Int = 0,
     override val maxConcurrentMessages: Int = 5
 ) : BaseA2AAgent(
-    agentType = ru.marslab.ide.ride.model.orchestrator.AgentType.PROJECT_SCANNER, // Временно упрощаем
+    agentType = adapterAgentType,
     a2aAgentId = a2aAgentId,
     supportedMessageTypes = supportedMessageTypes,
     publishedEventTypes = publishedEventTypes,
@@ -100,7 +106,71 @@ class A2AAgentAdapter(
                 )
             )
 
-            // Создаем простой AgentRequest из A2A сообщения
+            // Если это запрос на выполнение шага для ToolAgent
+            val toolAgent = legacyAgent as? ToolAgent
+            val maybeCustom = request.payload as? MessagePayload.CustomPayload
+            if (toolAgent != null && request.messageType == "TOOL_EXECUTION_REQUEST" && maybeCustom != null) {
+                // Формируем ToolPlanStep: допускаем как полную форму (step={...}), так и плоские поля
+                val stepMap = (maybeCustom.data["step"] as? Map<*, *>)?.mapNotNull { (k, v) ->
+                    (k as? String)?.let { it to v }
+                }?.toMap()
+
+                val description = (stepMap?.get("description") as? String)
+                    ?: (maybeCustom.data["description"] as? String)
+                    ?: "A2A Tool Execution"
+
+                val inputMap: Map<String, Any> = when {
+                    stepMap?.get("input") is Map<*, *> -> {
+                        @Suppress("UNCHECKED_CAST")
+                        (stepMap["input"] as Map<String, Any>)
+                    }
+                    else -> {
+                        @Suppress("UNCHECKED_CAST")
+                        (maybeCustom.data as Map<String, Any>)
+                    }
+                }
+
+                val toolStep = ToolPlanStep(
+                    description = description,
+                    agentType = toolAgent.agentType,
+                    input = StepInput(inputMap)
+                )
+
+                val stepResult = withContext(Dispatchers.Default) {
+                    toolAgent.executeStep(toolStep, executionContext)
+                }
+
+                // Публикуем событие о завершении
+                publishEvent(
+                    messageBus = messageBus,
+                    eventType = "EXECUTION_COMPLETED",
+                    payload = MessagePayload.ExecutionStatusPayload(
+                        status = if (stepResult.success) "COMPLETED" else "FAILED",
+                        agentId = a2aAgentId,
+                        requestId = request.id,
+                        timestamp = System.currentTimeMillis(),
+                        result = stepResult.output.data.toString(),
+                        error = stepResult.error
+                    )
+                )
+
+                return AgentMessage.Response(
+                    senderId = a2aAgentId,
+                    requestId = request.id,
+                    success = stepResult.success,
+                    payload = MessagePayload.CustomPayload(
+                        type = "TOOL_EXECUTION_RESULT",
+                        data = mapOf(
+                            "output" to stepResult.output.data,
+                            "error" to (stepResult.error ?: ""),
+                            "metadata" to stepResult.metadata
+                        )
+                    ),
+                    error = stepResult.error
+                )
+            }
+
+            // Иначе: текстовый запрос к legacy Agent
             val agentRequest = when (val payload = request.payload) {
                 is MessagePayload.TextPayload -> {
                     AgentRequest(
@@ -118,12 +188,10 @@ class A2AAgentAdapter(
                 }
             }
 
-            // Выполняем legacy agent
             val response = withContext(Dispatchers.Default) {
                 legacyAgent.ask(agentRequest)
             }
 
-            // Публикуем событие о завершении выполнения
             publishEvent(
                 messageBus = messageBus,
                 eventType = "EXECUTION_COMPLETED",
@@ -136,7 +204,6 @@ class A2AAgentAdapter(
                 )
             )
 
-            // Преобразуем legacy ответ в A2A ответ
             AgentMessage.Response(
                 senderId = a2aAgentId,
                 requestId = request.id,
@@ -150,7 +217,6 @@ class A2AAgentAdapter(
                     )
                 )
             )
-
         } catch (e: Exception) {
             logger.error("Error processing A2A request in adapter", e)
 
@@ -228,21 +294,24 @@ class A2AAgentAdapter(
             agent: Agent,
             a2aAgentId: String? = null,
             supportedMessageTypes: Set<String>? = null,
-            publishedEventTypes: Set<String>? = null
+            publishedEventTypes: Set<String>? = null,
+            agentType: AgentType? = null
         ): A2AAgentAdapter {
             return A2AAgentAdapter(
                 legacyAgent = agent,
+                adapterAgentType = agentType ?: (agent as? ToolAgent)?.agentType ?: AgentType.PROJECT_SCANNER,
                 a2aAgentId = a2aAgentId ?: agent.javaClass.simpleName,
-                supportedMessageTypes = supportedMessageTypes ?: setOf(
+                supportedMessageTypes = (supportedMessageTypes ?: setOf(
                     "AGENT_REQUEST",
                     "AGENT_RESPONSE",
-                    "EXECUTION_STATUS"
-                ),
-                publishedEventTypes = publishedEventTypes ?: setOf(
+                    "EXECUTION_STATUS",
+                    "TOOL_EXECUTION_REQUEST"
+                )),
+                publishedEventTypes = (publishedEventTypes ?: setOf(
                     "EXECUTION_STARTED",
                     "EXECUTION_COMPLETED",
                     "EXECUTION_FAILED"
-                )
+                ))
             )
         }
 
