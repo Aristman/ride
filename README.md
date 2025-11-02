@@ -468,6 +468,13 @@ Settings → Tools → Ride → Token Management
 
 Подробнее: [`docs/architecture/overview.md`](docs/architecture/overview.md)
 
+### 🤝 A2A Protocol (Agent-to-Agent)
+
+- Унифицированный протокол исполнения инструментов: `TOOL_EXECUTION_REQUEST` / `TOOL_EXECUTION_RESULT`.
+- Полная спецификация: `docs/features/a2a-protocol.md` (включая контракты данных и `planId` в metadata событий).
+- Дорожная карта внедрения A2A-агентов: `docs/roadmaps/25_a2a-agent-rollout-roadmap.md`.
+- Интеграция протокола: `docs/roadmaps/24_a2a-protocol-integration.md`.
+
 ## 🧪 Тестирование
 
 ### Запуск unit тестов
