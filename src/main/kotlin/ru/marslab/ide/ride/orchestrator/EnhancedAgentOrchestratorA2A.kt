@@ -7,6 +7,16 @@ import ru.marslab.ide.ride.agent.tools.A2AProjectScannerToolAgent
 import ru.marslab.ide.ride.agent.tools.A2ABugDetectionToolAgent
 import ru.marslab.ide.ride.agent.tools.A2ACodeQualityToolAgent
 import ru.marslab.ide.ride.agent.tools.A2AReportGeneratorToolAgent
+import ru.marslab.ide.ride.agent.tools.A2AArchitectureToolAgent
+import ru.marslab.ide.ride.agent.tools.A2ALLMReviewToolAgent
+import ru.marslab.ide.ride.agent.tools.A2AEmbeddingIndexerToolAgent
+import ru.marslab.ide.ride.agent.tools.A2ACodeChunkerToolAgent
+import ru.marslab.ide.ride.agent.tools.A2AOpenSourceFileToolAgent
+import ru.marslab.ide.ride.agent.tools.ArchitectureToolAgent
+import ru.marslab.ide.ride.agent.tools.LLMCodeReviewToolAgent
+import ru.marslab.ide.ride.agent.tools.EmbeddingIndexerToolAgent
+import ru.marslab.ide.ride.agent.tools.CodeChunkerToolAgent
+import ru.marslab.ide.ride.agent.tools.OpenSourceFileToolAgent
 import ru.marslab.ide.ride.agent.BaseToolAgent
 import ru.marslab.ide.ride.agent.AgentOrchestrator
 import ru.marslab.ide.ride.agent.OrchestratorStep
@@ -52,6 +62,29 @@ class EnhancedAgentOrchestratorA2A(
         val codeQuality = A2ACodeQualityToolAgent(messageBus, a2aRegistry)
         val bugDetection = A2ABugDetectionToolAgent(llmProvider, messageBus, a2aRegistry)
         val reportGenerator = A2AReportGeneratorToolAgent(llmProvider, messageBus, a2aRegistry)
+
+        // Дополнительные специализированные агенты
+        val registry = baseOrchestrator.getToolAgentRegistry()
+        (registry.get(AgentType.ARCHITECTURE_ANALYSIS) as? ToolAgent)?.let {
+            val legacy = ArchitectureToolAgent(llmProvider)
+            a2aRegistry.registerAgent(A2AArchitectureToolAgent(legacy, messageBus))
+        }
+        (registry.get(AgentType.LLM_REVIEW) as? ToolAgent)?.let {
+            val legacy = LLMCodeReviewToolAgent(llmProvider)
+            a2aRegistry.registerAgent(A2ALLMReviewToolAgent(legacy, messageBus))
+        }
+        (registry.get(AgentType.EMBEDDING_INDEXER) as? ToolAgent)?.let {
+            val legacy = EmbeddingIndexerToolAgent()
+            a2aRegistry.registerAgent(A2AEmbeddingIndexerToolAgent(legacy, messageBus))
+        }
+        (registry.get(AgentType.CODE_CHUNKER) as? ToolAgent)?.let {
+            val legacy = CodeChunkerToolAgent()
+            a2aRegistry.registerAgent(A2ACodeChunkerToolAgent(legacy, messageBus))
+        }
+        (registry.get(AgentType.FILE_OPERATIONS) as? ToolAgent)?.let {
+            val legacy = OpenSourceFileToolAgent()
+            a2aRegistry.registerAgent(A2AOpenSourceFileToolAgent(legacy, messageBus))
+        }
 
         // Регистрируем
         a2aRegistry.registerAgent(scanner)
@@ -546,6 +579,36 @@ class EnhancedAgentOrchestratorA2A(
                 val reqType = if (step.input.containsKey("structure_only")) "PROJECT_STRUCTURE_REQUEST" else "FILE_DATA_REQUEST"
                 reqType to MessagePayload.CustomPayload(
                     type = reqType,
+                    data = input
+                )
+            }
+            AgentType.ARCHITECTURE_ANALYSIS -> {
+                "ARCHITECTURE_ANALYSIS_REQUEST" to MessagePayload.CustomPayload(
+                    type = "ARCHITECTURE_ANALYSIS_REQUEST",
+                    data = input
+                )
+            }
+            AgentType.LLM_REVIEW -> {
+                "LLM_REVIEW_REQUEST" to MessagePayload.CustomPayload(
+                    type = "LLM_REVIEW_REQUEST",
+                    data = input
+                )
+            }
+            AgentType.EMBEDDING_INDEXER -> {
+                "EMBEDDING_INDEX_REQUEST" to MessagePayload.CustomPayload(
+                    type = "EMBEDDING_INDEX_REQUEST",
+                    data = input
+                )
+            }
+            AgentType.CODE_CHUNKER -> {
+                "CODE_CHUNK_REQUEST" to MessagePayload.CustomPayload(
+                    type = "CODE_CHUNK_REQUEST",
+                    data = input
+                )
+            }
+            AgentType.FILE_OPERATIONS -> {
+                "OPEN_FILE_REQUEST" to MessagePayload.CustomPayload(
+                    type = "OPEN_FILE_REQUEST",
                     data = input
                 )
             }
