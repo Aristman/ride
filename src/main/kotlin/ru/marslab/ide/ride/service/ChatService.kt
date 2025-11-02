@@ -34,6 +34,9 @@ import ru.marslab.ide.ride.service.storage.ChatStorageService
 import ru.marslab.ide.ride.settings.PluginSettings
 import ru.marslab.ide.ride.ui.chat.JcefChatView
 import ru.marslab.ide.ride.util.TokenEstimator
+import ru.marslab.ide.ride.agent.a2a.AgentMessage
+import ru.marslab.ide.ride.agent.a2a.MessagePayload
+import ru.marslab.ide.ride.agent.a2a.MessageBusProvider
 import java.time.Instant
 
 /**
@@ -86,6 +89,76 @@ class ChatService {
         override fun onToolAgentFailed(message: ToolAgentStatusMessage, error: String) {
             displayToolAgentStatus(message)
         }
+    }
+
+    /**
+     * Подписка на A2A события и отображение прогресса в чате
+     */
+    private fun startA2AEventSubscription() {
+        // Запускаем сбор событий в фоне
+        scope.launch {
+            try {
+                MessageBusProvider.get().subscribeAll().collect { msg ->
+                    when (msg) {
+                        is AgentMessage.Event -> handleA2AUiEvent(msg)
+                        else -> { /* ignore */ }
+                    }
+                }
+            } catch (e: Exception) {
+                logger.warn("ChatService: A2A event subscription error: ${e.message}", e)
+            }
+        }
+    }
+
+    private fun handleA2AUiEvent(event: AgentMessage.Event) {
+        val pretty = when (val payload = event.payload) {
+            is MessagePayload.ExecutionStatusPayload -> {
+                val status = payload.status
+                val agent = payload.agentId ?: event.senderId
+                val result = payload.result
+                val error = payload.error
+                buildString {
+                    appendLine("### A2A: ${event.eventType}")
+                    appendLine("- agent: $agent")
+                    appendLine("- status: $status")
+                    if (!result.isNullOrBlank()) appendLine("- result: $result")
+                    if (!error.isNullOrBlank()) appendLine("- error: $error")
+                }
+            }
+            is MessagePayload.ProgressPayload -> {
+                buildString {
+                    appendLine("### A2A Progress: ${event.eventType}")
+                    appendLine("- step: ${payload.stepId}")
+                    appendLine("- status: ${payload.status}")
+                    appendLine("- progress: ${payload.progress}%")
+                    if (!payload.message.isNullOrBlank()) appendLine("- message: ${payload.message}")
+                }
+            }
+            is MessagePayload.CustomPayload -> {
+                val type = payload.type
+                val data = payload.data
+                buildString {
+                    appendLine("### A2A Event: ${event.eventType}")
+                    appendLine("- type: $type")
+                    appendLine("- sender: ${event.senderId}")
+                    if (data.isNotEmpty()) appendLine("- data: ${simpleJsonString(data)}")
+                }
+            }
+            else -> {
+                "### A2A Event: ${event.eventType} (payload: ${payload::class.simpleName})\n- sender: ${event.senderId}"
+            }
+        }
+
+        val message = Message(
+            content = pretty,
+            role = MessageRole.ASSISTANT,
+            metadata = mapOf(
+                "type" to "a2a_event",
+                "eventType" to event.eventType,
+                "senderId" to event.senderId
+            )
+        )
+        sendProgressMessageToUI(message)
     }
 
     // Список активных progress сообщений для обновления
@@ -228,6 +301,8 @@ class ChatService {
         this.chatView = view
         // Добавляем listener к orchestrator если он есть
         setupProgressListener()
+        // Подписка на A2A события для отображения прогресса
+        startA2AEventSubscription()
     }
 
     /**
