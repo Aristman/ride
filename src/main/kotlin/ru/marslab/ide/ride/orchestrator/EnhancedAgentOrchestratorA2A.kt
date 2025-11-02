@@ -372,7 +372,8 @@ class EnhancedAgentOrchestratorA2A(
                         status = "started",
                         progress = 0,
                         message = step.title
-                    )
+                    ),
+                    metadata = mapOf("planId" to plan.id)
                 )
 
                 val policy = step.retryPolicy ?: RetryPolicy.DEFAULT
@@ -403,7 +404,7 @@ class EnhancedAgentOrchestratorA2A(
                                     progress = 0,
                                     message = "${step.title}: retry $attempt/${policy.maxAttempts}"
                                 ),
-                                metadata = mapOf("attempt" to attempt)
+                                metadata = mapOf("attempt" to attempt, "planId" to plan.id)
                             )
                             // Backoff
                             val delayMs = policy.getDelay(attempt).inWholeMilliseconds
@@ -425,7 +426,7 @@ class EnhancedAgentOrchestratorA2A(
                             progress = 0,
                             message = "${step.title}: ${lastError ?: "failed"}"
                         ),
-                        metadata = mapOf("attempts" to attempt - 1)
+                        metadata = mapOf("attempts" to attempt - 1, "planId" to plan.id)
                     )
 
                     onStepComplete(
@@ -479,7 +480,8 @@ class EnhancedAgentOrchestratorA2A(
                         status = "completed",
                         progress = 100,
                         message = step.title
-                    )
+                    ),
+                    metadata = mapOf("planId" to plan.id)
                 )
             }
 

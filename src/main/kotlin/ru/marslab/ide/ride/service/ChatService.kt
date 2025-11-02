@@ -117,20 +117,28 @@ class ChatService {
                 val agent = payload.agentId ?: event.senderId
                 val result = payload.result
                 val error = payload.error
+                val planId = event.metadata["planId"] ?: payload.requestId ?: ""
                 buildString {
                     appendLine("### A2A: ${event.eventType}")
                     appendLine("- agent: $agent")
                     appendLine("- status: $status")
+                    if (planId.toString().isNotBlank()) appendLine("- planId: $planId")
                     if (!result.isNullOrBlank()) appendLine("- result: $result")
                     if (!error.isNullOrBlank()) appendLine("- error: $error")
                 }
             }
             is MessagePayload.ProgressPayload -> {
+                val planId = event.metadata["planId"] ?: ""
+                val attempt = event.metadata["attempt"]
+                val attempts = event.metadata["attempts"]
                 buildString {
                     appendLine("### A2A Progress: ${event.eventType}")
                     appendLine("- step: ${payload.stepId}")
                     appendLine("- status: ${payload.status}")
                     appendLine("- progress: ${payload.progress}%")
+                    if (planId.toString().isNotBlank()) appendLine("- planId: $planId")
+                    if (attempt != null) appendLine("- attempt: $attempt")
+                    if (attempts != null) appendLine("- attempts: $attempts")
                     if (!payload.message.isNullOrBlank()) appendLine("- message: ${payload.message}")
                 }
             }
