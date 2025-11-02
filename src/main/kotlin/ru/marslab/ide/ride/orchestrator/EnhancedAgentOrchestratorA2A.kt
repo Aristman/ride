@@ -3,6 +3,10 @@ package ru.marslab.ide.ride.orchestrator
 import com.intellij.openapi.diagnostic.Logger
 import kotlinx.coroutines.*
 import ru.marslab.ide.ride.agent.a2a.*
+import ru.marslab.ide.ride.agent.tools.A2AProjectScannerToolAgent
+import ru.marslab.ide.ride.agent.tools.A2ABugDetectionToolAgent
+import ru.marslab.ide.ride.agent.tools.A2ACodeQualityToolAgent
+import ru.marslab.ide.ride.agent.tools.A2AReportGeneratorToolAgent
 import ru.marslab.ide.ride.agent.BaseToolAgent
 import ru.marslab.ide.ride.agent.AgentOrchestrator
 import ru.marslab.ide.ride.agent.OrchestratorStep
@@ -21,7 +25,7 @@ import ru.marslab.ide.ride.model.tool.ToolPlanStep
  */
 class EnhancedAgentOrchestratorA2A(
     private val baseOrchestrator: EnhancedAgentOrchestrator,
-    private val messageBus: MessageBus = InMemoryMessageBus(),
+    private val messageBus: MessageBus = MessageBusProvider.get(),
     private val a2aRegistry: A2AAgentRegistry = A2AAgentRegistry.getInstance(),
     private val a2aConfig: A2AConfig = A2AConfig.getInstance()
 ) {
@@ -36,6 +40,25 @@ class EnhancedAgentOrchestratorA2A(
     init {
         // Подписываемся на A2A события
         subscribeToA2AEvents()
+    }
+
+    /**
+     * Регистрирует базовых A2A-агентов в реестре на общей шине MessageBus
+     */
+    suspend fun registerCoreAgents(llmProvider: LLMProvider) {
+        // Используем общий messageBus для всех агентов
+        val scanner = A2AProjectScannerToolAgent(messageBus)
+        val codeQuality = A2ACodeQualityToolAgent(messageBus, a2aRegistry)
+        val bugDetection = A2ABugDetectionToolAgent(llmProvider, messageBus, a2aRegistry)
+        val reportGenerator = A2AReportGeneratorToolAgent(llmProvider, messageBus, a2aRegistry)
+
+        // Регистрируем
+        a2aRegistry.registerAgent(scanner)
+        a2aRegistry.registerAgent(codeQuality)
+        a2aRegistry.registerAgent(bugDetection)
+        a2aRegistry.registerAgent(reportGenerator)
+
+        logger.info("Core A2A agents registered: ${listOf(scanner.a2aAgentId, codeQuality.a2aAgentId, bugDetection.a2aAgentId, reportGenerator.a2aAgentId)}")
     }
 
     /**

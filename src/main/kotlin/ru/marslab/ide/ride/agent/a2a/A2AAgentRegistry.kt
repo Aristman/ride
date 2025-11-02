@@ -325,9 +325,7 @@ class A2AAgentRegistry : PersistentStateComponent<A2AAgentRegistry.State> {
     }
 
     private fun getMessageBus(): MessageBus {
-        // TODO: Получать MessageBus из сервиса
-        // Временно создаем инстанс
-        return InMemoryMessageBus()
+        return MessageBusProvider.get()
     }
 
     private fun createExecutionContext(agent: A2AAgent): ExecutionContext {
