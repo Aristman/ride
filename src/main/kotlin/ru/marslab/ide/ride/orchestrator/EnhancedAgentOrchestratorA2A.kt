@@ -62,6 +62,32 @@ class EnhancedAgentOrchestratorA2A(
     }
 
     /**
+     * Регистрирует базовые (без LLM) A2A-агенты: сканер и качество кода
+     */
+    suspend fun registerCoreAgentsBasic() {
+        val scanner = A2AProjectScannerToolAgent(messageBus)
+        val codeQuality = A2ACodeQualityToolAgent(messageBus, a2aRegistry)
+
+        a2aRegistry.registerAgent(scanner)
+        a2aRegistry.registerAgent(codeQuality)
+
+        logger.info("Basic A2A agents registered: ${listOf(scanner.a2aAgentId, codeQuality.a2aAgentId)}")
+    }
+
+    /**
+     * Регистрирует A2A-агентов, требующих LLM-провайдера
+     */
+    suspend fun registerLLMBasedAgents(llmProvider: LLMProvider) {
+        val bugDetection = A2ABugDetectionToolAgent(llmProvider, messageBus, a2aRegistry)
+        val reportGenerator = A2AReportGeneratorToolAgent(llmProvider, messageBus, a2aRegistry)
+
+        a2aRegistry.registerAgent(bugDetection)
+        a2aRegistry.registerAgent(reportGenerator)
+
+        logger.info("LLM-based A2A agents registered: ${listOf(bugDetection.a2aAgentId, reportGenerator.a2aAgentId)}")
+    }
+
+    /**
      * Обрабатывает запрос с поддержкой A2A режима
      *
      * @param request Входящий запрос

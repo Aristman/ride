@@ -458,16 +458,4 @@ class A2ABugDetectionToolAgent(
 
     // Удалены устаревшие override-методы, не предусмотренные интерфейсом A2AAgent
 
-    companion object {
-        /**
-         * Создает A2A-enhanced BugDetectionToolAgent
-         */
-        fun create(
-            llmProvider: LLMProvider,
-            messageBus: MessageBus,
-            agentRegistry: A2AAgentRegistry
-        ): A2ABugDetectionToolAgent {
-            return A2ABugDetectionToolAgent(llmProvider, messageBus, agentRegistry)
-        }
-    }
 }

@@ -861,17 +861,4 @@ class A2AReportGeneratorToolAgent(
         val requestId: String,
         val timestamp: Long
     )
-
-    companion object {
-        /**
-         * Создает A2A-enhanced ReportGeneratorToolAgent
-         */
-        fun create(
-            llmProvider: LLMProvider,
-            messageBus: MessageBus,
-            agentRegistry: A2AAgentRegistry
-        ): A2AReportGeneratorToolAgent {
-            return A2AReportGeneratorToolAgent(llmProvider, messageBus, agentRegistry)
-        }
-    }
 }

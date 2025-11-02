@@ -796,16 +796,4 @@ class A2ACodeQualityToolAgent(
         val methods: Int,
         val classes: Int
     )
-
-    companion object {
-        /**
-         * Создает A2A-enhanced CodeQualityToolAgent
-         */
-        fun create(
-            messageBus: MessageBus,
-            agentRegistry: A2AAgentRegistry
-        ): A2ACodeQualityToolAgent {
-            return A2ACodeQualityToolAgent(messageBus, agentRegistry)
-        }
-    }
 }

@@ -501,6 +501,18 @@ class EnhancedChatAgent(
             val baseChatAgent = ChatAgent(llmProvider)
             val orchestrator = EnhancedAgentOrchestrator(llmProvider)
 
+            // Инициализируем A2A-орchestrator и регистрируем A2A-агентов на общей шине
+            try {
+                val orchestratorA2A = ru.marslab.ide.ride.orchestrator.EnhancedAgentOrchestratorA2A(orchestrator)
+                // Регистрируем базовых агентов без LLM, затем LLM-зависимых
+                kotlinx.coroutines.runBlocking {
+                    orchestratorA2A.registerCoreAgentsBasic()
+                    orchestratorA2A.registerLLMBasedAgents(llmProvider)
+                }
+            } catch (e: Exception) {
+                Logger.getInstance(EnhancedChatAgent::class.java).warn("Failed to initialize A2A orchestrator: ${e.message}", e)
+            }
+
             // Регистрируем все доступные ToolAgents
             registerToolAgents(orchestrator, llmProvider)
 
