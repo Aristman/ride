@@ -375,10 +375,87 @@ class EnhancedAgentOrchestratorA2A(
                     )
                 )
 
-                val request = buildA2ARequestForStep(step)
-                val response = messageBus.requestResponse(request, a2aConfig.getDefaultTimeoutMs())
+                val policy = step.retryPolicy ?: RetryPolicy.DEFAULT
+                var attempt = 1
+                var lastError: String? = null
+                var success = false
+                var response: AgentMessage.Response? = null
+                var stepResult: Any = emptyMap<String, Any>()
 
-                val stepResult = mapResponseToResult(step, response)
+                while (attempt <= policy.maxAttempts && !success) {
+                    val request = buildA2ARequestForStep(step)
+                    response = messageBus.requestResponse(request, a2aConfig.getDefaultTimeoutMs())
+
+                    if (response.success) {
+                        success = true
+                        stepResult = mapResponseToResult(step, response)
+                        break
+                    } else {
+                        lastError = response.error ?: "Unknown error"
+                        val canRetry = policy.shouldRetryError(lastError)
+                        if (canRetry && attempt < policy.maxAttempts) {
+                            // Публикуем событие ретрая
+                            publishA2AEvent(
+                                eventType = "STEP_RETRYING",
+                                payload = MessagePayload.ProgressPayload(
+                                    stepId = step.id,
+                                    status = "retrying",
+                                    progress = 0,
+                                    message = "${step.title}: retry $attempt/${policy.maxAttempts}"
+                                ),
+                                metadata = mapOf("attempt" to attempt)
+                            )
+                            // Backoff
+                            val delayMs = policy.getDelay(attempt).inWholeMilliseconds
+                            delay(delayMs)
+                            attempt++
+                        } else {
+                            break
+                        }
+                    }
+                }
+
+                if (!success) {
+                    // Публикуем провал шага
+                    publishA2AEvent(
+                        eventType = "STEP_FAILED",
+                        payload = MessagePayload.ProgressPayload(
+                            stepId = step.id,
+                            status = "failed",
+                            progress = 0,
+                            message = "${step.title}: ${lastError ?: "failed"}"
+                        ),
+                        metadata = mapOf("attempts" to attempt - 1)
+                    )
+
+                    onStepComplete(
+                        OrchestratorStep.TaskComplete(
+                            agentName = "A2A-${step.agentType.name}",
+                            taskId = 0,
+                            taskTitle = step.title,
+                            content = (mapOf("error" to (lastError ?: "Unknown error"))).toString(),
+                            success = false,
+                            error = lastError
+                        )
+                    )
+
+                    // Завершаем план с ошибкой (fail-fast)
+                    publishA2AEvent(
+                        eventType = "PLAN_EXECUTION_FAILED",
+                        payload = MessagePayload.ExecutionStatusPayload(
+                            status = "FAILED",
+                            agentId = "enhanced-orchestrator-a2a",
+                            requestId = plan.id,
+                            timestamp = System.currentTimeMillis(),
+                            error = lastError
+                        )
+                    )
+                    return AgentResponse.error(
+                        error = lastError ?: "Execution error",
+                        content = "Шаг '${step.title}' завершился ошибкой после ${attempt - 1} попыток"
+                    )
+                }
+
                 completedSteps.add(step.id)
                 stepResults[step.id] = stepResult
 
@@ -389,8 +466,8 @@ class EnhancedAgentOrchestratorA2A(
                         taskId = 0,
                         taskTitle = step.title,
                         content = stepResult.toString(),
-                        success = response.success,
-                        error = response.error
+                        success = true,
+                        error = null
                     )
                 )
 
@@ -399,8 +476,8 @@ class EnhancedAgentOrchestratorA2A(
                     eventType = "STEP_COMPLETED",
                     payload = MessagePayload.ProgressPayload(
                         stepId = step.id,
-                        status = if (response.success) "completed" else "failed",
-                        progress = if (response.success) 100 else 0,
+                        status = "completed",
+                        progress = 100,
                         message = step.title
                     )
                 )
