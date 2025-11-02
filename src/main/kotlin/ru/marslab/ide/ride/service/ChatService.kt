@@ -24,6 +24,7 @@ import ru.marslab.ide.ride.model.llm.TokenUsage
 import ru.marslab.ide.ride.model.schema.ResponseFormat
 import ru.marslab.ide.ride.model.schema.ResponseSchema
 import ru.marslab.ide.ride.orchestrator.EnhancedAgentOrchestrator
+import ru.marslab.ide.ride.orchestrator.EnhancedAgentOrchestratorA2A
 import ru.marslab.ide.ride.orchestrator.ToolAgentProgressListener
 import ru.marslab.ide.ride.agent.tools.ProjectScannerToolAgent
 import ru.marslab.ide.ride.model.orchestrator.ExecutionContext
@@ -363,7 +364,7 @@ class ChatService {
     }
 
     /**
-     * Ищет EnhancedAgentOrchestrator в текущем агенте
+     * Ищет EnhancedAgentOrchestratorA2A в текущем агенте
      */
     private fun findEnhancedAgentOrchestrator(): EnhancedAgentOrchestrator? {
         val currentAgent = agent
@@ -375,9 +376,12 @@ class ChatService {
                     val field = currentAgent::class.java.getDeclaredField("orchestrator")
                     field.isAccessible = true
                     val orchestrator = field.get(currentAgent)
-                    if (orchestrator != null && orchestrator::class.java.simpleName == "EnhancedAgentOrchestrator") {
+                    if (orchestrator != null && orchestrator::class.java.simpleName == "EnhancedAgentOrchestratorA2A") {
+                        // Получаем baseOrchestrator из A2A
+                        val baseField = orchestrator::class.java.getDeclaredField("baseOrchestrator")
+                        baseField.isAccessible = true
                         @Suppress("UNCHECKED_CAST")
-                        return orchestrator as? EnhancedAgentOrchestrator
+                        return baseField.get(orchestrator) as? EnhancedAgentOrchestrator
                     }
                 }
 
@@ -854,9 +858,10 @@ class ChatService {
         // Обрабатываем запрос асинхронно
         scope.launch {
             try {
-                // Создаем улучшенный оркестратор
+                // Создаем старый оркестратор как основу для A2A
                 val llmProvider = LLMProviderFactory.createLLMProvider()
-                val enhancedOrchestrator = EnhancedAgentOrchestrator(llmProvider)
+                val baseOrchestrator = EnhancedAgentOrchestrator(llmProvider)
+                val enhancedOrchestrator = EnhancedAgentOrchestratorA2A(baseOrchestrator)
 
                 // Формируем контекст
                 val context = ChatContext(
@@ -905,10 +910,21 @@ class ChatService {
                     }
                 }
 
-                enhancedOrchestrator.addProgressListener(progressListener)
+                baseOrchestrator.addProgressListener(progressListener)
 
                 // Запускаем оркестратор
-                val result = enhancedOrchestrator.executePlan(agentRequest)
+                val result = baseOrchestrator.processEnhanced(agentRequest) { step ->
+                    // Отправляем прогресс в UI
+                    withContext(Dispatchers.EDT) {
+                        onStepComplete(
+                            ru.marslab.ide.ride.model.chat.Message(
+                                role = ru.marslab.ide.ride.model.chat.MessageRole.ASSISTANT,
+                                content = "🔄 Выполняется шаг: ${step.javaClass.simpleName}",
+                                timestamp = System.currentTimeMillis()
+                            )
+                        )
+                    }
+                }
 
                 withContext(Dispatchers.EDT) {
                     if (result.success) {
@@ -928,7 +944,7 @@ class ChatService {
                 }
 
                 // Удаляем listener и очищаем callback
-                enhancedOrchestrator.removeProgressListener(progressListener)
+                baseOrchestrator.removeProgressListener(progressListener)
                 currentResponseCallback = null
 
             } catch (e: Exception) {

@@ -79,8 +79,7 @@ class EnhancedAgentOrchestratorA2A(
             a2aRegistry.registerAgent(A2ALLMReviewToolAgent(legacy, messageBus))
         }
         (registry.get(AgentType.CODE_GENERATOR) as? ToolAgent)?.let {
-            val legacy = CodeGeneratorToolAgent(llmProvider)
-            a2aRegistry.registerAgent(A2ACodeGeneratorToolAgent(legacy, messageBus))
+            a2aRegistry.registerAgent(A2ACodeGeneratorToolAgent.create(llmProvider, messageBus))
         }
         (registry.get(AgentType.EMBEDDING_INDEXER) as? ToolAgent)?.let {
             val legacy = EmbeddingIndexerToolAgent()

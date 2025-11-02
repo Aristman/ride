@@ -43,6 +43,14 @@ object ToolAgentInitializer {
             registry.register(EmbeddingIndexerToolAgent())
             logger.info("Registered EmbeddingIndexerToolAgent")
 
+            // Регистрируем CodeGeneratorToolAgent
+            registry.register(CodeGeneratorToolAgent(llmProvider))
+            logger.info("Registered CodeGeneratorToolAgent")
+
+            // Регистрируем LLMReviewToolAgent
+            registry.register(LLMReviewToolAgent(llmProvider))
+            logger.info("Registered LLMReviewToolAgent")
+
             logger.info("All Tool Agents registered successfully. Total: ${registry.count()}")
 
             // Выводим статистику
@@ -67,6 +75,8 @@ object ToolAgentInitializer {
         registry.register(ProjectScannerToolAgent())
         registry.register(ArchitectureToolAgent(llmProvider))
         registry.register(UserInteractionAgent())
+        registry.register(CodeGeneratorToolAgent(llmProvider))
+        registry.register(LLMReviewToolAgent(llmProvider))
 
         logger.info("Basic Tool Agents registered. Total: ${registry.count()}")
     }

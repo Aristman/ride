@@ -1,41 +1,77 @@
 package ru.marslab.ide.ride.agent.tools
 
-import ru.marslab.ide.ride.agent.a2a.A2AAgentAdapter
-import ru.marslab.ide.ride.agent.a2a.AgentMessage
-import ru.marslab.ide.ride.agent.a2a.MessageBus
+import kotlinx.coroutines.*
+import ru.marslab.ide.ride.agent.a2a.*
+import ru.marslab.ide.ride.agent.BaseToolAgent
 import ru.marslab.ide.ride.integration.llm.LLMProvider
+import ru.marslab.ide.ride.model.orchestrator.AgentType
+import ru.marslab.ide.ride.model.orchestrator.ExecutionContext
+import ru.marslab.ide.ride.model.tool.*
+import ru.marslab.ide.ride.agent.ValidationResult
 
 /**
- * A2A адаптер для CodeGeneratorToolAgent
+ * A2A агент для генерации кода с использованием legacy CodeGeneratorToolAgent
  */
-class A2ACodeGeneratorToolAgent(
-    legacy: CodeGeneratorToolAgent,
-    messageBus: MessageBus
-) : A2AAgentAdapter(
-    agentType = "CODE_GENERATOR",
-    legacyAgent = legacy,
-    messageBus = messageBus
-) {
+class A2ACodeGeneratorToolAgent constructor(
+    private val legacyAgent: CodeGeneratorToolAgent,
+    override val a2aAgentId: String,
+    override val supportedMessageTypes: Set<String>,
+    override val publishedEventTypes: Set<String>,
+    override val messageProcessingPriority: Int,
+    override val maxConcurrentMessages: Int
+) : BaseToolAgent(
+    agentType = AgentType.CODE_GENERATOR,
+    toolCapabilities = setOf(
+        "code_generation",
+        "class_generation",
+        "function_generation",
+        "algorithm_generation"
+    )
+), A2AAgent {
 
-    init {
-        // Поддерживаемые типы сообщений для генерации кода
-        supportedMessageTypes = setOf(
-            "CODE_GENERATION_REQUEST",
-            "CLASS_GENERATION_REQUEST",
-            "FUNCTION_GENERATION_REQUEST",
-            "ALGORITHM_GENERATION_REQUEST"
-        )
+    private val messageTypeToCodeType = mapOf(
+        "CODE_GENERATION_REQUEST" to "general",
+        "CLASS_GENERATION_REQUEST" to "class",
+        "FUNCTION_GENERATION_REQUEST" to "function",
+        "ALGORITHM_GENERATION_REQUEST" to "algorithm"
+    )
 
-        // Маппинг типов сообщений на типы кода
-        messageTypeToCodeType = mapOf(
-            "CODE_GENERATION_REQUEST" to "general",
-            "CLASS_GENERATION_REQUEST" to "class",
-            "FUNCTION_GENERATION_REQUEST" to "function",
-            "ALGORITHM_GENERATION_REQUEST" to "algorithm"
-        )
+    override fun getDescription(): String {
+        return "A2A агент для генерации кода"
     }
 
-    override suspend fun processMessage(request: AgentMessage.Request): AgentMessage.Response {
+    override fun validateInput(input: StepInput): ValidationResult {
+        val request = input.getString("request")
+        val language = input.getString("language") ?: "kotlin"
+        val codeType = input.getString("code_type")
+
+        if (request.isNullOrBlank()) {
+            return ValidationResult.failure("Parameter 'request' is required for code generation")
+        }
+
+        if (codeType != null && codeType !in setOf("class", "function", "algorithm", "general")) {
+            return ValidationResult.failure("Invalid code_type: $codeType. Must be one of: class, function, algorithm, general")
+        }
+
+        return ValidationResult.success()
+    }
+
+    override suspend fun doExecuteStep(step: ToolPlanStep, context: ExecutionContext): StepResult {
+        // Этот метод не используется в A2A режиме, вся логика в handleA2AMessage
+        return legacyAgent.executeStep(step, context)
+    }
+
+    override suspend fun handleA2AMessage(
+        message: AgentMessage,
+        messageBus: MessageBus
+    ): AgentMessage? {
+        return when (message) {
+            is AgentMessage.Request -> handleA2ARequest(message)
+            else -> null
+        }
+    }
+
+    private suspend fun handleA2ARequest(request: AgentMessage.Request): AgentMessage.Response {
         val messageType = request.messageType
         val codeType = messageTypeToCodeType[messageType] ?: "general"
 
@@ -44,31 +80,33 @@ class A2ACodeGeneratorToolAgent(
         return try {
             // Извлекаем данные из payload
             val payloadData = when (val payload = request.payload) {
-                is ru.marslab.ide.ride.agent.a2a.MessagePayload.CustomPayload -> payload.data
+                is MessagePayload.CustomPayload -> payload.data
                 else -> emptyMap()
             }
 
             val inputData = payloadData["input"] as? Map<String, Any> ?: emptyMap()
 
             // Формируем входные данные для legacy агента
-            val stepInput = ru.marslab.ide.ride.model.tool.StepInput.of(
+            val stepInput = StepInput(mapOf(
                 "request" to (inputData["request"] ?: throw IllegalArgumentException("request parameter required")),
                 "language" to (inputData["language"] ?: "kotlin"),
                 "code_type" to codeType,
                 "context_files" to (inputData["context_files"] ?: emptyList<String>())
-            )
+            ))
 
             // Выполняем шаг с помощью legacy агента
-            val step = ru.marslab.ide.ride.model.tool.ToolPlanStep(
+            val step = ToolPlanStep(
                 id = request.metadata["stepId"] as? String ?: "unknown",
                 description = "Generate $codeType code",
-                agentType = ru.marslab.ide.ride.model.orchestrator.AgentType.CODE_GENERATOR,
+                agentType = AgentType.CODE_GENERATOR,
                 input = stepInput
             )
 
-            val context = ru.marslab.ide.ride.model.orchestrator.ExecutionContext.of(
-                "requestId" to (request.metadata["requestId"] ?: "unknown"),
-                "messageType" to messageType
+            val context = ExecutionContext(
+                additionalContext = mapOf(
+                    "requestId" to (request.metadata["requestId"] ?: "unknown"),
+                    "messageType" to messageType
+                )
             )
 
             val result = legacyAgent.executeStep(step, context)
@@ -76,11 +114,10 @@ class A2ACodeGeneratorToolAgent(
             if (result.success) {
                 val output = result.output
                 AgentMessage.Response(
-                    messageId = java.util.UUID.randomUUID().toString(),
-                    senderId = agentId,
-                    requestId = request.messageId,
+                    senderId = a2aAgentId,
+                    requestId = request.id,
                     success = true,
-                    payload = ru.marslab.ide.ride.agent.a2a.MessagePayload.CustomPayload(
+                    payload = MessagePayload.CustomPayload(
                         type = "${messageType}_RESPONSE",
                         data = mapOf(
                             "generated_code" to (output["generated_code"] ?: ""),
@@ -98,18 +135,17 @@ class A2ACodeGeneratorToolAgent(
                     metadata = mapOf(
                         "stepId" to step.id,
                         "executionTime" to System.currentTimeMillis(),
-                        "agentType" to agentType
+                        "agentType" to "CODE_GENERATOR"
                     )
                 )
             } else {
                 logger.error("Code generation failed: ${result.error}")
                 AgentMessage.Response(
-                    messageId = java.util.UUID.randomUUID().toString(),
-                    senderId = agentId,
-                    requestId = request.messageId,
+                    senderId = a2aAgentId,
+                    requestId = request.id,
                     success = false,
                     error = result.error ?: "Unknown error during code generation",
-                    payload = ru.marslab.ide.ride.agent.a2a.MessagePayload.CustomPayload(
+                    payload = MessagePayload.CustomPayload(
                         type = "${messageType}_ERROR",
                         data = mapOf(
                             "request" to (inputData["request"] ?: ""),
@@ -119,7 +155,7 @@ class A2ACodeGeneratorToolAgent(
                     metadata = mapOf(
                         "stepId" to step.id,
                         "executionTime" to System.currentTimeMillis(),
-                        "agentType" to agentType
+                        "agentType" to "CODE_GENERATOR"
                     )
                 )
             }
@@ -127,12 +163,11 @@ class A2ACodeGeneratorToolAgent(
         } catch (e: Exception) {
             logger.error("A2A_CODE_GENERATOR error processing request", e)
             AgentMessage.Response(
-                messageId = java.util.UUID.randomUUID().toString(),
-                senderId = agentId,
-                requestId = request.messageId,
+                senderId = a2aAgentId,
+                requestId = request.id,
                 success = false,
                 error = "Code generation failed: ${e.message}",
-                payload = ru.marslab.ide.ride.agent.a2a.MessagePayload.CustomPayload(
+                payload = MessagePayload.CustomPayload(
                     type = "${messageType}_ERROR",
                     data = mapOf(
                         "error_type" to "processing_error",
@@ -141,7 +176,7 @@ class A2ACodeGeneratorToolAgent(
                 ),
                 metadata = mapOf(
                     "executionTime" to System.currentTimeMillis(),
-                    "agentType" to agentType
+                    "agentType" to "CODE_GENERATOR"
                 )
             )
         }
@@ -150,7 +185,23 @@ class A2ACodeGeneratorToolAgent(
     companion object {
         fun create(llmProvider: LLMProvider, messageBus: MessageBus): A2ACodeGeneratorToolAgent {
             val legacy = CodeGeneratorToolAgent(llmProvider)
-            return A2ACodeGeneratorToolAgent(legacy, messageBus)
+            return A2ACodeGeneratorToolAgent(
+                legacyAgent = legacy,
+                a2aAgentId = "code-generator-a2a-${System.identityHashCode(legacy)}",
+                supportedMessageTypes = setOf(
+                    "CODE_GENERATION_REQUEST",
+                    "CLASS_GENERATION_REQUEST",
+                    "FUNCTION_GENERATION_REQUEST",
+                    "ALGORITHM_GENERATION_REQUEST"
+                ),
+                publishedEventTypes = setOf(
+                    "CODE_GENERATION_STARTED",
+                    "CODE_GENERATION_COMPLETED",
+                    "CODE_GENERATION_FAILED"
+                ),
+                messageProcessingPriority = 1,
+                maxConcurrentMessages = 3
+            )
         }
     }
 }

@@ -1,6 +1,7 @@
 package ru.marslab.ide.ride.model.orchestrator
 
 import kotlinx.datetime.Instant
+import ru.marslab.ide.ride.agent.ValidationResult
 import java.util.*
 
 /**
@@ -40,16 +41,13 @@ data class UserPrompt(
     fun validate(input: String): ValidationResult {
         // Проверка на пустой ввод для обязательных полей
         if (input.isBlank() && defaultValue == null) {
-            return ValidationResult(false, listOf("Ввод не может быть пустым"))
+            return ValidationResult.failure("Ввод не может быть пустым")
         }
 
         // Проверка выбора из списка
         if (type == InteractionType.CHOICE && options.isNotEmpty()) {
             if (!options.contains(input)) {
-                return ValidationResult(
-                    false,
-                    listOf("Выберите один из предложенных вариантов: ${options.joinToString(", ")}")
-                )
+                return ValidationResult.failure("Выберите один из предложенных вариантов: ${options.joinToString(", ")}")
             }
         }
 
@@ -58,18 +56,18 @@ data class UserPrompt(
             val selectedOptions = input.split(",").map { it.trim() }
             val invalidOptions = selectedOptions.filter { !options.contains(it) }
             if (invalidOptions.isNotEmpty()) {
-                return ValidationResult(false, listOf("Недопустимые варианты: ${invalidOptions.joinToString(", ")}"))
+                return ValidationResult.failure("Недопустимые варианты: ${invalidOptions.joinToString(", ")}")
             }
         }
 
         // Пользовательская валидация
         validator?.let { validatorFn ->
             if (!validatorFn(input)) {
-                return ValidationResult(false, listOf("Введенное значение не прошло валидацию"))
+                return ValidationResult.failure("Введенное значение не прошло валидацию")
             }
         }
 
-        return ValidationResult(true)
+        return ValidationResult.success()
     }
 
     /**
@@ -114,18 +112,6 @@ data class UserPrompt(
     }
 }
 
-/**
- * Результат валидации пользовательского ввода
- */
-data class ValidationResult(
-    val isValid: Boolean,
-    val errors: List<String> = emptyList()
-) {
-    companion object {
-        fun success() = ValidationResult(true)
-        fun failure(vararg errors: String) = ValidationResult(false, errors.toList())
-    }
-}
 
 /**
  * Ответ пользователя на запрос

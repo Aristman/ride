@@ -313,6 +313,25 @@ class RequestPlanner {
                 createdStepIds["bug_fix"] = bugFixStep.id
             }
 
+            TaskType.CODE_GENERATION -> {
+                // Сначала сканирование проекта для получения контекста
+                val projectScanStep = createProjectScanStep(requestAnalysis, stepIdCounter)
+                steps.add(projectScanStep)
+                createdStepIds["project_scan"] = projectScanStep.id
+
+                // Затем генерация кода с использованием контекста
+                val codeGenerationDependencies = setOf(projectScanStep.id)
+                val codeGenerationStep = createCodeGenerationStep(requestAnalysis, stepIdCounter, codeGenerationDependencies)
+                steps.add(codeGenerationStep)
+                createdStepIds["code_generation"] = codeGenerationStep.id
+
+                // И ревью сгенерированного кода
+                val reviewDependencies = setOf(codeGenerationStep.id)
+                val reviewStep = createLLMReviewStep(requestAnalysis, stepIdCounter, reviewDependencies)
+                steps.add(reviewStep)
+                createdStepIds["llm_review"] = reviewStep.id
+            }
+
             TaskType.REFACTORING -> {
                 val qualityStep = createQualityCheckStep(requestAnalysis, stepIdCounter)
                 steps.add(qualityStep)

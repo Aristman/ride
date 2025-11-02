@@ -3,6 +3,7 @@ package ru.marslab.ide.ride.orchestrator
 import com.intellij.openapi.diagnostic.Logger
 import kotlinx.coroutines.*
 import ru.marslab.ide.ride.agent.OrchestratorStep
+import ru.marslab.ide.ride.agent.ToolAgentInitializer
 import ru.marslab.ide.ride.agent.ToolAgentRegistry
 import ru.marslab.ide.ride.agent.UncertaintyAnalyzer
 import ru.marslab.ide.ride.integration.llm.LLMProvider
@@ -21,6 +22,8 @@ import kotlin.random.Random
 /**
  * Расширенный оркестратор с поддержкой интерактивности и персистентности
  *
+ * @deprecated Use EnhancedAgentOrchestratorA2A instead for new A2A protocol support
+ *
  * Интегрирует все компоненты Phase 1 и Phase 2:
  * - RequestAnalyzer для анализа запросов
  * - PlanStateMachine для управления состояниями
@@ -28,6 +31,7 @@ import kotlin.random.Random
  * - ProgressTracker для отслеживания прогресса
  * - ToolAgentRegistry для управления Tool Agents
  */
+@Deprecated("Use EnhancedAgentOrchestratorA2A instead for new A2A protocol support", ReplaceWith("EnhancedAgentOrchestratorA2A"))
 class EnhancedAgentOrchestrator(
     private val llmProvider: LLMProvider,
     private val uncertaintyAnalyzer: UncertaintyAnalyzer = UncertaintyAnalyzer,
@@ -50,6 +54,9 @@ class EnhancedAgentOrchestrator(
         // Добавляем слушателей
         stateMachine.addListener(this)
         progressTracker.addListener(this)
+
+        // Регистрируем всех Tool Agents
+        ToolAgentInitializer.registerAllAgents(toolAgentRegistry)
     }
 
     /**

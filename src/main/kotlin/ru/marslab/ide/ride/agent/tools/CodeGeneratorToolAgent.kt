@@ -82,7 +82,7 @@ class CodeGeneratorToolAgent(
                 systemPrompt = systemPrompt,
                 userMessage = fullUserPrompt,
                 conversationHistory = emptyList(),
-                parameters = ru.marslab.ide.ride.integration.llm.LLMParameters()
+                parameters = ru.marslab.ide.ride.model.llm.LLMParameters()
             )
 
             logger.info("CODE_GENERATOR received LLM response: ${response.content.take(100)}...")
@@ -107,7 +107,7 @@ class CodeGeneratorToolAgent(
                     "request_length" to request.length,
                     "code_length" to generatedCode.length,
                     "has_context" to (contextFiles.isNotEmpty()),
-                    "response_tokens" to (response.usage?.totalTokens ?: 0)
+                    "response_tokens" to 0
                 )
             )
 
@@ -116,7 +116,7 @@ class CodeGeneratorToolAgent(
             return StepResult.error(
                 "Failed to generate code: ${e.message}",
                 output = StepOutput.of(
-                    "error" to e.message,
+                    "error" to (e.message ?: "Unknown error"),
                     "request" to request
                 )
             )

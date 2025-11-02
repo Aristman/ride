@@ -19,7 +19,7 @@ import ru.marslab.ide.ride.model.tool.*
 class LLMReviewToolAgent(
     private val llmProvider: LLMProvider
 ) : BaseToolAgent(
-    agentType = AgentType.CODE_REVIEW,
+    agentType = AgentType.LLM_REVIEW,
     toolCapabilities = setOf(
         "code_review",
         "best_practices",
@@ -45,7 +45,7 @@ class LLMReviewToolAgent(
             return ValidationResult.failure("Invalid review_type: $reviewType")
         }
 
-        logger.info("LLM_REVIEW validation passed: review_type=$review_type, has_code=${!code.isNullOrBlank()}, files_count=${files?.size ?: 0}")
+        logger.info("LLM_REVIEW validation passed: review_type=$reviewType, has_code=${!code.isNullOrBlank()}, files_count=${files?.size ?: 0}")
         return ValidationResult.success()
     }
 
@@ -55,7 +55,7 @@ class LLMReviewToolAgent(
         val reviewType = step.input.getString("review_type") ?: "general"
         val language = step.input.getString("language") ?: "kotlin"
 
-        logger.info("LLM_REVIEW executing: review_type=$review_type, language=$language, files=${files.size}, has_code=${!code.isNullOrBlank()}")
+        logger.info("LLM_REVIEW executing: review_type=$reviewType, language=$language, files=${files.size}, has_code=${!code.isNullOrBlank()}")
 
         try {
             // Собираем код для ревью
@@ -73,7 +73,7 @@ class LLMReviewToolAgent(
 
             // Формируем промпт для ревью
             val systemPrompt = buildReviewSystemPrompt(reviewType, language)
-            val userPrompt = buildReviewUserPrompt(codeToReview, reviewType, files)
+            val userPrompt = buildReviewUserPrompt(codeToReview, reviewType, language, files)
 
             logger.info("LLM_REVIEW sending request to LLM")
 
@@ -82,7 +82,7 @@ class LLMReviewToolAgent(
                 systemPrompt = systemPrompt,
                 userMessage = userPrompt,
                 conversationHistory = emptyList(),
-                parameters = ru.marslab.ide.ride.integration.llm.LLMParameters()
+                parameters = ru.marslab.ide.ride.model.llm.LLMParameters()
             )
 
             logger.info("LLM_REVIEW received LLM response: ${response.content.take(100)}...")
@@ -110,7 +110,7 @@ class LLMReviewToolAgent(
                     "code_length" to codeToReview.length,
                     "files_count" to files.size,
                     "review_type" to reviewType,
-                    "response_tokens" to (response.usage?.totalTokens ?: 0)
+                    "response_tokens" to 0
                 )
             )
 
@@ -119,7 +119,7 @@ class LLMReviewToolAgent(
             return StepResult.error(
                 "Failed to review code: ${e.message}",
                 output = StepOutput.of(
-                    "error" to e.message,
+                    "error" to (e.message ?: "Unknown error"),
                     "review_type" to reviewType
                 )
             )
@@ -219,7 +219,7 @@ class LLMReviewToolAgent(
         return basePrompt + typeSpecific
     }
 
-    private fun buildReviewUserPrompt(code: String, reviewType: String, files: List<String>): String {
+    private fun buildReviewUserPrompt(code: String, reviewType: String, language: String, files: List<String>): String {
         val fileContext = if (files.isNotEmpty()) {
             "Файлы для ревью: ${files.joinToString(", ")}\n\n"
         } else {
