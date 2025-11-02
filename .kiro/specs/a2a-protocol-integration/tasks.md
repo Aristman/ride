@@ -1,6 +1,6 @@
 # Implementation Plan
 
-- [ ] 1. Implement Core A2A Protocol Infrastructure
+- [-] 1. Implement Core A2A Protocol Infrastructure
   - Create foundational message types and interfaces for A2A communication
   - Implement MessageBus with in-memory routing and basic error handling
   - _Requirements: 1.1, 1.2, 1.3, 2.1, 2.2_

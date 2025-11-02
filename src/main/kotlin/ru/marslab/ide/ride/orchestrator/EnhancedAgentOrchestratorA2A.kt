@@ -3,7 +3,9 @@ package ru.marslab.ide.ride.orchestrator
 import com.intellij.openapi.diagnostic.Logger
 import kotlinx.coroutines.*
 import ru.marslab.ide.ride.agent.a2a.*
-import ru.marslab.ide.ride.agent.tools.BaseToolAgent
+import ru.marslab.ide.ride.agent.BaseToolAgent
+import ru.marslab.ide.ride.agent.AgentOrchestrator
+import ru.marslab.ide.ride.agent.OrchestratorStep
 import ru.marslab.ide.ride.integration.llm.LLMProvider
 import ru.marslab.ide.ride.model.agent.AgentRequest
 import ru.marslab.ide.ride.model.agent.AgentResponse
@@ -119,7 +121,7 @@ class EnhancedAgentOrchestratorA2A(
     /**
      * Создает и регистрирует A2A агента для ToolAgent
      */
-    suspend fun createA2AToolAgent(toolAgent: ru.marslab.ide.ride.agent.tools.BaseToolAgent): A2AAgent {
+    suspend fun createA2AToolAgent(toolAgent: BaseToolAgent): A2AAgent {
         val a2aAgent = A2AAgentAdapter.create(
             agent = toolAgent,
             a2aAgentId = "${toolAgent.javaClass.simpleName}_${toolAgent.hashCode()}",
@@ -288,7 +290,7 @@ class EnhancedAgentOrchestratorA2A(
     private fun subscribeToA2AEvents() {
         // Подписываемся на сообщения от A2A агентов
         coroutineScope.launch {
-            messageBus.subscribeAll { message ->
+            messageBus.subscribeAll().collect { message ->
                 when (message) {
                     is AgentMessage.Event -> handleA2AEvent(message)
                     else -> { /* Другие типы сообщений обрабатываются по необходимости */ }

@@ -91,7 +91,8 @@ class InMemoryMessageBus : MessageBus {
     ): Flow<T> {
         subscriptionCount++
         return sharedFlow
-            .filterIsInstance<T>()
+            .filter { messageType.isInstance(it) }
+            .map { it as T }
             .filter { message -> filter?.invoke(message) ?: true }
             .onEach { message ->
                 // Отправляем acknowledgement для запросов
@@ -218,7 +219,7 @@ class InMemoryMessageBus : MessageBus {
         val ack = AgentMessage.Ack(
             senderId = "message-bus",
             originalMessageId = messageId,
-            status = AgentMessage.Ack.AckStatus.RECEIVED
+            status = AgentMessage.AckStatus.RECEIVED
         )
         publish(ack)
     }

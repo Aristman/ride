@@ -11,7 +11,8 @@ import ru.marslab.ide.ride.model.agent.AgentResponse
 import ru.marslab.ide.ride.model.agent.AgentSettings
 import ru.marslab.ide.ride.model.orchestrator.AgentType
 import ru.marslab.ide.ride.model.orchestrator.ExecutionContext
-import ru.marslab.ide.ride.model.response.ParsedResponse
+import ru.marslab.ide.ride.model.chat.ChatContext
+import ru.marslab.ide.ride.model.llm.LLMParameters
 
 /**
  * Адаптер для преобразования legacy Agent в A2AAgent
@@ -35,7 +36,7 @@ class A2AAgentAdapter(
     override val messageProcessingPriority: Int = 0,
     override val maxConcurrentMessages: Int = 5
 ) : BaseA2AAgent(
-    agentType = AgentType.CHAT, // Временно упрощаем
+    agentType = ru.marslab.ide.ride.model.orchestrator.AgentType.PROJECT_SCANNER, // Временно упрощаем
     a2aAgentId = a2aAgentId,
     supportedMessageTypes = supportedMessageTypes,
     publishedEventTypes = publishedEventTypes,
@@ -68,6 +69,18 @@ class A2AAgentAdapter(
         legacyAgent.dispose()
     }
 
+    // Создает пустой ChatContext для legacy агентов
+    private fun createEmptyChatContext(): ChatContext {
+        // Используем фиктивный проект для совместимости
+        return ChatContext(
+            project = com.intellij.openapi.project.ProjectManager.getInstance().defaultProject,
+            history = emptyList(),
+            currentFile = null,
+            selectedText = null,
+            additionalContext = emptyMap()
+        )
+    }
+
     override suspend fun handleRequest(
         request: AgentMessage.Request,
         messageBus: MessageBus
@@ -91,14 +104,16 @@ class A2AAgentAdapter(
             val agentRequest = when (val payload = request.payload) {
                 is MessagePayload.TextPayload -> {
                     AgentRequest(
-                        content = payload.text,
-                        metadata = request.metadata + ("a2a_request_id" to request.id)
+                        request = payload.text,
+                        context = createEmptyChatContext(),
+                        parameters = LLMParameters.DEFAULT
                     )
                 }
                 else -> {
                     AgentRequest(
-                        content = payload.toString(),
-                        metadata = request.metadata + ("a2a_request_id" to request.id)
+                        request = payload.toString(),
+                        context = createEmptyChatContext(),
+                        parameters = LLMParameters.DEFAULT
                     )
                 }
             }
@@ -131,7 +146,7 @@ class A2AAgentAdapter(
                     metadata = mapOf(
                         "legacy_agent_class" to legacyAgent.javaClass.simpleName,
                         "is_final_response" to response.isFinal,
-                        "uncertainty_score" to response.uncertainty
+                        "uncertainty_score" to (response.uncertainty ?: 0.0)
                     )
                 )
             )

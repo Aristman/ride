@@ -130,7 +130,8 @@ abstract class BaseA2AAgent(
     override suspend fun ask(req: AgentRequest): AgentResponse {
         // По умолчанию преобразуем в A2A сообщение и обрабатываем
         return AgentResponse(
-            content = "A2A agent ${a2aAgentId} received request: ${req.content}",
+            content = "A2A agent ${a2aAgentId} received request: ${req.request}",
+            success = true,
             isFinal = true,
             uncertainty = 0.0
         )

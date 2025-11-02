@@ -1,5 +1,6 @@
 package ru.marslab.ide.ride.agent.a2a
 
+import kotlinx.serialization.Contextual
 import kotlinx.serialization.Serializable
 import java.util.UUID
 
@@ -13,7 +14,7 @@ sealed class AgentMessage {
     abstract val id: String
     abstract val senderId: String
     abstract val timestamp: Long
-    abstract val metadata: Map<String, Any>
+    abstract val metadata: Map<String, @Contextual Any>
 
     /**
      * Запрос от одного агента другому с ожиданием ответа
@@ -27,7 +28,7 @@ sealed class AgentMessage {
         val payload: MessagePayload,
         override val timestamp: Long = System.currentTimeMillis(),
         val timeoutMs: Long = 30000, // 30 секунд по умолчанию
-        override val metadata: Map<String, Any> = emptyMap()
+        override val metadata: Map<String, @Contextual Any> = emptyMap()
     ) : AgentMessage()
 
     /**
@@ -42,7 +43,7 @@ sealed class AgentMessage {
         val payload: MessagePayload,
         val error: String? = null,
         override val timestamp: Long = System.currentTimeMillis(),
-        override val metadata: Map<String, Any> = emptyMap()
+        override val metadata: Map<String, @Contextual Any> = emptyMap()
     ) : AgentMessage()
 
     /**
@@ -55,7 +56,7 @@ sealed class AgentMessage {
         val eventType: String,
         val payload: MessagePayload,
         override val timestamp: Long = System.currentTimeMillis(),
-        override val metadata: Map<String, Any> = emptyMap()
+        override val metadata: Map<String, @Contextual Any> = emptyMap()
     ) : AgentMessage()
 
     /**
@@ -68,7 +69,7 @@ sealed class AgentMessage {
         val originalMessageId: String,
         val status: AckStatus,
         override val timestamp: Long = System.currentTimeMillis(),
-        override val metadata: Map<String, Any> = emptyMap()
+        override val metadata: Map<String, @Contextual Any> = emptyMap()
     ) : AgentMessage()
 
     enum class AckStatus {
@@ -132,7 +133,7 @@ sealed class MessagePayload {
         val error: String,
         val cause: String? = null,
         val stackTrace: List<String> = emptyList(),
-        val context: Map<String, Any> = emptyMap()
+        val context: Map<String, @Contextual Any> = emptyMap()
     ) : MessagePayload()
 
     @Serializable
@@ -163,8 +164,14 @@ sealed class MessagePayload {
     ) : MessagePayload()
 
     @Serializable
+    data class TextPayload(
+        val text: String,
+        val metadata: Map<String, @Contextual Any> = emptyMap()
+    ) : MessagePayload()
+
+    @Serializable
     data class CustomPayload(
         val type: String,
-        val data: Map<String, Any>
+        val data: Map<String, @Contextual Any>
     ) : MessagePayload()
 }

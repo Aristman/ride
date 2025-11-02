@@ -29,8 +29,8 @@ object A2AAgentFactory {
         forceA2A: Boolean = false
     ): A2AAgent {
         // Проверяем feature flag
-        if (!forceA2A && !A2AConfigUtil.shouldUseA2A(legacyAgent.agentType.name)) {
-            throw IllegalStateException("A2A mode is disabled for agent type: ${legacyAgent.agentType}")
+        if (!forceA2A && !A2AConfigUtil.shouldUseA2A(legacyAgent.javaClass.simpleName)) {
+            throw IllegalStateException("A2A mode is disabled for agent type: ${legacyAgent.javaClass.simpleName}")
         }
 
         // Если агент уже поддерживает A2A, возвращаем его
@@ -125,15 +125,15 @@ object A2AAgentFactory {
     ): A2AAgent {
         // Создаем legacy агент в зависимости от типа
         val legacyAgent = when (agentType) {
-            ru.marslab.ide.ride.model.orchestrator.AgentType.CHAT -> {
+            ru.marslab.ide.ride.model.orchestrator.AgentType.PROJECT_SCANNER -> {
                 llmProvider?.let { AgentFactory.createChatAgent(it) }
                     ?: AgentFactory.createChatAgent()
             }
-            ru.marslab.ide.ride.model.orchestrator.AgentType.ENHANCED_CHAT -> {
+            ru.marslab.ide.ride.model.orchestrator.AgentType.CODE_QUALITY -> {
                 llmProvider?.let { AgentFactory.createChatAgent(it) }
                     ?: AgentFactory.createEnhancedChatAgent()
             }
-            ru.marslab.ide.ride.model.orchestrator.AgentType.TERMINAL -> {
+            ru.marslab.ide.ride.model.orchestrator.AgentType.BUG_DETECTION -> {
                 AgentFactory.createTerminalAgent()
             }
             else -> {
@@ -203,9 +203,9 @@ object A2AAgentFactory {
      */
     fun canConvertToA2A(agentType: ru.marslab.ide.ride.model.orchestrator.AgentType): Boolean {
         return A2AConfigUtil.shouldUseA2A(agentType.name) && when (agentType) {
-            ru.marslab.ide.ride.model.orchestrator.AgentType.CHAT,
-            ru.marslab.ide.ride.model.orchestrator.AgentType.ENHANCED_CHAT,
-            ru.marslab.ide.ride.model.orchestrator.AgentType.TERMINAL -> true
+            ru.marslab.ide.ride.model.orchestrator.AgentType.PROJECT_SCANNER,
+            ru.marslab.ide.ride.model.orchestrator.AgentType.CODE_QUALITY,
+            ru.marslab.ide.ride.model.orchestrator.AgentType.BUG_DETECTION -> true
             else -> false
         }
     }
@@ -220,8 +220,8 @@ object A2AAgentFactory {
         return A2AStatistics(
             a2aEnabled = config.isA2AEnabled(),
             totalAgents = registry.getRegisteredAgentsCount(),
-            activeAgents = registry.getAllAgents().count {
-                registry.isAgentActive(it.a2aAgentId)
+            activeAgents = registry.getAllAgents().count { (agentId, _) ->
+                registry.isAgentActive(agentId)
             },
             metrics = registry.getAllMetrics(),
             allowedTypes = config.state.allowedAgentTypes,

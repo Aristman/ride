@@ -8,8 +8,9 @@ import com.intellij.openapi.diagnostic.Logger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import ru.marslab.ide.ride.agent.tools.BaseToolAgent
+import ru.marslab.ide.ride.agent.BaseToolAgent
 import ru.marslab.ide.ride.model.orchestrator.AgentType
+import ru.marslab.ide.ride.model.orchestrator.ExecutionContext
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -28,7 +29,7 @@ class A2AAgentRegistry : PersistentStateComponent<A2AAgentRegistry.State> {
     data class State(
         val registeredAgents: Map<String, AgentInfo> = emptyMap(),
         val subscriptions: Map<String, Set<String>> = emptyMap(), // agentId -> messageTypes
-        val agentMetrics: Map<String, AgentMetrics> = emptyMap()
+        val agentMetrics: Map<String, AgentMetrics> = emptyMap(),
         val lastActivity: Map<String, Long> = emptyMap() // agentId -> timestamp
     ) {
         companion object {
@@ -67,9 +68,9 @@ class A2AAgentRegistry : PersistentStateComponent<A2AAgentRegistry.State> {
 
     override fun getState(): State = State(
         registeredAgents = agents.toMap(),
-        subscriptions = subscriptions.mapValues { it.toSet() },
+        subscriptions = subscriptions.mapValues { it.value },
         agentMetrics = metrics.toMap(),
-        lastActivity = agents.mapValues { it.lastHeartbeat }
+        lastActivity = agents.mapValues { System.currentTimeMillis() }
     )
 
     override fun loadState(state: State) {
@@ -165,7 +166,7 @@ class A2AAgentRegistry : PersistentStateComponent<A2AAgentRegistry.State> {
      * Получает все зарегистрированные агенты
      */
     fun getAllAgents(): Map<String, A2AAgent> {
-        return agents.mapValues { it.agent }
+        return agents.mapValues { it.value.agent }
     }
 
     /**
@@ -275,7 +276,7 @@ class A2AAgentRegistry : PersistentStateComponent<A2AAgentRegistry.State> {
     }
 
     private fun startHeartbeatMonitoring() {
-        heartbeatJob.launch {
+        CoroutineScope(Dispatchers.Default + heartbeatJob).launch {
             while (isActive) {
                 delay(30000) // Проверяем каждые 30 секунд
 
@@ -299,7 +300,7 @@ class A2AAgentRegistry : PersistentStateComponent<A2AAgentRegistry.State> {
     }
 
     private fun startPeriodicCleanup() {
-        cleanupJob.launch {
+        CoroutineScope(Dispatchers.Default + cleanupJob).launch {
             while (isActive) {
                 delay(300000) // Очищаем каждые 5 минут
 
