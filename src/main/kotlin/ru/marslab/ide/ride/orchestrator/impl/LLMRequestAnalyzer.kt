@@ -261,8 +261,11 @@ class LLMRequestAnalyzer(
     }
 
     /**
-     * Обогащает список инструментов на основе типа задачи для полноты плана.
-     * LLM может не перечислить все инструменты явно, поэтому добавляем недостающие.
+     * Обогащает список инструментов на основе типа задачи, но позволяет агентам
+     * динамически определять следующие шаги выполнения.
+     *
+     * Важно: не добавляем REPORT_GENERATOR автоматически - пусть сами агенты
+     * решают, когда нужно генерировать отчет.
      */
     private fun enrichRequiredTools(
         taskType: TaskType,
@@ -270,41 +273,47 @@ class LLMRequestAnalyzer(
     ): Set<AgentType> {
         val tools = parsed.toMutableSet()
 
-        // Всегда добавляем REPORT_GENERATOR для итогового результата
-        tools.add(AgentType.REPORT_GENERATOR)
-
         when (taskType) {
             TaskType.BUG_FIX -> {
-                tools.add(AgentType.PROJECT_SCANNER)
-                tools.add(AgentType.BUG_DETECTION)
-                tools.add(AgentType.CODE_QUALITY)
-                tools.add(AgentType.LLM_REVIEW)
-                // CODE_FIXER не добавляем, т.к. агент отсутствует в реализации/регистрации
+                // Для исправления багов нужно сначала найти проблемы
+                if (!tools.contains(AgentType.PROJECT_SCANNER)) {
+                    tools.add(AgentType.PROJECT_SCANNER)
+                }
+                if (!tools.contains(AgentType.BUG_DETECTION)) {
+                    tools.add(AgentType.BUG_DETECTION)
+                }
             }
 
             TaskType.CODE_ANALYSIS -> {
-                tools.add(AgentType.PROJECT_SCANNER)
-                tools.add(AgentType.CODE_QUALITY)
-                tools.add(AgentType.LLM_REVIEW)
+                // Для анализа кода нужен сканер проекта
+                if (!tools.contains(AgentType.PROJECT_SCANNER)) {
+                    tools.add(AgentType.PROJECT_SCANNER)
+                }
             }
 
             TaskType.ARCHITECTURE_ANALYSIS -> {
-                tools.add(AgentType.PROJECT_SCANNER)
-                tools.add(AgentType.ARCHITECTURE_ANALYSIS)
+                // Для архитектурного анализа нужен сканер
+                if (!tools.contains(AgentType.PROJECT_SCANNER)) {
+                    tools.add(AgentType.PROJECT_SCANNER)
+                }
             }
 
             TaskType.PERFORMANCE_OPTIMIZATION -> {
-                tools.add(AgentType.PROJECT_SCANNER)
-                tools.add(AgentType.PERFORMANCE_ANALYZER)
+                // Для оптимизации производительности нужен сканер
+                if (!tools.contains(AgentType.PROJECT_SCANNER)) {
+                    tools.add(AgentType.PROJECT_SCANNER)
+                }
             }
 
-            TaskType.REPORT_GENERATION -> {
-                tools.add(AgentType.PROJECT_SCANNER)
+            TaskType.SIMPLE_QUERY -> {
+                // Для простых запросов не добавляем ничего лишнего
+                // Позволяем LLM-анализу определить нужные инструменты
+                // Например, для "открой файл" нужен только FILE_OPERATIONS
             }
 
+            // Для остальных типов сохраняем как есть, позволяя динамическое планирование
             else -> {
-                // Для остальных типов хотя бы сканер + отчёт
-                tools.add(AgentType.PROJECT_SCANNER)
+                // Ничего не добавляем автоматически
             }
         }
 
@@ -323,6 +332,20 @@ class LLMRequestAnalyzer(
             5. Требуется ли ввод от пользователя
             6. Уверенность в анализе (0.0 - 1.0)
             7. Обоснование принятых решений
+
+            ВАЖНЫЕ ПРАВИЛА ВЫБОРА ИНСТРУМЕНТОВ:
+
+            • Для запросов на открытие/просмотр/редактирование файлов используй только FILE_OPERATIONS
+            • Для запросов на анализ кода, структуры проекта, архитектуры используй PROJECT_SCANNER
+            • Для поиска багов и проблем используй BUG_DETECTION
+            • Для генерации отчетов используй REPORT_GENERATOR только если явно запрошен отчет
+            • НЕ добавляй лишние инструменты, если они не нужны для выполнения запроса
+
+            Примеры:
+            - "Открой файл README.md" → SIMPLE_QUERY + [FILE_OPERATIONS]
+            - "Проанализируй качество кода" → CODE_ANALYSIS + [PROJECT_SCANNER, CODE_QUALITY]
+            - "Найди баги в проекте" → BUG_FIX + [PROJECT_SCANNER, BUG_DETECTION]
+            - "Создай отчет о проекте" → REPORT_GENERATION + [PROJECT_SCANNER, REPORT_GENERATOR]
 
             Верни результат в виде JSON:
             {

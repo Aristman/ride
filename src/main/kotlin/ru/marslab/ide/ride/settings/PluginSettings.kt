@@ -284,6 +284,53 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
             state.ragSourceLinksEnabled = value
         }
 
+    // --- Пороги анализа неопределенности ---
+
+    /**
+     * Порог для перехода от простых запросов к сложным
+     */
+    var uncertaintyComplexityThreshold: Double
+        get() = state.uncertaintyComplexityThreshold
+        set(value) {
+            state.uncertaintyComplexityThreshold = value.coerceIn(0.0, 1.0)
+        }
+
+    /**
+     * Порог для использования оркестратора
+     */
+    var uncertaintyOrchestratorThreshold: Double
+        get() = state.uncertaintyOrchestratorThreshold
+        set(value) {
+            state.uncertaintyOrchestratorThreshold = value.coerceIn(0.0, 1.0)
+        }
+
+    /**
+     * Порог для запроса уточняющих вопросов
+     */
+    var uncertaintyClarificationThreshold: Double
+        get() = state.uncertaintyClarificationThreshold
+        set(value) {
+            state.uncertaintyClarificationThreshold = value.coerceIn(0.0, 1.0)
+        }
+
+    /**
+     * Порог для RAG обогащения при планировании
+     */
+    var uncertaintyRagEnrichmentThreshold: Double
+        get() = state.uncertaintyRagEnrichmentThreshold
+        set(value) {
+            state.uncertaintyRagEnrichmentThreshold = value.coerceIn(0.0, 1.0)
+        }
+
+    /**
+     * Максимальная длина простого запроса
+     */
+    var uncertaintyMaxSimpleQueryLength: Int
+        get() = state.uncertaintyMaxSimpleQueryLength
+        set(value) {
+            state.uncertaintyMaxSimpleQueryLength = value.coerceAtLeast(10)
+        }
+
     /**
      * Получает токен Hugging Face из безопасного хранилища
      */

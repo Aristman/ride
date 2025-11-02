@@ -377,7 +377,6 @@ class MCPServerManager {
     fun getServerUrl(): String = serverUrl
 
     // Вспомогательные методы
-`
     private fun getServerDirectory(): File {
         val pluginDir = File(System.getProperty("user.home"), ".ride")
         val serverDir = File(pluginDir, "mcp-server")

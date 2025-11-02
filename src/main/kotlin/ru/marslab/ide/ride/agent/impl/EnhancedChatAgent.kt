@@ -1,29 +1,57 @@
 package ru.marslab.ide.ride.agent.impl
 
 import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.components.service
 import ru.marslab.ide.ride.agent.Agent
 import ru.marslab.ide.ride.agent.UncertaintyAnalyzer
+import ru.marslab.ide.ride.agent.analyzer.RequestComplexityAnalyzer
+import ru.marslab.ide.ride.agent.analyzer.UncertaintyThresholds
+import ru.marslab.ide.ride.agent.analyzer.UncertaintyResult
+import ru.marslab.ide.ride.agent.planner.RequestPlanner
+import ru.marslab.ide.ride.agent.planner.AdaptiveRequestPlanner
+import ru.marslab.ide.ride.agent.rag.RAGPlanEnricher
 import ru.marslab.ide.ride.agent.tools.*
+import ru.marslab.ide.ride.agent.cache.UncertaintyAnalysisCache
+import ru.marslab.ide.ride.agent.cache.PredictiveCacheManager
+import ru.marslab.ide.ride.agent.optimizer.PromptOptimizer
+import ru.marslab.ide.ride.agent.monitoring.PerformanceMonitor
+import ru.marslab.ide.ride.agent.monitoring.RequestMetrics
 import ru.marslab.ide.ride.integration.llm.LLMProvider
 import ru.marslab.ide.ride.model.agent.AgentCapabilities
 import ru.marslab.ide.ride.model.agent.AgentRequest
 import ru.marslab.ide.ride.model.agent.AgentResponse
 import ru.marslab.ide.ride.model.agent.AgentSettings
-import ru.marslab.ide.ride.model.orchestrator.TaskType
+import ru.marslab.ide.ride.model.orchestrator.*
 import ru.marslab.ide.ride.orchestrator.EnhancedAgentOrchestrator
+import ru.marslab.ide.ride.settings.PluginSettings
+import java.util.UUID
 
 /**
- * Расширенный ChatAgent с поддержкой интерактивных планов
+ * Улучшенный ChatAgent с интеллектуальным планированием и адаптацией
  *
- * Определяет, когда использовать простой ChatAgent, а когда - EnhancedAgentOrchestrator:
- * - Простые вопросы → ChatAgent
- * - Сложные задачи → EnhancedAgentOrchestrator
- * - Возобновление планов → EnhancedAgentOrchestrator.resumePlan
+ * Новая архитектура с умной оценкой неопределенности:
+ * - Простые запросы → прямой ответ через ChatAgent (< 1 секунда)
+ * - Средняя сложность → базовый план через RequestPlanner
+ * - Сложные запросы → адаптивный план с RAG обогащением
+ * - Динамическая модификация планов на основе результатов
+ *
+ * Ключевые улучшения:
+ * - Убрано прямое RAG обогащение из начального этапа
+ * - RAG используется только на этапе планирования
+ * - Адаптивные планы с условными шагами
+ * - Интеллектуальная оценка неопределенности
  */
 class EnhancedChatAgent(
     private val baseChatAgent: ChatAgent,
     private val orchestrator: EnhancedAgentOrchestrator,
-    private val uncertaintyAnalyzer: UncertaintyAnalyzer = UncertaintyAnalyzer
+    private val uncertaintyAnalyzer: UncertaintyAnalyzer = UncertaintyAnalyzer,
+    private val complexityAnalyzer: RequestComplexityAnalyzer = RequestComplexityAnalyzer(),
+    private val requestPlanner: RequestPlanner = RequestPlanner(),
+    private val adaptivePlanner: AdaptiveRequestPlanner = AdaptiveRequestPlanner(),
+    private val ragPlanEnricher: RAGPlanEnricher = RAGPlanEnricher(),
+    private val uncertaintyCache: UncertaintyAnalysisCache = UncertaintyAnalysisCache(),
+    private val predictiveCacheManager: PredictiveCacheManager = PredictiveCacheManager(uncertaintyCache, complexityAnalyzer),
+    private val performanceMonitor: PerformanceMonitor = PerformanceMonitor()
 ) : Agent {
 
     private val logger = Logger.getInstance(EnhancedChatAgent::class.java)
@@ -32,38 +60,98 @@ class EnhancedChatAgent(
         stateful = true,
         streaming = false,
         reasoning = true,
-        tools = setOf("orchestration", "user_interaction", "plan_management"),
+        tools = setOf(
+            "orchestration",
+            "user_interaction",
+            "plan_management",
+            "adaptive_planning",
+            "rag_enrichment",
+            "uncertainty_analysis",
+            "dynamic_modification",
+            "caching",
+            "predictive_optimization",
+            "performance_monitoring"
+        ),
         systemPrompt = baseChatAgent.capabilities.systemPrompt,
         responseRules = baseChatAgent.capabilities.responseRules + listOf(
-            "Использовать оркестратор для сложных многошаговых задач",
+            "Использовать интеллектуальную оценку неопределенности для выбора стратегии",
+            "Простые запросы обрабатывать напрямую без планирования",
+            "Использовать RAG обогащение только на этапе планирования",
+            "Создавать адаптивные планы с условными шагами",
+            "Динамически модифицировать планы на основе результатов",
             "Поддерживать интерактивные планы с паузами для пользовательского ввода",
-            "Возобновлять приостановленные планы по запросу пользователя"
+            "Возобновлять приостановленные планы по запросу пользователя",
+            "Использовать кэширование для ускорения повторных запросов",
+            "Применять предиктивное кэширование на основе паттернов",
+            "Оптимизировать системные промпты под сложность запроса",
+            "Мониторить производительность и автоматически оптимизировать"
         )
     )
 
     override suspend fun ask(request: AgentRequest): AgentResponse {
-        logger.info("EnhancedChatAgent processing request")
+        val requestId = UUID.randomUUID().toString()
+        logger.info("EnhancedChatAgent processing request $requestId with new architecture")
 
         // Проверяем, это возобновление плана?
         val resumePlanId = request.context.additionalContext["resume_plan_id"] as? String
         if (resumePlanId != null) {
             logger.info("Resuming plan: $resumePlanId")
-            return resumePlanWithInput(resumePlanId, request.request)
+            return resumePlanWithInput(resumePlanId, request.request, request.context)
         }
 
-        // Анализируем сложность задачи
-        val taskComplexity = analyzeTaskComplexity(request.request, request.context)
+        // Этап 1: Проверяем кэш для анализа неопределенности
+        val uncertaintyResult = uncertaintyCache.get(request.request, request.context)
+        val (finalUncertaintyResult, cacheHit) = if (uncertaintyResult != null) {
+            logger.debug("Using cached uncertainty analysis for request $requestId")
+            uncertaintyResult to true
+        } else {
+            // Выполняем анализ неопределенности
+            val result = complexityAnalyzer.analyzeUncertainty(request.request, request.context)
+            uncertaintyCache.put(request.request, request.context, result)
+            result to false
+        }
 
-        return when {
-            taskComplexity.isComplex -> {
-                logger.info("Complex task detected, using orchestrator")
-                useOrchestrator(request)
+        // Регистрируем запрос в системе мониторинга
+        val metrics = performanceMonitor.startRequest(requestId, finalUncertaintyResult.complexity)
+
+        // Регистрируем паттерн запроса для предиктивного кэширования
+        predictiveCacheManager.registerRequest(request.request, request.context, finalUncertaintyResult)
+
+        try {
+            // Этап 2: Выбор стратегии обработки
+            val response = when {
+                UncertaintyThresholds.isSimpleQuery(finalUncertaintyResult) -> {
+                    logger.info("Simple query detected, using direct response")
+                    handleSimpleQuery(request, finalUncertaintyResult, metrics)
+                }
+
+                UncertaintyThresholds.shouldUseOrchestrator(finalUncertaintyResult) -> {
+                    logger.info("Complex task detected, using adaptive planning")
+                    handleComplexQueryWithPlanning(request, finalUncertaintyResult, metrics)
+                }
+
+                else -> {
+                    logger.info("Medium complexity task, using base planning")
+                    handleMediumQueryWithPlanning(request, finalUncertaintyResult, metrics)
+                }
             }
 
-            else -> {
-                logger.info("Simple task, using base ChatAgent")
-                baseChatAgent.ask(request)
-            }
+            // Предсказываем и кэшируем следующие запросы
+            predictiveCacheManager.predictAndCache(request.request, request.context)
+
+            // Завершаем мониторинг
+            performanceMonitor.finishRequest(metrics, cacheHit)
+
+            return response
+
+        } catch (e: Exception) {
+            logger.error("Error in enhanced request processing", e)
+            performanceMonitor.recordError("processing_error", e.message)
+
+            // Fallback к базовому агенту
+            val fallbackResponse = baseChatAgent.ask(request)
+            performanceMonitor.finishRequest(metrics, false, 0.5) // Низкое качество при fallback
+            return fallbackResponse
         }
     }
 
@@ -72,83 +160,200 @@ class EnhancedChatAgent(
     }
 
     override fun dispose() {
-        baseChatAgent.dispose()
+        try {
+            // Останавливаем предиктивное кэширование
+            predictiveCacheManager.shutdown()
+            logger.info("EnhancedChatAgent disposed successfully")
+        } catch (e: Exception) {
+            logger.warn("Error during EnhancedChatAgent disposal", e)
+        } finally {
+            baseChatAgent.dispose()
+        }
     }
 
     /**
-     * Возвращает текущий LLM провайдер (для отображения в UI)
+     * Обрабатывает простые запросы напрямую через базовый агент
      */
-    fun getProvider(): LLMProvider {
-        return baseChatAgent.getProvider()
-    }
+    private suspend fun handleSimpleQuery(
+        request: AgentRequest,
+        uncertaintyResult: UncertaintyResult,
+        metrics: RequestMetrics
+    ): AgentResponse {
+        logger.info("Processing simple query with uncertainty: ${uncertaintyResult.score}")
 
-    /**
-     * Анализирует сложность задачи
-     */
-    private suspend fun analyzeTaskComplexity(
-        request: String,
-        context: ru.marslab.ide.ride.model.chat.ChatContext
-    ): TaskComplexity {
-        // Ключевые слова для сложных задач
-        val complexKeywords = listOf(
-            "проанализируй", "найди баги", "оптимизируй", "рефактор",
-            "создай отчет", "проверь качество", "архитектур",
-            "сканируй", "исследуй", "улучши"
-        )
-
-        val requestLower = request.lowercase()
-        val hasComplexKeywords = complexKeywords.any { requestLower.contains(it) }
-
-        // Проверяем упоминание файлов или проекта
-        val mentionsFiles = requestLower.contains("файл") ||
-                requestLower.contains("проект") ||
-                requestLower.contains("код")
-
-        // Проверяем, является ли запрос RAG-обогащенным
-        val isRagEnriched = request.contains("=== Retrieved Context ===") ||
-                request.contains("Фрагмент из:") ||
-                request.contains("сходство:")
-
-        // Если это RAG обогащенный запрос без явных ключевых слов сложности - считаем простым
-        if (isRagEnriched && !hasComplexKeywords) {
-            logger.debug("RAG enriched query detected, treating as simple task")
-            return TaskComplexity(
-                isComplex = false,
-                estimatedSteps = 1,
-                taskType = TaskType.CODE_ANALYSIS,
-                requiresOrchestration = false
+        // Оптимизируем промпт для простого запроса
+        val optimizedPrompt = PromptOptimizer.getFastPathPrompt(baseChatAgent.capabilities.systemPrompt ?: "")
+        val optimizedRequest = request.copy(
+            context = request.context.copy(
+                additionalContext = request.context.additionalContext + ("optimized_prompt" to (optimizedPrompt ?: ""))
             )
-        }
+        )
 
-        // Длинный запрос обычно означает сложную задачу (но не для RAG)
-        val isLongRequest = request.length > 100 && !isRagEnriched
+        // Прямой ответ через базовый агент без планирования
+        val response = baseChatAgent.ask(optimizedRequest)
 
-        val isComplex = hasComplexKeywords && mentionsFiles || isLongRequest && mentionsFiles
-
-        val taskType = when {
-            requestLower.contains("баг") || requestLower.contains("ошибк") -> TaskType.BUG_FIX
-            requestLower.contains("качеств") || requestLower.contains("code smell") -> TaskType.CODE_ANALYSIS
-            requestLower.contains("архитектур") -> TaskType.ARCHITECTURE_ANALYSIS
-            requestLower.contains("рефактор") -> TaskType.REFACTORING
-            else -> TaskType.CODE_ANALYSIS
-        }
-
-        return TaskComplexity(
-            isComplex = isComplex,
-            estimatedSteps = if (isComplex) 3 else 1,
-            taskType = taskType,
-            requiresOrchestration = isComplex
+        // Добавляем метаданные об анализе
+        return response.copy(
+            metadata = response.metadata + mapOf(
+                "uncertainty_analysis" to mapOf(
+                    "score" to uncertaintyResult.score,
+                    "complexity" to uncertaintyResult.complexity.name,
+                    "reasoning" to uncertaintyResult.reasoning,
+                    "processing_strategy" to "direct_response_optimized"
+                ),
+                "processing_time_ms" to System.currentTimeMillis(),
+                "fast_path" to true,
+                "prompt_optimization" to true,
+                "cache_hit" to true
+            )
         )
     }
 
     /**
-     * Использует оркестратор для выполнения сложной задачи
+     * Обрабатывает запросы средней сложности с базовым планированием
      */
-    private suspend fun useOrchestrator(request: AgentRequest): AgentResponse {
-        val steps = mutableListOf<String>()
+    private suspend fun handleMediumQueryWithPlanning(
+        request: AgentRequest,
+        uncertaintyResult: UncertaintyResult,
+        metrics: RequestMetrics
+    ): AgentResponse {
+        logger.info("Processing medium complexity query with planning")
 
-        val result = orchestrator.processEnhanced(request) { step ->
-            // Собираем информацию о шагах
+        try {
+            // Оптимизируем промпт для запроса средней сложности
+            val optimizedPrompt = PromptOptimizer.getOptimizedSystemPrompt(
+                baseChatAgent.capabilities.systemPrompt ?: "",
+                uncertaintyResult,
+                request.context
+            )
+
+            // Этап 1: Создание базового плана
+            val plan = requestPlanner.createPlan(
+                request = request.request,
+                uncertainty = uncertaintyResult,
+                context = request.context,
+                userRequestId = request.context.additionalContext["user_request_id"] as? String ?: ""
+            )
+
+            logger.info("Created plan with ${plan.steps.size} steps")
+
+            // Этап 2: Проверяем, нужно ли RAG обогащение
+            val enrichedPlan = if (UncertaintyThresholds.shouldUseRAGEnrichment(uncertaintyResult)) {
+                logger.info("Applying RAG enrichment to plan")
+                ragPlanEnricher.enrichPlan(plan, request.request, request.context)
+            } else {
+                plan
+            }
+
+            // Этап 3: Выполнение плана через оркестратор
+            return executePreparedPlan(enrichedPlan, request, uncertaintyResult, optimizedPrompt)
+
+        } catch (e: Exception) {
+            logger.error("Error in medium complexity planning", e)
+            performanceMonitor.recordError("medium_planning_error", e.message)
+            // Fallback к базовому агенту
+            return baseChatAgent.ask(request)
+        }
+    }
+
+    /**
+     * Обрабатывает сложные запросы с адаптивным планированием
+     */
+    private suspend fun handleComplexQueryWithPlanning(
+        request: AgentRequest,
+        uncertaintyResult: UncertaintyResult,
+        metrics: RequestMetrics
+    ): AgentResponse {
+        logger.info("Processing complex query with adaptive planning")
+
+        try {
+            // Оптимизируем промпт для сложного запроса
+            val optimizedPrompt = PromptOptimizer.getOptimizedSystemPrompt(
+                baseChatAgent.capabilities.systemPrompt ?: "",
+                uncertaintyResult,
+                request.context
+            )
+
+            // Этап 1: Создание адаптивного плана с условными шагами
+            val adaptivePlan = adaptivePlanner.createAdaptivePlan(
+                request = request.request,
+                uncertainty = uncertaintyResult,
+                context = request.context,
+                userRequestId = request.context.additionalContext["user_request_id"] as? String ?: ""
+            )
+
+            logger.info("Created adaptive plan with ${adaptivePlan.steps.size} steps")
+
+            // Этап 2: RAG обогащение (почти всегда нужно для сложных запросов)
+            val enrichedPlan = if (UncertaintyThresholds.shouldUseRAGEnrichment(uncertaintyResult)) {
+                logger.info("Applying RAG enrichment to adaptive plan")
+                ragPlanEnricher.enrichPlan(adaptivePlan, request.request, request.context)
+            } else {
+                adaptivePlan
+            }
+
+            // Этап 3: Выполнение плана с поддержкой динамической модификации
+            return executeAdaptivePlan(enrichedPlan, request, uncertaintyResult, optimizedPrompt)
+
+        } catch (e: Exception) {
+            logger.error("Error in complex adaptive planning", e)
+            performanceMonitor.recordError("complex_planning_error", e.message)
+            // Fallback к базовому планированию
+            return handleMediumQueryWithPlanning(request, uncertaintyResult, metrics)
+        }
+    }
+
+    /**
+     * Выполняет готовый план через оркестратор
+     */
+    private suspend fun executePreparedPlan(
+        plan: ExecutionPlan,
+        request: AgentRequest,
+        uncertaintyResult: UncertaintyResult,
+        optimizedPrompt: String
+    ): AgentResponse {
+        logger.info("Executing prepared plan ${plan.id} with ${plan.steps.size} steps")
+
+        val result = orchestrator.executePreparedPlan(plan)
+
+        // Формируем итоговый ответ
+        val content = buildString {
+            appendLine(result.content)
+        }
+
+        return result.copy(
+            content = content,
+            metadata = result.metadata + mapOf(
+                "uncertainty_analysis" to mapOf(
+                    "score" to uncertaintyResult.score,
+                    "complexity" to uncertaintyResult.complexity.name,
+                    "reasoning" to uncertaintyResult.reasoning,
+                    "processing_strategy" to "prepared_plan_execution"
+                ),
+                "plan_id" to plan.id,
+                "plan_steps" to plan.steps.size,
+                "plan_version" to plan.version,
+                "prompt_optimization" to true
+            )
+        )
+    }
+
+    /**
+     * Выполняет адаптивный план с поддержкой динамической модификации
+     */
+    private suspend fun executeAdaptivePlan(
+        plan: ExecutionPlan,
+        request: AgentRequest,
+        uncertaintyResult: UncertaintyResult,
+        optimizedPrompt: String
+    ): AgentResponse {
+        logger.info("Executing adaptive plan ${plan.id} with ${plan.steps.size} steps")
+
+        val steps = mutableListOf<String>()
+        var currentPlan = plan
+
+        // Используем уже созданный адаптивный план вместо создания нового
+        val result = orchestrator.executePreparedPlan(plan) { step ->
             val stepInfo = when (step) {
                 is ru.marslab.ide.ride.agent.OrchestratorStep.PlanningComplete ->
                     "📋 Планирование: ${step.content}"
@@ -165,9 +370,12 @@ class EnhancedChatAgent(
             steps.add(stepInfo)
         }
 
+        // Здесь можно добавить логику динамической модификации на основе результатов
+        // Но это потребует более глубокой интеграции с оркестратором
+
         // Формируем итоговый ответ
         val content = buildString {
-            appendLine("## Результат выполнения задачи")
+            appendLine("## Результат адаптивного выполнения")
             appendLine()
             if (steps.isNotEmpty()) {
                 appendLine("### Выполненные шаги:")
@@ -179,18 +387,36 @@ class EnhancedChatAgent(
             appendLine(result.content)
         }
 
-        return result.copy(content = content)
+        return result.copy(
+            content = content,
+            metadata = result.metadata + mapOf(
+                "uncertainty_analysis" to mapOf(
+                    "score" to uncertaintyResult.score,
+                    "complexity" to uncertaintyResult.complexity.name,
+                    "reasoning" to uncertaintyResult.reasoning,
+                    "processing_strategy" to "adaptive_planned_execution_optimized"
+                ),
+                "plan_id" to plan.id,
+                "plan_steps" to plan.steps.size,
+                "plan_version" to plan.version,
+                "adaptive_plan" to true,
+                "prompt_optimization" to true
+            )
+        )
     }
 
     /**
      * Возобновляет выполнение плана с пользовательским вводом
      */
-    private suspend fun resumePlanWithInput(planId: String, userInput: String): AgentResponse {
+    private suspend fun resumePlanWithInput(
+        planId: String,
+        userInput: String,
+        context: ru.marslab.ide.ride.model.chat.ChatContext
+    ): AgentResponse {
         logger.info("Resuming plan $planId with user input")
 
         val steps = mutableListOf<String>()
 
-        // Используем новый метод с callback
         val result = orchestrator.resumePlanWithCallback(planId, userInput) { step ->
             val stepInfo = when (step) {
                 is ru.marslab.ide.ride.agent.OrchestratorStep.PlanningComplete ->
@@ -226,24 +452,50 @@ class EnhancedChatAgent(
             content = content,
             metadata = result.metadata + mapOf(
                 "plan_id" to planId,
-                "resumed" to true
+                "resumed" to true,
+                "user_input" to userInput
             )
         )
     }
 
     /**
-     * Результат анализа сложности задачи
+     * Возвращает текущий LLM провайдер (для отображения в UI)
      */
-    private data class TaskComplexity(
-        val isComplex: Boolean,
-        val estimatedSteps: Int,
-        val taskType: TaskType,
-        val requiresOrchestration: Boolean
-    )
+    fun getProvider(): LLMProvider {
+        return baseChatAgent.getProvider()
+    }
+
+    /**
+     * Возвращает статистику производительности
+     */
+    fun getPerformanceStats() = performanceMonitor.getCurrentStats()
+
+    /**
+     * Возвращает статистику кэша
+     */
+    fun getCacheStats() = uncertaintyCache.getStats()
+
+    /**
+     * Возвращает статистику предиктивного кэширования
+     */
+    fun getPredictiveCacheStats() = predictiveCacheManager.getPredictiveStats()
+
+    /**
+     * Возвращает рекомендации по оптимизации
+     */
+    fun getOptimizationRecommendations() = performanceMonitor.analyzePerformance()
+
+    /**
+     * Сбрасывает всю статистику
+     */
+    fun resetStats() {
+        performanceMonitor.reset()
+        uncertaintyCache.clear()
+    }
 
     companion object {
         /**
-         * Создаёт EnhancedChatAgent с базовым ChatAgent и оркестратором
+         * Создаёт EnhancedChatAgent с новым архитектурой планирования
          */
         fun create(llmProvider: LLMProvider): EnhancedChatAgent {
             val baseChatAgent = ChatAgent(llmProvider)
@@ -252,7 +504,10 @@ class EnhancedChatAgent(
             // Регистрируем все доступные ToolAgents
             registerToolAgents(orchestrator, llmProvider)
 
-            return EnhancedChatAgent(baseChatAgent, orchestrator)
+            return EnhancedChatAgent(
+                baseChatAgent = baseChatAgent,
+                orchestrator = orchestrator
+            )
         }
 
         /**
@@ -264,7 +519,7 @@ class EnhancedChatAgent(
         ) {
             val registry = orchestrator.getToolAgentRegistry()
 
-            // Регистрируем все Tool Agents из Phase 2
+            // Регистрируем все Tool Agents
             registry.register(
                 ProjectScannerToolAgent()
             )
