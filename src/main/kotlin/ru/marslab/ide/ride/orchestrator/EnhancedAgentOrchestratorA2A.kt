@@ -123,8 +123,11 @@ class EnhancedAgentOrchestratorA2A(
                 )
             )
 
-            // Анализируем запрос и получаем результат
-            val result = analyzeRequestAndCreatePlan(request, a2aContext)
+            // Создаем план без выполнения
+            val plan = baseOrchestrator.createPlanFor(request)
+
+            // Выполняем план через A2A
+            val result = executePlanWithA2A(plan, context, onStepComplete)
 
             // Публикуем событие о завершении
             publishA2AEvent(
@@ -333,6 +336,199 @@ class EnhancedAgentOrchestratorA2A(
         )
 
         return response
+    }
+
+    /**
+     * Выполнение плана шагов через A2A MessageBus
+     */
+    private suspend fun executePlanWithA2A(
+        plan: ExecutionPlan,
+        context: ExecutionContext,
+        onStepComplete: suspend (OrchestratorStep) -> Unit
+    ): AgentResponse {
+        try {
+            val completedSteps = mutableSetOf<String>()
+            val stepResults = mutableMapOf<String, Any>()
+
+            // Публикуем старт
+            publishA2AEvent(
+                eventType = "PLAN_EXECUTION_STARTED",
+                payload = MessagePayload.ExecutionStatusPayload(
+                    status = "STARTED",
+                    agentId = "enhanced-orchestrator-a2a",
+                    requestId = plan.id,
+                    timestamp = System.currentTimeMillis()
+                )
+            )
+
+            for (step in plan.steps) {
+                if (!step.dependencies.all { completedSteps.contains(it) }) continue
+
+                // Прогресс: старт шага
+                publishA2AEvent(
+                    eventType = "STEP_STARTED",
+                    payload = MessagePayload.ProgressPayload(
+                        stepId = step.id,
+                        status = "started",
+                        progress = 0,
+                        message = step.title
+                    )
+                )
+
+                val request = buildA2ARequestForStep(step)
+                val response = messageBus.requestResponse(request, a2aConfig.getDefaultTimeoutMs())
+
+                val stepResult = mapResponseToResult(step, response)
+                completedSteps.add(step.id)
+                stepResults[step.id] = stepResult
+
+                // Callback об окончании шага (совместимость с OrchestratorStep API)
+                onStepComplete(
+                    OrchestratorStep.TaskComplete(
+                        agentName = "A2A-${step.agentType.name}",
+                        taskId = 0,
+                        taskTitle = step.title,
+                        content = stepResult.toString(),
+                        success = response.success,
+                        error = response.error
+                    )
+                )
+
+                // Прогресс: завершение шага
+                publishA2AEvent(
+                    eventType = "STEP_COMPLETED",
+                    payload = MessagePayload.ProgressPayload(
+                        stepId = step.id,
+                        status = if (response.success) "completed" else "failed",
+                        progress = if (response.success) 100 else 0,
+                        message = step.title
+                    )
+                )
+            }
+
+            // Публикуем завершение плана
+            publishA2AEvent(
+                eventType = "PLAN_EXECUTION_COMPLETED",
+                payload = MessagePayload.ExecutionStatusPayload(
+                    status = "COMPLETED",
+                    agentId = "enhanced-orchestrator-a2a",
+                    requestId = plan.id,
+                    timestamp = System.currentTimeMillis(),
+                    result = "${completedSteps.size} steps completed"
+                )
+            )
+
+            // Формируем итоговый контент (если есть отчёт — он последний шаг)
+            val reportStep = plan.steps.find { it.agentType == AgentType.REPORT_GENERATOR }
+            val content = if (reportStep != null) {
+                val res = stepResults[reportStep.id]
+                when (res) {
+                    is String -> res
+                    is Map<*, *> -> (res["report"] as? String) ?: "План успешно выполнен."
+                    else -> "План успешно выполнен."
+                }
+            } else {
+                "План успешно выполнен. Завершено ${completedSteps.size} шагов."
+            }
+
+            return AgentResponse.success(
+                content = content,
+                metadata = mapOf("plan_id" to plan.id, "completed_steps" to completedSteps.size)
+            )
+
+        } catch (e: Exception) {
+            logger.error("A2A plan execution error", e)
+            publishA2AEvent(
+                eventType = "PLAN_EXECUTION_FAILED",
+                payload = MessagePayload.ExecutionStatusPayload(
+                    status = "FAILED",
+                    agentId = "enhanced-orchestrator-a2a",
+                    requestId = plan.id,
+                    timestamp = System.currentTimeMillis(),
+                    error = e.message
+                )
+            )
+            return AgentResponse.error(error = e.message ?: "Execution error", content = "Не удалось выполнить план")
+        }
+    }
+
+    private fun buildA2ARequestForStep(step: PlanStep): AgentMessage.Request {
+        val (messageType, payload) = when (step.agentType) {
+            AgentType.PROJECT_SCANNER -> {
+                val reqType = if (step.input.containsKey("structure_only")) "PROJECT_STRUCTURE_REQUEST" else "FILE_DATA_REQUEST"
+                reqType to MessagePayload.CustomPayload(
+                    type = reqType,
+                    data = step.input
+                )
+            }
+            AgentType.BUG_DETECTION -> {
+                "BUG_ANALYSIS_REQUEST" to MessagePayload.CustomPayload(
+                    type = "BUG_ANALYSIS_REQUEST",
+                    data = step.input
+                )
+            }
+            AgentType.CODE_QUALITY -> {
+                "CODE_QUALITY_REQUEST" to MessagePayload.CustomPayload(
+                    type = "CODE_QUALITY_REQUEST",
+                    data = step.input
+                )
+            }
+            AgentType.REPORT_GENERATOR -> {
+                "REPORT_GENERATION_REQUEST" to MessagePayload.CustomPayload(
+                    type = "REPORT_GENERATION_REQUEST",
+                    data = step.input
+                )
+            }
+            else -> {
+                "TOOL_EXECUTION_REQUEST" to MessagePayload.CustomPayload(
+                    type = "TOOL_EXECUTION_REQUEST",
+                    data = step.input
+                )
+            }
+        }
+
+        return AgentMessage.Request(
+            senderId = "enhanced-orchestrator-a2a",
+            messageType = messageType,
+            payload = payload,
+            metadata = mapOf("stepId" to step.id, "agentType" to step.agentType.name)
+        )
+    }
+
+    private fun mapResponseToResult(step: PlanStep, response: AgentMessage.Response): Any {
+        if (!response.success) return mapOf("error" to (response.error ?: "Unknown error"))
+        return when (val payload = response.payload) {
+            is MessagePayload.ProjectStructurePayload -> {
+                mapOf(
+                    "files" to payload.files,
+                    "directories" to payload.directories,
+                    "project_type" to payload.projectType,
+                    "total_files" to payload.totalFiles,
+                    "scanned_at" to payload.scannedAt
+                )
+            }
+            is MessagePayload.FilesScannedPayload -> {
+                mapOf(
+                    "files" to payload.files,
+                    "file_types" to payload.fileTypes,
+                    "scan_path" to payload.scanPath,
+                    "scan_duration_ms" to payload.scanDurationMs
+                )
+            }
+            is MessagePayload.CodeAnalysisPayload -> {
+                mapOf(
+                    "summary" to payload.summary,
+                    "findings" to payload.findings,
+                    "processed_files" to payload.processedFiles
+                )
+            }
+            is MessagePayload.TextPayload -> payload.text
+            is MessagePayload.CustomPayload -> payload.data
+            is MessagePayload.ErrorPayload -> mapOf("error" to payload.error)
+            is MessagePayload.ProgressPayload -> mapOf("status" to payload.status, "progress" to payload.progress)
+            is MessagePayload.ExecutionStatusPayload -> mapOf("status" to payload.status, "result" to (payload.result ?: ""))
+            is MessagePayload.AgentInfoPayload -> mapOf("agent" to payload.agentId, "type" to payload.agentType)
+        }
     }
 
     
