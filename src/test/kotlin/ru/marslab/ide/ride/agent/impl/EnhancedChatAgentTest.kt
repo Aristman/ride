@@ -249,7 +249,10 @@ class EnhancedChatAgentTest : BasePlatformTestCase() {
 
         // Then: агент создан корректно
         assertNotNull(agent)
-        assertEquals(3, agent.capabilities.tools.size)
+        val tools = agent.capabilities.tools
+        assertTrue(tools.contains("orchestration"))
+        assertTrue(tools.contains("user_interaction"))
+        assertTrue(tools.contains("plan_management"))
     }
 
     @Test

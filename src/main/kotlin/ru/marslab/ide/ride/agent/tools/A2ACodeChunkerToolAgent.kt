@@ -1,44 +1,51 @@
 package ru.marslab.ide.ride.agent.tools
 
-import ru.marslab.ide.ride.agent.a2a.A2AAgent
 import ru.marslab.ide.ride.agent.a2a.AgentMessage
+import ru.marslab.ide.ride.agent.a2a.BaseA2AAgent
 import ru.marslab.ide.ride.agent.a2a.MessageBus
 import ru.marslab.ide.ride.agent.a2a.MessagePayload
 import ru.marslab.ide.ride.model.orchestrator.AgentType
-import ru.marslab.ide.ride.model.orchestrator.ExecutionContext
 import ru.marslab.ide.ride.model.tool.StepInput
+import ru.marslab.ide.ride.model.orchestrator.ExecutionContext
 import ru.marslab.ide.ride.model.tool.ToolPlanStep
 
 class A2ACodeChunkerToolAgent(
     private val legacy: CodeChunkerToolAgent,
-    private val messageBus: MessageBus
-) : A2AAgent {
-    override val a2aAgentId: String = "a2a-code-chunker-${hashCode()}"
-    override val supportedMessageTypes: Set<String> = setOf("CODE_CHUNK_REQUEST")
+    private val bus: MessageBus
+) : BaseA2AAgent(
+    agentType = AgentType.CODE_CHUNKER,
+    a2aAgentId = "a2a-code-chunker-${System.identityHashCode(legacy)}",
+    supportedMessageTypes = setOf("CODE_CHUNK_REQUEST"),
+    publishedEventTypes = setOf("TOOL_EXECUTION_STARTED", "TOOL_EXECUTION_COMPLETED", "TOOL_EXECUTION_FAILED")
+) {
 
-    override suspend fun initializeA2A(messageBus: MessageBus, context: ExecutionContext) {}
-
-    override suspend fun shutdownA2A(messageBus: MessageBus) {}
-
-    override suspend fun handleRequest(message: AgentMessage.Request): AgentMessage.Response {
-        if (message.messageType != "CODE_CHUNK_REQUEST") {
+    override suspend fun handleRequest(
+        request: AgentMessage.Request,
+        messageBus: MessageBus
+    ): AgentMessage.Response? {
+        if (request.messageType != "CODE_CHUNK_REQUEST") {
             return AgentMessage.Response(
+                senderId = a2aAgentId,
+                requestId = request.id,
                 success = false,
-                payload = MessagePayload.ErrorPayload("Unsupported message type: ${message.messageType}"),
+                payload = MessagePayload.ErrorPayload("Unsupported message type: ${request.messageType}"),
                 error = "unsupported_type"
             )
         }
-        val data = (message.payload as? MessagePayload.CustomPayload)?.data ?: emptyMap<String, Any>()
+        val data = (request.payload as? MessagePayload.CustomPayload)?.data ?: emptyMap<String, Any>()
         val step = ToolPlanStep(
-            id = (message.metadata["stepId"] as? String) ?: "code-chunk-${System.currentTimeMillis()}",
-            title = (data["description"] as? String) ?: "Code chunking",
-            description = (data["description"] as? String) ?: "",
+            id = (request.metadata["stepId"] as? String) ?: "code-chunk-${System.currentTimeMillis()}",
+            description = (data["description"] as? String) ?: "Code chunking",
             agentType = AgentType.CODE_CHUNKER,
             input = StepInput(data = (data["input"] as? Map<String, Any>) ?: emptyMap())
         )
-        val result = legacy.executeStep(step)
+
+        val result = legacy.executeStep(step, ExecutionContext.Empty)
+
         return if (result.success) {
             AgentMessage.Response(
+                senderId = a2aAgentId,
+                requestId = request.id,
                 success = true,
                 payload = MessagePayload.CustomPayload(
                     type = "TOOL_EXECUTION_RESULT",
@@ -50,6 +57,8 @@ class A2ACodeChunkerToolAgent(
             )
         } else {
             AgentMessage.Response(
+                senderId = a2aAgentId,
+                requestId = request.id,
                 success = false,
                 payload = MessagePayload.CustomPayload(
                     type = "TOOL_EXECUTION_RESULT",

@@ -30,12 +30,21 @@ class CodeQualityToolAgent : BaseToolAgent(
 
     override fun validateInput(input: StepInput): ValidationResult {
         val files = input.getList<String>("files")
+        val projectPath = input.getString("project_path")
 
-        if (files.isNullOrEmpty()) {
-            return ValidationResult.failure("files is required and must not be empty")
+        // Если есть файлы - отлично
+        if (!files.isNullOrEmpty()) {
+            return ValidationResult.success()
         }
 
-        return ValidationResult.success()
+        // Если нет файлов, но есть project_path - можем найти файлы сами
+        if (projectPath != null) {
+            logger.info("CODE_QUALITY: No files provided, but project_path available for scanning: $projectPath")
+            return ValidationResult.success()
+        }
+
+        // Если нет ни файлов, ни project_path - это ошибка
+        return ValidationResult.failure("Either 'files' or 'project_path' must be provided for quality analysis")
     }
 
     override suspend fun doExecuteStep(step: ToolPlanStep, context: ExecutionContext): StepResult {
@@ -47,6 +56,35 @@ class CodeQualityToolAgent : BaseToolAgent(
         logger.info("CODE_QUALITY input: files=${files.size}, check_complexity=${checkComplexity}, max_complexity=${maxComplexity}")
         files.take(10).forEach { logger.info("CODE_QUALITY file: $it") }
 
+        // Если файлы не предоставлены, но есть project_path, попробуем найти файлы
+        val filesToAnalyze = if (files.isEmpty()) {
+            val projectPath = step.input.getString("project_path")
+            if (projectPath != null) {
+                logger.info("CODE_QUALITY: No files provided, scanning project directory: $projectPath")
+                findProjectFiles(projectPath)
+            } else {
+                logger.warn("CODE_QUALITY: No files provided and no project_path available")
+                emptyList()
+            }
+        } else {
+            files
+        }
+
+        if (filesToAnalyze.isEmpty()) {
+            logger.warn("CODE_QUALITY: No files to analyze, returning empty result")
+            return StepResult.success(
+                output = StepOutput(mapOf(
+                    "findings" to emptyList<Finding>(),
+                    "summary" to mapOf(
+                        "total_files" to 0,
+                        "issues_found" to 0,
+                        "complexity_issues" to 0
+                    ),
+                    "message" to "No files available for quality analysis"
+                ))
+            )
+        }
+
         val findings = mutableListOf<Finding>()
         val metrics = mutableMapOf<String, Any>()
 
@@ -54,7 +92,7 @@ class CodeQualityToolAgent : BaseToolAgent(
         var totalMethods = 0
         var totalClasses = 0
 
-        for (filePath in files) {
+        for (filePath in filesToAnalyze) {
             val file = File(filePath)
             if (!file.exists() || !file.isFile) {
                 logger.warn("File does not exist: $filePath")
@@ -198,6 +236,43 @@ class CodeQualityToolAgent : BaseToolAgent(
         } catch (e: Exception) {
             logger.error("Error analyzing file ${file.absolutePath}", e)
             return FileAnalysis(emptyList(), 0, 0, 0)
+        }
+    }
+
+    /**
+     * Находит файлы для анализа в директории проекта
+     */
+    private fun findProjectFiles(projectPath: String): List<String> {
+        try {
+            val projectDir = File(projectPath)
+            if (!projectDir.exists()) {
+                logger.warn("CODE_QUALITY: Project directory does not exist: $projectPath")
+                return emptyList()
+            }
+
+            val sourceExtensions = setOf("kt", "java", "scala", "groovy", "js", "ts", "py", "cpp", "c", "h")
+            val maxFiles = 50 // Ограничим количество файлов для анализа
+
+            val files = projectDir.walkTopDown()
+                .filter { file ->
+                    file.isFile &&
+                    sourceExtensions.contains(file.extension.lowercase()) &&
+                    !file.path.contains("/build/") &&
+                    !file.path.contains("/out/") &&
+                    !file.path.contains("/target/") &&
+                    !file.path.contains("/node_modules/") &&
+                    !file.path.contains("/.git/")
+                }
+                .take(maxFiles)
+                .map { it.absolutePath }
+                .toList()
+
+            logger.info("CODE_QUALITY: Found ${files.size} files for analysis")
+            return files
+
+        } catch (e: Exception) {
+            logger.error("CODE_QUALITY: Error scanning project directory: $projectPath", e)
+            return emptyList()
         }
     }
 

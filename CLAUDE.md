@@ -17,6 +17,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Run unit tests
 ./gradlew test
 
+# Run A2A smoke tests (isolated headless)
+./gradlew a2aTest
+
 # Run plugin in development IDE
 ./gradlew runIde
 
@@ -31,6 +34,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # Run tests with coverage
 ./gradlew test jacocoTestReport
+
+# Run specific A2A smoke test
+./gradlew a2aTest --tests "A2AAgentsSmokeTest"
 ```
 
 ## Architecture Overview
@@ -113,9 +119,16 @@ if (response.isFinal) {
 ```
 src/main/kotlin/ru/marslab/ide/ride/
 ├── agent/              # Agent interfaces and implementations
+│   ├── impl/           # Core agent implementations (ChatAgent, ToolAgent)
+│   ├── tools/          # Specialized tool agents (A2A enabled)
+│   ├── planner/        # Request planning agents
+│   ├── rag/           # RAG (Retrieval-Augmented Generation) agents
+│   └── a2a/           # A2A (Agent-to-Agent) protocol implementation
 ├── integration/llm/    # LLM provider abstractions and Yandex GPT
 ├── model/              # Data models and domain objects
 ├── service/            # Application services
+│   ├── mcp/           # MCP (Model Context Protocol) integration
+│   └── rag/           # RAG enrichment services
 ├── settings/           # Plugin configuration and persistence
 ├── ui/                 # Refactored UI components with composition pattern
 │   ├── config/         # Configuration and constants (ChatPanelConfig)
@@ -127,6 +140,12 @@ src/main/kotlin/ru/marslab/ide/ride/
 └── actions/            # IntelliJ platform actions
 ```
 
+### Test Structure
+```
+src/test/kotlin/           # Standard unit tests
+src/a2aTest/kotlin/        # Isolated A2A smoke tests (headless)
+```
+
 ### Key Components
 - **ChatAgent**: Universal agent implementation with uncertainty analysis and full dialogue history
 - **YandexGPTProvider**: HTTP client for Yandex GPT API integration with conversation support
@@ -135,6 +154,11 @@ src/main/kotlin/ru/marslab/ide/ride/
 - **MessageHistory**: In-memory storage for chat conversations with role-based messages
 - **PluginSettings**: Persistent configuration using IntelliJ's PersistentStateComponent
 - **ChatPanel**: Main UI component with refactored architecture (235 lines vs 958)
+- **EnhancedAgentOrchestratorA2A**: Advanced orchestration system for multi-agent workflows
+- **MessageBus**: Event-driven communication system for agent-to-agent messaging
+- **A2AAgentAdapter**: Universal adapter for integrating legacy agents with A2A protocol
+- **RagEnrichmentService**: RAG (Retrieval-Augmented Generation) for context enrichment
+- **MCPServerManager**: Management system for MCP (Model Context Protocol) servers
 
 ### Refactored UI Architecture (NEW)
 The UI layer has been completely refactored following single responsibility principle:
@@ -162,13 +186,16 @@ ChatPanel (coordinator)
 ## Technology Stack
 
 - **Language**: Kotlin 2.1.0
-- **Platform**: IntelliJ Platform 2025.1.4.1
+- **Platform**: IntelliJ Platform 2024.2.5+
 - **UI Framework**: Swing (IntelliJ UI components) with composition pattern
 - **Async**: Kotlin Coroutines
-- **HTTP**: Java HttpClient (JDK 11+) - *Note: Avoid Ktor due to coroutine conflicts*
+- **HTTP**: Java HttpClient (JDK 21+) - *Note: Avoid Ktor due to coroutine conflicts*
 - **JSON**: kotlinx.serialization 1.6.2
 - **XML**: xmlutil for XML serialization
-- **Testing**: JUnit + MockK
+- **Tokenization**: jtokkit (Tiktoken implementation) for token counting
+- **Database**: SQLite for RAG embeddings storage
+- **Testing**: JUnit 5 + MockK + Mockito (mixed test suite)
+- **Build**: Gradle 8.14.3 with IntelliJ Platform Gradle Plugin 2.7.1
 
 ## Development Guidelines
 
@@ -189,6 +216,13 @@ ChatPanel (coordinator)
 - Use specialized managers for different UI concerns
 - Follow single responsibility principle for UI components
 
+### A2A Agent Development
+- Implement A2A message handling for Request/Response patterns
+- Use `A2AAgentAdapter` for legacy agent integration
+- Follow unified `TOOL_EXECUTION_REQUEST` protocol
+- Include proper error handling and retry policies
+- Add metadata tracking with `planId` for orchestration
+
 ### Testing Strategy
 - Unit tests for all core components
 - Mock external dependencies (LLM providers)
@@ -198,6 +232,7 @@ ChatPanel (coordinator)
 - Conversation history validation tests
 - Pattern matching validation for Russian language uncertainty indicators
 - UI component tests for refactored architecture
+- **A2A smoke tests**: Isolated headless testing with `./gradlew a2aTest`
 
 ## Important Constraints
 
@@ -215,13 +250,80 @@ ChatPanel (coordinator)
 - Monitor memory usage with long conversations
 - Component composition helps prevent memory leaks
 
+### Gradle and IDE Configuration
+- **JCEF Support**: Use JetBrains Runtime with JCEF, disable sandbox on Linux: `-Dide.browser.jcef.sandbox.enable=false`
+- **Plugin Conflicts**: Gradle plugin may cause conflicts, disabled in sandbox config
+- **Headless Testing**: A2A tests run in headless mode with proper flags
+
+## RAG System (Retrieval-Augmented Generation)
+
+### Overview
+RAG provides context enrichment through local embedding database with semantic search and source linking capabilities.
+
+### Core Components
+- **RagEnrichmentService**: Main enrichment service with configurable strategies
+- **SQLite Database**: Local storage for embeddings with optimized retrieval
+- **Source Links**: Clickable links to source code in responses
+- **Reranking Strategies**: THRESHOLD and MMR (Maximal Marginal Relevance)
+
+### Configuration
+```
+Settings → Tools → Ride → RAG Enrichment
+├── ☑ Enable RAG enrichment
+├── ☑ Enable source links in responses
+├── Reranker Strategy: [THRESHOLD|MMR]
+├── Top K: [5] (final results)
+├── Candidate K: [30] (initial candidates)
+├── Similarity threshold: [0.25]
+└── MMR lambda: [0.5] (if MMR selected)
+```
+
+### Usage
+- Automatic enrichment when enabled
+- Source links displayed as clickable "🔗 Открыть" elements
+- Memory-optimized retrieval with top-N heap and pagination
+- Detailed logging of strategy and metrics
+
 ## Plugin Configuration
 
 The plugin is configured in `src/main/resources/META-INF/plugin.xml`:
 - Tool Window: "Ride Chat" anchored to right side
 - Settings: Available under Tools → Ride
-- Application Services: ChatService and PluginSettings
+- Application Services: ChatService, PluginSettings, MCPServerManager
 - Actions: Response format configuration menu
+
+## MCP Integration (Model Context Protocol)
+
+### Overview
+MCP enables extending plugin functionality through external servers via stdio and HTTP protocols.
+
+### Core Components
+- **MCPServerManager**: Management system for MCP servers
+- **UI Integration**: Server management through settings interface
+- **Method Calling**: Direct MCP server method invocation with parameters
+- **Status Indicators**: Visual connection status in UI
+
+### Configuration
+Create `.ride/mcp.json` in project root:
+```json
+{
+  "servers": [
+    {
+      "name": "filesystem",
+      "type": "STDIO",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/directory"],
+      "enabled": true
+    }
+  ]
+}
+```
+
+### Usage
+- Configure servers in Settings → Tools → Ride → MCP Servers
+- Test connection and view available methods in MCP Methods Tool Window
+- Direct method calling from agents with parameter passing
+- Real-time status indicators for server connections
 
 ## Response Format System
 
@@ -289,6 +391,48 @@ Response format is configured per agent through the `setResponseFormat()` method
 - **Configuration-driven**: Runtime format switching without code changes
 - **Component composition**: Easy to extend UI with new features
 
+## A2A Protocol (Agent-to-Agent Communication)
+
+### Overview
+The A2A protocol enables sophisticated multi-agent workflows through event-driven communication using MessageBus architecture. It supports Request/Response/Event patterns with type-safe messaging.
+
+### Core Protocol Messages
+- **TOOL_EXECUTION_REQUEST**: Unified tool execution protocol
+  ```json
+  {
+    "type": "TOOL_EXECUTION_REQUEST",
+    "data": {
+      "stepId": "<uuid>",
+      "description": "<string>",
+      "agentType": "<AgentType>",
+      "input": {...},
+      "dependencies": ["<stepId>"]
+    }
+  }
+  ```
+- **TOOL_EXECUTION_RESULT**: Tool execution response
+- **Event Types**: STEP_STARTED, STEP_COMPLETED, STEP_FAILED, PLAN_EXECUTION_*
+
+### A2A-Enabled Agents
+- **A2AArchitectureToolAgent**: Architecture analysis
+- **A2ALLMReviewToolAgent**: LLM code review
+- **A2AEmbeddingIndexerToolAgent**: Embedding indexing
+- **A2ACodeChunkerToolAgent**: Code chunking
+- **A2AOpenSourceFileToolAgent**: File operations
+- **A2AAgentAdapter**: Universal adapter for legacy agents
+
+### Orchestration
+- **EnhancedAgentOrchestratorA2A**: Advanced orchestration with retry policies, dependency management, and planId tracking
+- **Data Flow**: Automatic step input enrichment from previous results
+- **Error Handling**: Configurable retry policies with exponential backoff
+
+### Testing
+- **Isolated Tests**: `./gradlew a2aTest` for headless smoke testing
+- **Coverage**: Comprehensive A2A smoke tests in `src/a2aTest/kotlin/`
+
+### Current Status (Phase 1 Active)
+Phase 0 infrastructure is complete. Phase 1 focuses on specialized A2A tool agents with unified TOOL_EXECUTION protocol support.
+
 ## Feature Roadmaps
 
 ### Uncertainty Analysis System
@@ -317,3 +461,31 @@ UI refactoring was completed in 2025 with the following improvements:
 - **Better Reusability**: Components can be used in other parts of the application
 - **Cleaner Architecture**: Clear separation between UI concerns
 - **Component Composition**: Flexible building block approach for UI development
+
+## Current Project Status
+
+### Recently Completed (2025)
+- ✅ **Uncertainty Analysis System** - Intelligent clarifying question detection
+- ✅ **Agent Orchestrator** - Multi-agent workflow system with /plan mode
+- ✅ **Token Management** - Automatic counting and history compression
+- ✅ **Response Format System** - JSON/XML/TEXT with schema validation
+- ✅ **MCP Integration** - External server connectivity
+- ✅ **UI Architecture Refactoring** - Modular component-based design
+- ✅ **A2A Protocol Phase 0** - Infrastructure and messaging system
+- ✅ **RAG System** - Context enrichment with source links
+
+### Active Development
+- 🔄 **A2A Protocol Phase 1** - Specialized tool agents rollout (70% complete)
+- 🔄 **Enhanced Agent Orchestration** - Advanced workflow management
+- 📝 **Documentation Updates** - Comprehensive API and architecture guides
+
+### Technology Maturity
+- **Stable**: Core chat functionality, UI components, basic agent system
+- **Mature**: Uncertainty analysis, token management, response formatting
+- **Advanced**: A2A protocol, RAG system, MCP integration, orchestration
+
+### Testing Coverage
+- **40+ unit tests** covering core functionality
+- **12 uncertainty analysis tests** with comprehensive pattern coverage
+- **A2A smoke tests** for protocol validation
+- **Integration tests** for end-to-end workflows

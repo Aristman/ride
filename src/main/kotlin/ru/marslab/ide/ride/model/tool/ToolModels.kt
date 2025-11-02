@@ -65,6 +65,8 @@ data class StepOutput(
         @Suppress("UNCHECKED_CAST")
         return data[key] as? T
     }
+
+    operator fun contains(key: String): Boolean = data.containsKey(key)
 }
 
 /**

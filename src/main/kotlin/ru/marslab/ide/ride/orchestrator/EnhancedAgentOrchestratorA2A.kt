@@ -17,6 +17,8 @@ import ru.marslab.ide.ride.agent.tools.LLMCodeReviewToolAgent
 import ru.marslab.ide.ride.agent.tools.EmbeddingIndexerToolAgent
 import ru.marslab.ide.ride.agent.tools.CodeChunkerToolAgent
 import ru.marslab.ide.ride.agent.tools.OpenSourceFileToolAgent
+import ru.marslab.ide.ride.agent.tools.UserInteractionAgent
+import ru.marslab.ide.ride.agent.tools.A2AUserInteractionAgent
 import ru.marslab.ide.ride.agent.BaseToolAgent
 import ru.marslab.ide.ride.agent.AgentOrchestrator
 import ru.marslab.ide.ride.agent.OrchestratorStep
@@ -84,6 +86,10 @@ class EnhancedAgentOrchestratorA2A(
         (registry.get(AgentType.FILE_OPERATIONS) as? ToolAgent)?.let {
             val legacy = OpenSourceFileToolAgent()
             a2aRegistry.registerAgent(A2AOpenSourceFileToolAgent(legacy, messageBus))
+        }
+        (registry.get(AgentType.USER_INTERACTION) as? ToolAgent)?.let {
+            val legacy = UserInteractionAgent()
+            a2aRegistry.registerAgent(A2AUserInteractionAgent(legacy, messageBus))
         }
 
         // Регистрируем
@@ -609,6 +615,12 @@ class EnhancedAgentOrchestratorA2A(
             AgentType.FILE_OPERATIONS -> {
                 "OPEN_FILE_REQUEST" to MessagePayload.CustomPayload(
                     type = "OPEN_FILE_REQUEST",
+                    data = input
+                )
+            }
+            AgentType.USER_INTERACTION -> {
+                "USER_INPUT_REQUEST" to MessagePayload.CustomPayload(
+                    type = "USER_INPUT_REQUEST",
                     data = input
                 )
             }
