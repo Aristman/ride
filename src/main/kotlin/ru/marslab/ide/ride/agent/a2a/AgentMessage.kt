@@ -144,6 +144,25 @@ sealed class MessagePayload {
     ) : MessagePayload()
 
     @Serializable
+    data class ExecutionStatusPayload(
+        val status: String, // STARTED, COMPLETED, FAILED
+        val agentId: String,
+        val requestId: String,
+        val timestamp: Long,
+        val result: String? = null,
+        val error: String? = null
+    ) : MessagePayload()
+
+    @Serializable
+    data class AgentInfoPayload(
+        val agentId: String,
+        val agentType: String,
+        val legacyAgentClass: String,
+        val supportedMessageTypes: Set<String>? = null,
+        val timestamp: Long
+    ) : MessagePayload()
+
+    @Serializable
     data class CustomPayload(
         val type: String,
         val data: Map<String, Any>
