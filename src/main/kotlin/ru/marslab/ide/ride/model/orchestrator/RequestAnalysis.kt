@@ -78,7 +78,11 @@ data class ExecutionContext(
     val selectedDirectories: List<String> = emptyList(),
     val gitBranch: String? = null,
     val additionalContext: Map<String, Any> = emptyMap()
-)
+) {
+    companion object {
+        val Empty = ExecutionContext()
+    }
+}
 
 /**
  * Результат анализа пользовательского запроса

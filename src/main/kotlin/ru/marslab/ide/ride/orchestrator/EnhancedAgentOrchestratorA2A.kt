@@ -72,11 +72,8 @@ class EnhancedAgentOrchestratorA2A(
                 )
             )
 
-            // Анализируем запрос и создаем план
-            val plan = analyzeRequestAndCreatePlan(request, a2aContext)
-
-            // Выполняем план с A2A агентами
-            val result = executePlanWithA2A(plan, a2aContext, onStepComplete)
+            // Анализируем запрос и получаем результат
+            val result = analyzeRequestAndCreatePlan(request, a2aContext)
 
             // Публикуем событие о завершении
             publishA2AEvent(
@@ -122,7 +119,7 @@ class EnhancedAgentOrchestratorA2A(
     /**
      * Создает и регистрирует A2A агента для ToolAgent
      */
-    suspend fun createA2AToolAgent(toolAgent: BaseToolAgent): A2AAgent {
+    suspend fun createA2AToolAgent(toolAgent: ru.marslab.ide.ride.agent.tools.BaseToolAgent): A2AAgent {
         val a2aAgent = A2AAgentAdapter.create(
             agent = toolAgent,
             a2aAgentId = "${toolAgent.javaClass.simpleName}_${toolAgent.hashCode()}",
@@ -247,7 +244,7 @@ class EnhancedAgentOrchestratorA2A(
     private suspend fun analyzeRequestAndCreatePlan(
         request: AgentRequest,
         a2aContext: A2AExecutionContext
-    ): ExecutionPlan {
+    ): AgentResponse {
         // Публикуем событие анализа
         publishA2AEvent(
             eventType = "REQUEST_ANALYSIS_STARTED",
@@ -260,15 +257,15 @@ class EnhancedAgentOrchestratorA2A(
         )
 
         // Используем базовый оркестратор для анализа
-        val plan = baseOrchestrator.processEnhanced(request) { step ->
+        val response = baseOrchestrator.processEnhanced(request) { step ->
             // Публикуем прогресс через A2A
             publishA2AEvent(
                 eventType = "PLAN_STEP_PROGRESS",
                 payload = MessagePayload.ProgressPayload(
-                    stepId = step.id,
+                    stepId = step.javaClass.simpleName,
                     status = "completed",
-                    progress = step.progress,
-                    message = "Step completed: ${step.name}"
+                    progress = 50,
+                    message = "Step completed"
                 )
             )
         }
@@ -284,63 +281,10 @@ class EnhancedAgentOrchestratorA2A(
             )
         )
 
-        // Создаем план из результата (эмуляция)
-        return ExecutionPlan(
-            id = a2aContext.executionId,
-            request = request,
-            steps = listOf(), // Упрощенно для Phase 2
-            status = PlanStatus.CREATED,
-            createdAt = System.currentTimeMillis()
-        )
+        return response
     }
 
-    private suspend fun executePlanWithA2A(
-        plan: ExecutionPlan,
-        a2aContext: A2AExecutionContext,
-        onStepComplete: suspend (OrchestratorStep) -> Unit
-    ): AgentResponse {
-        // Для Phase 2 выполняем базовую логику с A2A событиями
-        publishA2AEvent(
-            eventType = "PLAN_EXECUTION_STARTED",
-            payload = MessagePayload.ExecutionStatusPayload(
-                status = "STARTED",
-                agentId = "enhanced-orchestrator-a2a",
-                requestId = a2aContext.executionId,
-                timestamp = System.currentTimeMillis()
-            )
-        )
-
-        // Выполняем план через базовый оркестратор
-        val result = baseOrchestrator.processEnhanced(a2aContext.originalRequest) { step ->
-            // Публикуем события выполнения через A2A
-            publishA2AEvent(
-                eventType = "PLAN_STEP_EXECUTION",
-                payload = MessagePayload.ProgressPayload(
-                    stepId = step.id,
-                    status = "progress",
-                    progress = step.progress,
-                    message = "Executing step: ${step.name}"
-                )
-            )
-
-            onStepComplete(step)
-        }
-
-        // Публикуем завершение выполнения
-        publishA2AEvent(
-            eventType = "PLAN_EXECUTION_COMPLETED",
-            payload = MessagePayload.ExecutionStatusPayload(
-                status = "COMPLETED",
-                agentId = "enhanced-orchestrator-a2a",
-                requestId = a2aContext.executionId,
-                timestamp = System.currentTimeMillis(),
-                result = result.content
-            )
-        )
-
-        return result
-    }
-
+    
     private fun subscribeToA2AEvents() {
         // Подписываемся на сообщения от A2A агентов
         coroutineScope.launch {

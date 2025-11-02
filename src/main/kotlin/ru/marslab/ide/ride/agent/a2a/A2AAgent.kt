@@ -1,6 +1,13 @@
 package ru.marslab.ide.ride.agent.a2a
 
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import ru.marslab.ide.ride.agent.Agent
+import ru.marslab.ide.ride.model.agent.AgentCapabilities
+import ru.marslab.ide.ride.model.agent.AgentEvent
+import ru.marslab.ide.ride.model.agent.AgentRequest
+import ru.marslab.ide.ride.model.agent.AgentResponse
+import ru.marslab.ide.ride.model.agent.AgentSettings
 import ru.marslab.ide.ride.model.orchestrator.AgentType
 import ru.marslab.ide.ride.model.orchestrator.ExecutionContext
 
@@ -14,6 +21,11 @@ import ru.marslab.ide.ride.model.orchestrator.ExecutionContext
  * - Асинхронной обработки сообщений
  */
 interface A2AAgent : Agent {
+
+    /**
+     * Тип агента (из оркестратора)
+     */
+    val agentType: AgentType
 
     /**
      * Уникальный идентификатор агента в A2A системе
@@ -104,6 +116,40 @@ abstract class BaseA2AAgent(
 ) : A2AAgent {
 
     protected val logger = com.intellij.openapi.diagnostic.Logger.getInstance(javaClass)
+
+    // Базовая реализация Agent интерфейса
+    override val capabilities: AgentCapabilities = AgentCapabilities(
+        stateful = false,
+        streaming = false,
+        reasoning = false,
+        tools = emptySet(),
+        systemPrompt = null,
+        responseRules = emptyList()
+    )
+
+    override suspend fun ask(req: AgentRequest): AgentResponse {
+        // По умолчанию преобразуем в A2A сообщение и обрабатываем
+        return AgentResponse(
+            content = "A2A agent ${a2aAgentId} received request: ${req.content}",
+            isFinal = true,
+            uncertainty = 0.0
+        )
+    }
+
+    override fun start(req: AgentRequest): Flow<AgentEvent>? {
+        // По умолчанию streaming не поддерживается
+        return null
+    }
+
+    override fun updateSettings(settings: AgentSettings) {
+        // По умолчанию игнорируем настройки
+        logger.info("A2A agent $a2aAgentId received settings update (ignored)")
+    }
+
+    override fun dispose() {
+        // По умолчанию ничего не делаем
+        logger.info("A2A agent $a2aAgentId disposed")
+    }
 
     override suspend fun handleA2AMessage(
         message: AgentMessage,

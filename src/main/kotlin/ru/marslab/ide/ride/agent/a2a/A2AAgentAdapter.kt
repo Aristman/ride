@@ -1,11 +1,17 @@
 package ru.marslab.ide.ride.agent.a2a
 
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import ru.marslab.ide.ride.agent.Agent
+import ru.marslab.ide.ride.model.agent.AgentCapabilities
+import ru.marslab.ide.ride.model.agent.AgentEvent
+import ru.marslab.ide.ride.model.agent.AgentRequest
+import ru.marslab.ide.ride.model.agent.AgentResponse
+import ru.marslab.ide.ride.model.agent.AgentSettings
 import ru.marslab.ide.ride.model.orchestrator.AgentType
 import ru.marslab.ide.ride.model.orchestrator.ExecutionContext
-import ru.marslab.ide.ride.model.request.AgentRequest
-import ru.marslab.ide.ride.model.response.AgentResponse
+import ru.marslab.ide.ride.model.response.ParsedResponse
 
 /**
  * Адаптер для преобразования legacy Agent в A2AAgent
@@ -29,13 +35,13 @@ class A2AAgentAdapter(
     override val messageProcessingPriority: Int = 0,
     override val maxConcurrentMessages: Int = 5
 ) : BaseA2AAgent(
-    agentType = legacyAgent.agentType,
+    agentType = AgentType.CHAT, // Временно упрощаем
     a2aAgentId = a2aAgentId,
     supportedMessageTypes = supportedMessageTypes,
     publishedEventTypes = publishedEventTypes,
     messageProcessingPriority = messageProcessingPriority,
     maxConcurrentMessages = maxConcurrentMessages
-) {
+), Agent {
 
     // Сохраняем ссылку на legacy agent для делегирования
     val wrappedAgent: Agent get() = legacyAgent
@@ -43,24 +49,31 @@ class A2AAgentAdapter(
     // Контекст выполнения для адаптера
     private var executionContext: ExecutionContext = ExecutionContext.Empty
 
+    // Реализация методов Agent интерфейса
+    override val capabilities: AgentCapabilities get() = legacyAgent.capabilities
+
+    override suspend fun ask(req: AgentRequest): AgentResponse {
+        return legacyAgent.ask(req)
+    }
+
+    override fun start(req: AgentRequest): Flow<AgentEvent>? {
+        return legacyAgent.start(req)
+    }
+
+    override fun updateSettings(settings: AgentSettings) {
+        legacyAgent.updateSettings(settings)
+    }
+
+    override fun dispose() {
+        legacyAgent.dispose()
+    }
+
     override suspend fun handleRequest(
         request: AgentMessage.Request,
         messageBus: MessageBus
     ): AgentMessage.Response? {
         return try {
             logger.info("Adapting A2A request for legacy agent: $a2aAgentId")
-
-            // Преобразуем A2A сообщение в legacy запрос
-            val agentRequest = when (request.messageType) {
-                "AGENT_REQUEST" -> convertToAgentRequest(request)
-                else -> {
-                    logger.warn("Unsupported request type: ${request.messageType}")
-                    return createErrorResponse(
-                        requestId = request.id,
-                        error = "Unsupported request type: ${request.messageType}"
-                    )
-                }
-            }
 
             // Публикуем событие о начале выполнения
             publishEvent(
@@ -74,9 +87,25 @@ class A2AAgentAdapter(
                 )
             )
 
+            // Создаем простой AgentRequest из A2A сообщения
+            val agentRequest = when (val payload = request.payload) {
+                is MessagePayload.TextPayload -> {
+                    AgentRequest(
+                        content = payload.text,
+                        metadata = request.metadata + ("a2a_request_id" to request.id)
+                    )
+                }
+                else -> {
+                    AgentRequest(
+                        content = payload.toString(),
+                        metadata = request.metadata + ("a2a_request_id" to request.id)
+                    )
+                }
+            }
+
             // Выполняем legacy agent
             val response = withContext(Dispatchers.Default) {
-                legacyAgent.processRequest(agentRequest, executionContext)
+                legacyAgent.ask(agentRequest)
             }
 
             // Публикуем событие о завершении выполнения
@@ -93,12 +122,17 @@ class A2AAgentAdapter(
             )
 
             // Преобразуем legacy ответ в A2A ответ
-            convertToA2AResponse(
+            AgentMessage.Response(
+                senderId = a2aAgentId,
                 requestId = request.id,
-                agentResponse = response,
-                metadata = mapOf(
-                    "legacy_agent_class" to legacyAgent.javaClass.simpleName,
-                    "execution_time_ms" to (System.currentTimeMillis() - request.timestamp)
+                success = true,
+                payload = MessagePayload.TextPayload(
+                    text = response.content,
+                    metadata = mapOf(
+                        "legacy_agent_class" to legacyAgent.javaClass.simpleName,
+                        "is_final_response" to response.isFinal,
+                        "uncertainty_score" to response.uncertainty
+                    )
                 )
             )
 
@@ -118,10 +152,14 @@ class A2AAgentAdapter(
                 )
             )
 
-            createErrorResponse(
+            AgentMessage.Response(
+                senderId = a2aAgentId,
                 requestId = request.id,
-                error = "Legacy agent execution failed: ${e.message}",
-                cause = e.javaClass.simpleName
+                success = false,
+                payload = MessagePayload.ErrorPayload(
+                    error = "Legacy agent execution failed: ${e.message}",
+                    cause = e.javaClass.simpleName
+                )
             )
         }
     }
@@ -165,122 +203,6 @@ class A2AAgentAdapter(
         )
 
         super.shutdownA2A(messageBus)
-    }
-
-    /**
-     * Преобразует A2A запрос в legacy AgentRequest
-     */
-    private suspend fun convertToAgentRequest(request: AgentMessage.Request): AgentRequest {
-        return when (val payload = request.payload) {
-            is MessagePayload.TextPayload -> {
-                AgentRequest(
-                    content = payload.text,
-                    metadata = request.metadata + ("a2a_request_id" to request.id)
-                )
-            }
-            is MessagePayload.JsonPayload -> {
-                // Извлекаем текст из JSON если возможно
-                val content = payload.jsonElement.primitive?.content
-                    ?: payload.jsonElement.toString()
-                AgentRequest(
-                    content = content,
-                    metadata = request.metadata + ("a2a_request_id" to request.id)
-                )
-            }
-            else -> {
-                AgentRequest(
-                    content = payload.toString(),
-                    metadata = request.metadata + ("a2a_request_id" to request.id)
-                )
-            }
-        }
-    }
-
-    /**
-     * Преобразует legacy AgentResponse в A2A Response
-     */
-    private suspend fun convertToA2AResponse(
-        requestId: String,
-        agentResponse: AgentResponse,
-        metadata: Map<String, Any> = emptyMap()
-    ): AgentMessage.Response {
-        val payload = when (val content = agentResponse.parsedContent) {
-            is ru.marslab.ide.ride.model.response.ParsedResponse.JsonResponse -> {
-                MessagePayload.JsonPayload(
-                    jsonElement = content.jsonElement,
-                    metadata = mapOf(
-                        "response_format" to "JSON",
-                        "is_final" to agentResponse.isFinal,
-                        "uncertainty" to agentResponse.uncertainty
-                    )
-                )
-            }
-            is ru.marslab.ide.ride.model.response.ParsedResponse.XmlResponse -> {
-                MessagePayload.TextPayload(
-                    text = content.xml,
-                    metadata = mapOf(
-                        "response_format" to "XML",
-                        "is_final" to agentResponse.isFinal,
-                        "uncertainty" to agentResponse.uncertainty
-                    )
-                )
-            }
-            is ru.marslab.ide.ride.model.response.ParsedResponse.TextResponse -> {
-                MessagePayload.TextPayload(
-                    text = content.text,
-                    metadata = mapOf(
-                        "response_format" to "TEXT",
-                        "is_final" to agentResponse.isFinal,
-                        "uncertainty" to agentResponse.uncertainty
-                    )
-                )
-            }
-            is ru.marslab.ide.ride.model.response.ParsedResponse.ParseError -> {
-                MessagePayload.ErrorPayload(
-                    error = content.error,
-                    cause = "Parse error in legacy response",
-                    metadata = mapOf(
-                        "response_format" to "ERROR",
-                        "original_content" to content.originalContent
-                    )
-                )
-            }
-        }
-
-        return AgentMessage.Response(
-            senderId = a2aAgentId,
-            requestId = requestId,
-            success = true,
-            payload = payload,
-            metadata = metadata + mapOf(
-                "legacy_agent_class" to legacyAgent.javaClass.simpleName,
-                "is_final_response" to agentResponse.isFinal,
-                "uncertainty_score" to agentResponse.uncertainty
-            )
-        )
-    }
-
-    /**
-     * Создает ответ с ошибкой
-     */
-    private suspend fun createErrorResponse(
-        requestId: String,
-        error: String,
-        cause: String? = null
-    ): AgentMessage.Response {
-        return AgentMessage.Response(
-            senderId = a2aAgentId,
-            requestId = requestId,
-            success = false,
-            payload = MessagePayload.ErrorPayload(
-                error = error,
-                cause = cause
-            ),
-            metadata = mapOf(
-                "legacy_agent_class" to legacyAgent.javaClass.simpleName,
-                "adapter_error" to true
-            )
-        )
     }
 
     companion object {
