@@ -32,13 +32,19 @@ class LLMCodeReviewToolAgent(
     override fun validateInput(input: StepInput): ru.marslab.ide.ride.agent.ValidationResult {
         val files = input.getList<String>("files")
         if (files.isNullOrEmpty()) {
+            // Fallback: если нет files, пытаемся работать с другими параметрами
+            val request = input.getString("request")
+            if (!request.isNullOrBlank()) {
+                log.info("LLM_REVIEW fallback: using request parameter instead of files")
+                return ru.marslab.ide.ride.agent.ValidationResult.success()
+            }
             return ru.marslab.ide.ride.agent.ValidationResult.failure("files is required and must not be empty")
         }
         return ru.marslab.ide.ride.agent.ValidationResult.success()
     }
 
     override suspend fun doExecuteStep(step: ToolPlanStep, context: ExecutionContext): StepResult {
-        val files = step.input.getList<String>("files")!!.distinct()
+        val files = step.input.getList<String>("files")?.distinct() ?: emptyList()
         val maxFindingsPerFile = step.input.getInt("maxFindingsPerFile") ?: 20
         val maxCharsPerFile = step.input.getInt("maxCharsPerFile") ?: 8000
 
@@ -47,6 +53,43 @@ class LLMCodeReviewToolAgent(
         // Входные логи
         log.info("LLM_REVIEW input: files=${files.size}, maxFindingsPerFile=$maxFindingsPerFile, maxCharsPerFile=$maxCharsPerFile")
         files.take(10).forEach { log.info("LLM_REVIEW file: $it") }
+
+        // Fallback: если нет файлов, используем запрос для генерации ответа
+        if (files.isEmpty()) {
+            val request = step.input.getString("request") ?: "Анализ кода"
+            log.info("LLM_REVIEW fallback: processing request without files: $request")
+
+            val prompt = buildString {
+                appendLine("Проанализируй следующий запрос и предоставь рекомендации по улучшению кода:")
+                appendLine()
+                appendLine("Запрос: $request")
+                appendLine()
+                appendLine("Верни JSON с ключом 'findings' и массивом объектов с полями:")
+                appendLine("file (string), line (number|null), severity (critical/high/medium/low), rule (string), message (string), suggestion (string)")
+            }
+
+            val response = withContext(Dispatchers.IO) {
+                llmProvider.sendRequest(
+                    systemPrompt = "You are a senior code reviewer. Provide ONLY JSON as requested.",
+                    userMessage = prompt,
+                    conversationHistory = emptyList(),
+                    parameters = LLMParameters.PRECISE
+                )
+            }
+
+            if (response.success) {
+                val findings = parseFindings(response.content, "general_analysis")
+                return StepResult.success(
+                    output = StepOutput.of(
+                        "findings" to findings,
+                        "total" to findings.size,
+                        "mode" to "fallback_analysis"
+                    )
+                )
+            } else {
+                return StepResult.error("Failed to process fallback request: ${response.error}")
+            }
+        }
 
         for (path in files) {
             val file = File(path)
@@ -128,7 +171,7 @@ class LLMCodeReviewToolAgent(
     private fun parseFindings(content: String, path: String): List<Map<String, Any>> {
         val jsonBlock = extractJson(content) ?: return emptyList()
         return try {
-            val findingsRaw = Regex("""\{\s*\"findings\"\s*:\s*\[(.*)]\s*}\""", RegexOption.DOT_MATCHES_ALL)
+            val findingsRaw = Regex("""\{\s*\"findings\"\s*:\s*\[(.*)]\s*}\\""", RegexOption.DOT_MATCHES_ALL)
                 .find(jsonBlock)?.groupValues?.getOrNull(1) ?: run {
                 // fallback без завершающей кавычки (если провайдер вернул чистый JSON)
                 Regex("""\{\s*\"findings\"\s*:\s*\[(.*)]\s*}""", RegexOption.DOT_MATCHES_ALL)

@@ -352,7 +352,8 @@ class EnhancedChatAgent(
         val steps = mutableListOf<String>()
         var currentPlan = plan
 
-        val result = orchestrator.processEnhanced(request) { step ->
+        // Используем уже созданный адаптивный план вместо создания нового
+        val result = orchestrator.executePreparedPlan(plan) { step ->
             val stepInfo = when (step) {
                 is ru.marslab.ide.ride.agent.OrchestratorStep.PlanningComplete ->
                     "📋 Планирование: ${step.content}"

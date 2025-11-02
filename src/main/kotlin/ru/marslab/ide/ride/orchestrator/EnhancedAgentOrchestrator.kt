@@ -484,6 +484,33 @@ class EnhancedAgentOrchestrator(
         }
     }
 
+    /**
+     * Выполняет готовый план извне с callback'ом для шагов
+     */
+    suspend fun executePreparedPlan(
+        plan: ExecutionPlan,
+        onStepComplete: suspend (OrchestratorStep) -> Unit
+    ): AgentResponse {
+        logger.info("Executing prepared plan ${plan.id} with ${plan.steps.size} steps and callback")
+
+        return try {
+            // Переводим план в состояние выполнения
+            val executingPlan = stateMachine.transition(plan, PlanEvent.Start(plan.analysis))
+            activePlans[plan.id] = executingPlan
+            planStorage.update(executingPlan)
+
+            // Выполняем план с переданным callback'ом
+            executePlan(executingPlan, onStepComplete)
+
+        } catch (e: Exception) {
+            logger.error("Failed to execute prepared plan ${plan.id}", e)
+            AgentResponse.error(
+                error = e.message ?: "Failed to execute plan",
+                content = "Произошла ошибка при выполнении плана: ${e.message}"
+            )
+        }
+    }
+
     private suspend fun executePlan(
         plan: ExecutionPlan,
         onStepComplete: suspend (OrchestratorStep) -> Unit
@@ -538,7 +565,10 @@ class EnhancedAgentOrchestrator(
                 if (step.status != StepStatus.PENDING) continue
 
                 // Проверяем зависимости
-                if (step.dependencies.all { it in completedSteps }) {
+                val dependenciesMet = step.dependencies.all { it in completedSteps }
+                logger.info("Step ${step.title} (${step.agentType}): dependencies=${step.dependencies}, completed=${completedSteps}, canExecute=${dependenciesMet}")
+
+                if (dependenciesMet) {
                     // Выполняем шаг с учётом retry/loop
                     val stepResult = if (step.retryPolicy != null || step.loopConfig != null) {
                         executeStepWithRetryLoop(step, inProgressPlan.analysis.context, stepResults)
@@ -555,6 +585,8 @@ class EnhancedAgentOrchestrator(
                     planStorage.update(updatedPlan)
 
                     progressTracker.completeStep(plan.id, step.id, stepResult)
+                } else {
+                    logger.warn("Step ${step.title} (${step.agentType}) cannot execute: dependencies not met")
                 }
             }
 

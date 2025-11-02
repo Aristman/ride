@@ -268,55 +268,118 @@ class RequestPlanner {
     ): List<PlanStep> {
         val steps = mutableListOf<PlanStep>()
         val stepIdCounter = mutableMapOf<String, Int>()
+        val createdStepIds = mutableMapOf<String, String>() // Хранит соответствие шаблон -> реальный ID
 
         when (requestAnalysis.taskType) {
             TaskType.SIMPLE_QUERY -> {
                 // Один шаг для простого запроса
-                steps.add(createSimpleQueryStep(requestAnalysis, stepIdCounter))
+                val step = createSimpleQueryStep(requestAnalysis, stepIdCounter)
+                steps.add(step)
             }
 
             TaskType.CODE_ANALYSIS -> {
-                steps.add(createAnalysisStep(requestAnalysis, stepIdCounter))
-                steps.add(createQualityCheckStep(requestAnalysis, stepIdCounter, setOf("analysis")))
+                val analysisStep = createAnalysisStep(requestAnalysis, stepIdCounter)
+                steps.add(analysisStep)
+                createdStepIds["analysis"] = analysisStep.id
+
+                val qualityStep = createQualityCheckStep(requestAnalysis, stepIdCounter, setOf(analysisStep.id))
+                steps.add(qualityStep)
+                createdStepIds["quality_check"] = qualityStep.id
             }
 
             TaskType.BUG_FIX -> {
-                steps.add(createBugDetectionStep(requestAnalysis, stepIdCounter))
-                steps.add(createQualityCheckStep(requestAnalysis, stepIdCounter, setOf("bug_detection")))
-                steps.add(createBugFixStep(requestAnalysis, stepIdCounter, setOf("bug_detection", "quality_check")))
+                val bugDetectionStep = createBugDetectionStep(requestAnalysis, stepIdCounter)
+                steps.add(bugDetectionStep)
+                createdStepIds["bug_detection"] = bugDetectionStep.id
+
+                val qualityStep = createQualityCheckStep(requestAnalysis, stepIdCounter, setOf(bugDetectionStep.id))
+                steps.add(qualityStep)
+                createdStepIds["quality_check"] = qualityStep.id
+
+                val bugFixStep = createBugFixStep(requestAnalysis, stepIdCounter, setOf(bugDetectionStep.id, qualityStep.id))
+                steps.add(bugFixStep)
+                createdStepIds["bug_fix"] = bugFixStep.id
             }
 
             TaskType.REFACTORING -> {
-                steps.add(createQualityCheckStep(requestAnalysis, stepIdCounter))
-                steps.add(createRefactorStep(requestAnalysis, stepIdCounter, setOf("quality_check")))
-                steps.add(createValidationStep(requestAnalysis, stepIdCounter, setOf("quality_check", "refactor")))
+                val qualityStep = createQualityCheckStep(requestAnalysis, stepIdCounter)
+                steps.add(qualityStep)
+                createdStepIds["quality_check"] = qualityStep.id
+
+                val refactorStep = createRefactorStep(requestAnalysis, stepIdCounter, setOf(qualityStep.id))
+                steps.add(refactorStep)
+                createdStepIds["refactor"] = refactorStep.id
+
+                val validationStep = createValidationStep(requestAnalysis, stepIdCounter, setOf(qualityStep.id, refactorStep.id))
+                steps.add(validationStep)
+                createdStepIds["validation"] = validationStep.id
             }
 
             TaskType.ARCHITECTURE_ANALYSIS -> {
-                steps.add(createProjectScanStep(requestAnalysis, stepIdCounter))
-                steps.add(createArchitectureStep(requestAnalysis, stepIdCounter, setOf("project_scan")))
-                steps.add(createQualityCheckStep(requestAnalysis, stepIdCounter, setOf("project_scan", "architecture")))
-                steps.add(createDocumentationStep(requestAnalysis, stepIdCounter, setOf("architecture", "quality_check")))
+                val projectScanStep = createProjectScanStep(requestAnalysis, stepIdCounter)
+                steps.add(projectScanStep)
+                createdStepIds["project_scan"] = projectScanStep.id
+
+                val architectureStep = createArchitectureStep(requestAnalysis, stepIdCounter, setOf(projectScanStep.id))
+                steps.add(architectureStep)
+                createdStepIds["architecture"] = architectureStep.id
+
+                val qualityStep = createQualityCheckStep(requestAnalysis, stepIdCounter, setOf(projectScanStep.id, architectureStep.id))
+                steps.add(qualityStep)
+                createdStepIds["quality_check"] = qualityStep.id
+
+                val documentationStep = createDocumentationStep(requestAnalysis, stepIdCounter, setOf(architectureStep.id, qualityStep.id))
+                steps.add(documentationStep)
+                createdStepIds["documentation"] = documentationStep.id
             }
 
             TaskType.REPORT_GENERATION -> {
-                steps.add(createProjectScanStep(requestAnalysis, stepIdCounter))
-                steps.add(createAnalysisStep(requestAnalysis, stepIdCounter, setOf("project_scan")))
-                steps.add(createReportStep(requestAnalysis, stepIdCounter, setOf("project_scan", "analysis")))
+                val projectScanStep = createProjectScanStep(requestAnalysis, stepIdCounter)
+                steps.add(projectScanStep)
+                createdStepIds["project_scan"] = projectScanStep.id
+
+                val analysisStep = createAnalysisStep(requestAnalysis, stepIdCounter, setOf(projectScanStep.id))
+                steps.add(analysisStep)
+                createdStepIds["analysis"] = analysisStep.id
+
+                val reportStep = createReportStep(requestAnalysis, stepIdCounter, setOf(projectScanStep.id, analysisStep.id))
+                steps.add(reportStep)
+                createdStepIds["report"] = reportStep.id
             }
 
             TaskType.COMPLEX_MULTI_STEP -> {
-                steps.add(createProjectScanStep(requestAnalysis, stepIdCounter))
+                val projectScanStep = createProjectScanStep(requestAnalysis, stepIdCounter)
+                steps.add(projectScanStep)
+                createdStepIds["project_scan"] = projectScanStep.id
+
+                var ragEnrichmentStep: PlanStep? = null
                 if (uncertainty.suggestedActions.contains("поиск_контекста")) {
-                    steps.add(createRagEnrichmentStep(requestAnalysis, stepIdCounter, setOf("project_scan")))
+                    ragEnrichmentStep = createRagEnrichmentStep(requestAnalysis, stepIdCounter, setOf(projectScanStep.id))
+                    steps.add(ragEnrichmentStep)
+                    createdStepIds["rag_enrichment"] = ragEnrichmentStep.id
                 }
-                steps.add(createAnalysisStep(requestAnalysis, stepIdCounter, setOf("project_scan")))
-                steps.add(createQualityCheckStep(requestAnalysis, stepIdCounter, setOf("analysis")))
-                steps.add(createDocumentationStep(requestAnalysis, stepIdCounter, setOf("analysis", "quality_check")))
+
+                val analysisDependencies = if (ragEnrichmentStep != null) {
+                    setOf(projectScanStep.id, ragEnrichmentStep.id)
+                } else {
+                    setOf(projectScanStep.id)
+                }
+                val analysisStep = createAnalysisStep(requestAnalysis, stepIdCounter, analysisDependencies)
+                steps.add(analysisStep)
+                createdStepIds["analysis"] = analysisStep.id
+
+                val qualityStep = createQualityCheckStep(requestAnalysis, stepIdCounter, setOf(analysisStep.id))
+                steps.add(qualityStep)
+                createdStepIds["quality_check"] = qualityStep.id
+
+                val documentationStep = createDocumentationStep(requestAnalysis, stepIdCounter, setOf(analysisStep.id, qualityStep.id))
+                steps.add(documentationStep)
+                createdStepIds["documentation"] = documentationStep.id
             }
 
             else -> {
-                steps.add(createGenericStep(requestAnalysis, stepIdCounter))
+                val step = createGenericStep(requestAnalysis, stepIdCounter)
+                steps.add(step)
             }
         }
 
@@ -400,6 +463,9 @@ class RequestPlanner {
             description = "Детальный анализ кода и выявление проблем",
             agentType = AgentType.LLM_REVIEW,
             input = mapOf<String, Any>(
+                "files" to listOf<String>(), // Будет заполнено оркестратором из результатов предыдущих шагов
+                "maxFindingsPerFile" to 10,
+                "maxCharsPerFile" to 5000,
                 "request" to (analysis.parameters["original_request"] ?: ""),
                 "context" to analysis.context,
                 "task_type" to analysis.taskType.name
