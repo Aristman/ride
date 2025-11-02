@@ -19,6 +19,9 @@ import ru.marslab.ide.ride.agent.tools.CodeChunkerToolAgent
 import ru.marslab.ide.ride.agent.tools.OpenSourceFileToolAgent
 import ru.marslab.ide.ride.agent.tools.UserInteractionAgent
 import ru.marslab.ide.ride.agent.tools.A2AUserInteractionAgent
+import ru.marslab.ide.ride.agent.tools.A2ACodeGeneratorToolAgent
+import ru.marslab.ide.ride.agent.tools.CodeGeneratorToolAgent
+import ru.marslab.ide.ride.agent.tools.LLMReviewToolAgent
 import ru.marslab.ide.ride.agent.BaseToolAgent
 import ru.marslab.ide.ride.agent.AgentOrchestrator
 import ru.marslab.ide.ride.agent.OrchestratorStep
@@ -72,8 +75,12 @@ class EnhancedAgentOrchestratorA2A(
             a2aRegistry.registerAgent(A2AArchitectureToolAgent(legacy, messageBus))
         }
         (registry.get(AgentType.LLM_REVIEW) as? ToolAgent)?.let {
-            val legacy = LLMCodeReviewToolAgent(llmProvider)
+            val legacy = LLMReviewToolAgent(llmProvider)
             a2aRegistry.registerAgent(A2ALLMReviewToolAgent(legacy, messageBus))
+        }
+        (registry.get(AgentType.CODE_GENERATOR) as? ToolAgent)?.let {
+            val legacy = CodeGeneratorToolAgent(llmProvider)
+            a2aRegistry.registerAgent(A2ACodeGeneratorToolAgent(legacy, messageBus))
         }
         (registry.get(AgentType.EMBEDDING_INDEXER) as? ToolAgent)?.let {
             val legacy = EmbeddingIndexerToolAgent()

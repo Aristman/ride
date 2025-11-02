@@ -10,7 +10,7 @@ import ru.marslab.ide.ride.model.orchestrator.ExecutionContext
 import ru.marslab.ide.ride.model.tool.ToolPlanStep
 
 class A2ALLMReviewToolAgent(
-    private val legacy: LLMCodeReviewToolAgent,
+    private val legacy: LLMReviewToolAgent,
     private val bus: MessageBus
 ) : BaseA2AAgent(
     agentType = AgentType.LLM_REVIEW,

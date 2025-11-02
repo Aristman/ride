@@ -111,6 +111,9 @@ class RequestPlanner {
             requestLower.contains("архитектур") -> TaskType.ARCHITECTURE_ANALYSIS
             requestLower.contains("баг") || requestLower.contains("ошибк") -> TaskType.BUG_FIX
             requestLower.contains("рефактор") -> TaskType.REFACTORING
+            requestLower.contains("создай") || requestLower.contains("напиши") || requestLower.contains("генерируй") ||
+            requestLower.contains("create") || requestLower.contains("write") || requestLower.contains("generate") ||
+            requestLower.contains("сделай") || requestLower.contains("implement") -> TaskType.CODE_GENERATION
             requestLower.contains("оптимиз") || requestLower.contains("производительность") -> TaskType.PERFORMANCE_OPTIMIZATION
             requestLower.contains("тест") -> TaskType.TESTING
             requestLower.contains("документ") -> TaskType.DOCUMENTATION
@@ -152,6 +155,13 @@ class RequestPlanner {
                 tools.add(AgentType.CODE_QUALITY)
                 tools.add(AgentType.LLM_REVIEW)
                 tools.add(AgentType.CODE_FIXER)
+            }
+            TaskType.CODE_GENERATION -> {
+                tools.add(AgentType.CODE_GENERATOR)
+                tools.add(AgentType.LLM_REVIEW)
+                if (requestLower.contains("класс") || requestLower.contains("class")) {
+                    tools.add(AgentType.ARCHITECTURE_ANALYSIS)
+                }
             }
 
             TaskType.PERFORMANCE_OPTIMIZATION -> {
@@ -219,6 +229,7 @@ class RequestPlanner {
             TaskType.BUG_FIX -> 3
             TaskType.REFACTORING -> 3
             TaskType.PERFORMANCE_OPTIMIZATION -> 3
+            TaskType.CODE_GENERATION -> 2
             TaskType.REPORT_GENERATION -> 3
             TaskType.ARCHITECTURE_ANALYSIS -> 4
             TaskType.MIGRATION -> 4
@@ -243,6 +254,7 @@ class RequestPlanner {
             TaskType.SIMPLE_QUERY -> false
             TaskType.BUG_FIX -> uncertainty.score > 0.3 // Требует уточнения для сложных багов
             TaskType.REFACTORING -> uncertainty.score > 0.4 // Требует понимания требований
+            TaskType.CODE_GENERATION -> uncertainty.score > 0.4 // Требует уточнения для сложной генерации
             TaskType.ARCHITECTURE_ANALYSIS -> true // Всегда требует уточнения
             TaskType.MIGRATION -> true // Сложные миграции требуют уточнения
             else -> uncertainty.score > 0.5
@@ -618,6 +630,51 @@ class RequestPlanner {
                 "task_type" to analysis.taskType.name
             ),
             estimatedDurationMs = 5000
+        )
+    }
+
+    /**
+     * Создает шаг для генерации кода
+     */
+    private fun createCodeGenerationStep(
+        analysis: RequestAnalysis,
+        counter: MutableMap<String, Int>,
+        dependencies: Set<String> = emptySet()
+    ): PlanStep {
+        return PlanStep(
+            id = generateStepId("code_generation", counter),
+            title = "Генерация кода",
+            description = "Генерация кода на основе запроса",
+            agentType = AgentType.CODE_GENERATOR,
+            input = mapOf<String, Any>(
+                "request" to (analysis.parameters["original_request"] ?: ""),
+                "language" to "kotlin",
+                "project_path" to (analysis.context.projectPath ?: "")
+            ),
+            dependencies = dependencies,
+            estimatedDurationMs = 10000
+        )
+    }
+
+    /**
+     * Создает шаг для LLM ревью
+     */
+    private fun createLLMReviewStep(
+        analysis: RequestAnalysis,
+        counter: MutableMap<String, Int>,
+        dependencies: Set<String> = emptySet()
+    ): PlanStep {
+        return PlanStep(
+            id = generateStepId("llm_review", counter),
+            title = "LLM ревью кода",
+            description = "Ревью сгенерированного кода",
+            agentType = AgentType.LLM_REVIEW,
+            input = mapOf<String, Any>(
+                "review_type" to "general",
+                "language" to "kotlin"
+            ),
+            dependencies = dependencies,
+            estimatedDurationMs = 8000
         )
     }
 

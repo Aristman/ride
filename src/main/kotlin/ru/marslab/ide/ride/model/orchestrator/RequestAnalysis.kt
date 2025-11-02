@@ -13,6 +13,9 @@ enum class TaskType {
     /** Исправление багов */
     BUG_FIX,
 
+    /** Генерация кода */
+    CODE_GENERATION,
+
     /** Генерация отчетов */
     REPORT_GENERATION,
 
@@ -58,6 +61,7 @@ enum class AgentType {
     CODE_QUALITY,
     ARCHITECTURE_ANALYSIS,
     CODE_FIXER,
+    CODE_GENERATOR,
     REPORT_GENERATOR,
     USER_INTERACTION,
     FILE_OPERATIONS,
