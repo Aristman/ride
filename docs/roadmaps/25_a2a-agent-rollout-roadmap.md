@@ -13,10 +13,10 @@
 ## Phased Checklist (для утверждения)
 
 ### Phase 0: Стабилизация инфраструктуры A2A
-- [ ] Исправить `A2AAgentAdapter`: параметризовать `agentType` (убрать жёсткое `AgentType.PROJECT_SCANNER`), пробросить `supportedMessageTypes`/`publishedEventTypes` per-агент
-- [ ] Стандартизировать общую схему: `TOOL_EXECUTION_REQUEST` / `TOOL_EXECUTION_RESULT` через `MessagePayload.CustomPayload { step, context, output }`
-- [ ] Гарантировать `planId` в `metadata` всех событий, публикуемых `EnhancedAgentOrchestratorA2A`
-- [ ] Обновить `docs/features/a2a-protocol.md` c новыми типами сообщений и правилами
+- [x] Исправить `A2AAgentAdapter`: параметризовать `agentType` (убрать жёсткое `AgentType.PROJECT_SCANNER`), пробросить `supportedMessageTypes`/`publishedEventTypes` per-агент
+- [x] Стандартизировать общую схему: `TOOL_EXECUTION_REQUEST` / `TOOL_EXECUTION_RESULT` через `MessagePayload.CustomPayload { stepId, description, agentType, input, dependencies }`
+- [x] Гарантировать `planId` в `metadata` всех событий, публикуемых `EnhancedAgentOrchestratorA2A`
+- [x] Обновить `docs/features/a2a-protocol.md` c новыми типами сообщений и правилами
 
 ### Phase 1: Покрытие отсутствующих A2A-агентов
 - [ ] `ArchitectureToolAgent` → `A2AArchitectureToolAgent` (или адаптер): `ARCHITECTURE_ANALYSIS_REQUEST`
@@ -25,21 +25,21 @@
 - [ ] `CodeChunkerToolAgent` → `A2ACodeChunkerToolAgent` (или адаптер): `CODE_CHUNK_REQUEST`
 - [ ] `OpenSourceFileToolAgent` → `A2AOpenSourceFileToolAgent` (или адаптер): `OPEN_FILE_REQUEST`
 - [ ] `UserInteractionAgent` → `A2AUserInteractionAgent`: `USER_INPUT_REQUEST` с ожиданием пользовательского ввода
-- [ ] Универсальный путь через адаптер: добавить обработчик `TOOL_EXECUTION_REQUEST` → парсинг в `ToolPlanStep` → `executeStep()`
+- [x] Универсальный путь через адаптер: добавить обработчик `TOOL_EXECUTION_REQUEST` → парсинг в `ToolPlanStep` → `executeStep()`
 
 ### Phase 2: Сквозная передача данных между шагами
-- [ ] Реализовать `enrichStepInput(step, prevResults)` в `EnhancedAgentOrchestratorA2A.executePlanWithA2A()`
-- [ ] Контракты данных: `PROJECT_SCANNER → files`; потребители — `BUG_DETECTION`, `CODE_QUALITY`, `LLM_REVIEW`, `ARCHITECTURE_ANALYSIS`
-- [ ] Расширить `mapResponseToResult()` для новых payload-типов: `architecture_findings`, `llm_review_findings`, `embeddings_stats`, `chunks`, `open_file_ack`
+- [x] Реализовать `enrichStepInput(step, prevResults)` в `EnhancedAgentOrchestratorA2A.executePlanWithA2A()`
+- [x] Контракты данных: `PROJECT_SCANNER → files`; потребители — `BUG_DETECTION`, `CODE_QUALITY`, `LLM_REVIEW`, `ARCHITECTURE_ANALYSIS` (зафиксированы в features)
+- [x] Расширить `mapResponseToResult()` для обработки `TOOL_EXECUTION_RESULT`
 
 ### Phase 3: Тестирование и верификация
 - [ ] Обновить/добавить `A2AAgentsSmokeTest` для всех новых `messageType`
 - [ ] Интеграционные тесты плана: зависимости, ретраи, таймауты, корректность протекания данных
 - [ ] Нагрузочные тесты MessageBus: параллельные шаги, задержки, throughput/latency
-- [ ] UI: фильтрация событий по `planId` в `ChatService.handleA2AUiEvent()` и корректное отображение прогресса
+- [x] UI: фильтрация событий по `planId` в `ChatService.handleA2AUiEvent()` и корректное отображение прогресса
 
 ### Phase 4: Документация и feature flags
-- [ ] Обновить данный ROADMAP и `docs/roadmaps/24_a2a-protocol-integration.md` статусами задач
+- [x] Обновить данный ROADMAP и `docs/roadmaps/24_a2a-protocol-integration.md` статусами задач
 - [ ] Включить фичефлаги в `A2AConfig/A2AConfigUtil` для зрелых агентов; незрелые — за флагом
 - [ ] Обновить `docs/README.md` и гайды по созданию A2A-агентов
 
