@@ -9,12 +9,12 @@
 | Phase 1: Core A2A Infrastructure   | ✅ COMPLETED    | 100%     | MessageBus, AgentMessage, A2AAgent interface                  |
 | Phase 2: Legacy Integration        | ✅ COMPLETED    | 100%     | A2AAgentAdapter, A2AAgentRegistry, Conversion logic           |
 | Phase 3: ToolAgent A2A Integration | ✅ COMPLETED*   | 95%      | All ToolAgent A2A implementations (*minor compilation issues) |
-| Phase 4: Orchestrator Integration  | 🚧 IN PROGRESS | 72%      | A2AEnhancedOrchestrator, Event-driven execution               |
+| Phase 4: Orchestrator Integration  | 🚧 IN PROGRESS | 78%      | A2AEnhancedOrchestrator, Event-driven execution               |
 | Phase 5: UI & Advanced Features    | ⏳ PENDING      | 10%      | ChatService integration, Resilience patterns                  |
 
-**Latest Achievement**: Phase 4 продвинута — план создаётся без запуска, шаги исполняются через A2A MessageBus, события прогресса/статусов публикуются; общий `MessageBusProvider`, регистрация core A2A-агентов; `ChatService` подписан на события. Пройден headless A2A smoke-тест (сканер проекта отвечает на FILE_DATA_REQUEST).
+**Latest Achievement**: Phase 4 продвинута — план создаётся без запуска, шаги исполняются через A2A MessageBus; добавлены ретраи по `RetryPolicy` с backoff, события `STEP_RETRYING`/`STEP_FAILED`, метаданные `planId`/`attempt(s)`; `ChatService` отображает прогресс и ретраи. Пройден headless A2A smoke-тест (сканер проекта отвечает на FILE_DATA_REQUEST).
 
-**Next Milestone**: Завершить E2E-валидацию (Scanner → Bug Detection → Code Quality → Report Generator) и внедрить обработку ошибок/ретраи в A2A.
+**Next Milestone**: Завершить E2E-валидацию (Scanner → Bug Detection → Code Quality → Report Generator).
 
 ## Overview
 
@@ -179,8 +179,8 @@ User Request → ChatService → A2A Events → Agents
 - [x] A2AEnhancedOrchestrator с MessageBus интеграцией (shared bus, agent registration)
 - [x] Event-driven plan execution через A2A
 - [x] Progress tracking через A2A status events (подписка `ChatService` на A2A события)
-- [ ] Error propagation и recovery через A2A
-- [ ] Plan state consistency через A2A messaging
+- [x] Error propagation и recovery через A2A
+- [x] Plan state consistency через A2A messaging
 
 **Key Features**:
 

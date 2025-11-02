@@ -62,6 +62,8 @@ class ChatService {
     // Текущие настройки формата ответа (для UI)
     private var currentFormat: ResponseFormat? = null
     private var currentSchema: ResponseSchema? = null
+    // Активный план для фильтрации A2A событий в UI
+    private var currentPlanId: String? = null
 
     // Агент создаётся и может быть пересоздан при смене настроек
     // EnhancedChatAgent автоматически определяет сложность задачи:
@@ -111,6 +113,21 @@ class ChatService {
     }
 
     private fun handleA2AUiEvent(event: AgentMessage.Event) {
+        // Определяем planId из metadata/payload
+        val metaPlanId = event.metadata["planId"] as? String
+        val payloadRequestId = (event.payload as? MessagePayload.ExecutionStatusPayload)?.requestId
+        val planIdForEvent = metaPlanId ?: payloadRequestId
+
+        // Захватываем текущий planId на старте оркестрации/плана
+        if (currentPlanId == null && (event.eventType == "ORCHESTRATION_STARTED" || event.eventType == "PLAN_EXECUTION_STARTED")) {
+            currentPlanId = planIdForEvent
+        }
+
+        // Фильтрация событий других планов
+        if (currentPlanId != null && planIdForEvent != null && planIdForEvent != currentPlanId) {
+            return
+        }
+
         val pretty = when (val payload = event.payload) {
             is MessagePayload.ExecutionStatusPayload -> {
                 val status = payload.status
@@ -167,6 +184,12 @@ class ChatService {
             )
         )
         sendProgressMessageToUI(message)
+
+        // Сброс план-контекста при завершении
+        if (event.eventType == "PLAN_EXECUTION_COMPLETED" || event.eventType == "PLAN_EXECUTION_FAILED" ||
+            event.eventType == "ORCHESTRATION_COMPLETED" || event.eventType == "ORCHESTRATION_FAILED") {
+            currentPlanId = null
+        }
     }
 
     // Список активных progress сообщений для обновления
