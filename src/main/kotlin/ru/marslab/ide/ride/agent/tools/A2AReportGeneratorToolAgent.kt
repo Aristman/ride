@@ -1,11 +1,14 @@
 package ru.marslab.ide.ride.agent.tools
 
 import kotlinx.coroutines.*
+import kotlinx.coroutines.Deferred
 import kotlinx.datetime.Clock
 import ru.marslab.ide.ride.agent.BaseToolAgent
 import ru.marslab.ide.ride.agent.ValidationResult
 import ru.marslab.ide.ride.agent.a2a.*
 import ru.marslab.ide.ride.integration.llm.LLMProvider
+import ru.marslab.ide.ride.model.chat.ConversationMessage
+import ru.marslab.ide.ride.model.llm.LLMParameters
 import ru.marslab.ide.ride.model.orchestrator.AgentType
 import ru.marslab.ide.ride.model.orchestrator.ExecutionContext
 import ru.marslab.ide.ride.model.tool.*
@@ -44,7 +47,7 @@ class A2AReportGeneratorToolAgent(
     )
 ), A2AAgent {
 
-    override val agentId: String = "report-generator-a2a-${hashCode()}"
+    private val agentId: String = "report-generator-a2a-${hashCode()}"
     override val a2aAgentId: String = agentId
 
     // A2A message types this agent supports
@@ -70,8 +73,9 @@ class A2AReportGeneratorToolAgent(
 
     init {
         logger.info("Initializing A2A Report Generator Agent: $agentId")
-    }    overr
-ide fun getDescription(): String {
+    }
+
+    override fun getDescription(): String {
         return "A2A-enhanced агент для генерации комплексных отчетов с данными от всех анализирующих агентов"
     }
 
@@ -149,7 +153,7 @@ ide fun getDescription(): String {
             )
 
             StepResult.success(
-                output = mapOf(
+                output = StepOutput.of(
                     "report_content" to report.content,
                     "report_format" to report.format,
                     "data_sources" to report.dataSources,
@@ -176,8 +180,8 @@ ide fun getDescription(): String {
 
             StepResult.error("A2A Report Generation failed: ${e.message}")
         }
-    }    /
-**
+    }
+    /**
      * Собирает данные от всех доступных анализирующих агентов через A2A
      */
     private suspend fun collectDataFromAllAgents(requestId: String): Map<String, Any> {
@@ -197,17 +201,15 @@ ide fun getDescription(): String {
             )
 
             // Собираем данные параллельно от разных типов агентов
-            val dataCollectionJobs = listOf(
-                async { collectProjectScannerData(timeout) },
-                async { collectBugDetectionData(timeout) },
-                async { collectCodeQualityData(timeout) },
-                // Можем добавить другие агенты
-                // async { collectArchitectureAnalysisData(timeout) },
-                // async { collectPerformanceAnalysisData(timeout) }
-            )
-
-            // Ждем завершения всех задач сбора данных
-            val results = dataCollectionJobs.awaitAll()
+            val results: List<Map<String, Any>> = coroutineScope {
+                val jobs: List<Deferred<Map<String, Any>>> = listOf(
+                    async { collectProjectScannerData(timeout) },
+                    async { collectBugDetectionData(timeout) },
+                    async { collectCodeQualityData(timeout) }
+                    // Можно добавить другие агенты при необходимости
+                )
+                jobs.awaitAll()
+            }
 
             // Объединяем результаты
             results.forEach { result ->
@@ -250,7 +252,7 @@ ide fun getDescription(): String {
 
             val request = AgentMessage.Request(
                 senderId = agentId,
-                requestId = "scanner-data-${System.currentTimeMillis()}",
+                messageType = "PROJECT_STRUCTURE_REQUEST",
                 payload = MessagePayload.CustomPayload(
                     type = "PROJECT_STRUCTURE_REQUEST",
                     data = mapOf(
@@ -307,7 +309,7 @@ ide fun getDescription(): String {
 
             val request = AgentMessage.Request(
                 senderId = agentId,
-                requestId = "bug-data-${System.currentTimeMillis()}",
+                messageType = "BUG_ANALYSIS_REQUEST",
                 payload = MessagePayload.CustomPayload(
                     type = "BUG_ANALYSIS_REQUEST",
                     data = mapOf(
@@ -376,7 +378,7 @@ ide fun getDescription(): String {
 
             val request = AgentMessage.Request(
                 senderId = agentId,
-                requestId = "quality-data-${System.currentTimeMillis()}",
+                messageType = "METRICS_REQUEST",
                 payload = MessagePayload.CustomPayload(
                     type = "METRICS_REQUEST",
                     data = mapOf(
@@ -635,9 +637,14 @@ ide fun getDescription(): String {
                 appendLine("Дай конкретные рекомендации по приоритетам исправления проблем.")
             }
 
-            // Используем LLM для генерации рекомендаций
-            val response = llmProvider.generateText(prompt)
-            response.ifEmpty { "Рекомендации не сгенерированы" }
+            // Используем LLM для генерации рекомендаций через стандартный интерфейс
+            val response = llmProvider.sendRequest(
+                systemPrompt = "",
+                userMessage = prompt,
+                conversationHistory = emptyList<ConversationMessage>(),
+                parameters = LLMParameters()
+            )
+            response.content.ifEmpty { "Рекомендации не сгенерированы" }
 
         } catch (e: Exception) {
             logger.error("Error generating LLM recommendations", e)
@@ -720,11 +727,10 @@ ide fun getDescription(): String {
             val event = AgentMessage.Event(
                 senderId = agentId,
                 eventType = eventType,
-                payload = payload,
-                broadcast = true
+                payload = payload
             )
 
-            messageBus.broadcast(event)
+            messageBus.publish(event)
             logger.debug("Published A2A event: $eventType")
 
         } catch (e: Exception) {
@@ -733,7 +739,10 @@ ide fun getDescription(): String {
     }
 
     // A2AAgent interface implementation
-    override suspend fun handleA2AMessage(message: AgentMessage): AgentMessage? {
+    override suspend fun handleA2AMessage(
+        message: AgentMessage,
+        messageBus: MessageBus
+    ): AgentMessage? {
         return when (message) {
             is AgentMessage.Request -> handleA2ARequest(message)
             is AgentMessage.Event -> {
@@ -770,6 +779,7 @@ ide fun getDescription(): String {
         // Создаем временный ToolPlanStep для генерации отчета
         val tempStep = ToolPlanStep(
             id = "a2a-${request.id}",
+            description = "Generate report via A2A request",
             agentType = AgentType.REPORT_GENERATOR,
             input = StepInput(mapOf(
                 "format" to format,
@@ -780,7 +790,7 @@ ide fun getDescription(): String {
 
         val result = doExecuteStep(tempStep, ExecutionContext.Empty)
 
-        return if (result.isSuccess) {
+        return if (result.success) {
             AgentMessage.Response(
                 senderId = agentId,
                 requestId = request.id,
@@ -830,19 +840,7 @@ ide fun getDescription(): String {
         )
     }
 
-    override fun getSupportedMessageTypes(): Set<String> = supportedMessageTypes
-
-    override fun getMessageHandler(): suspend (AgentMessage) -> Unit = { message ->
-        handleA2AMessage(message)
-    }
-
-    override suspend fun startA2AListening() {
-        logger.info("Starting A2A message listening for Report Generator Agent")
-    }
-
-    override suspend fun stopA2AListening() {
-        logger.info("Stopping A2A message listening for Report Generator Agent")
-    }
+    // Удалены устаревшие override-методы, не предусмотренные интерфейсом A2AAgent
 
     // Data classes
     data class CollectedAgentData(

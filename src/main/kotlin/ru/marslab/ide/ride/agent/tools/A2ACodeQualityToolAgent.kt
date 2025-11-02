@@ -43,7 +43,7 @@ class A2ACodeQualityToolAgent(
     )
 ), A2AAgent {
 
-    override val agentId: String = "code-quality-a2a-${hashCode()}"
+    private val agentId: String = "code-quality-a2a-${hashCode()}"
     override val a2aAgentId: String = agentId
 
     // A2A message types this agent supports
@@ -146,7 +146,7 @@ class A2ACodeQualityToolAgent(
             )
 
             StepResult.success(
-                output = mapOf(
+                output = StepOutput.of(
                     "quality_findings" to qualityResults,
                     "aggregated_results" to aggregatedResults,
                     "comprehensive_report" to comprehensiveReport,
@@ -207,7 +207,7 @@ class A2ACodeQualityToolAgent(
                     "severity" to finding.severity.name,
                     "category" to finding.category,
                     "message" to finding.message,
-                    "suggestion" to finding.suggestion,
+                    "suggestion" to (finding.suggestion ?: ""),
                     "agent_type" to "CODE_QUALITY",
                     "analysis_type" to "quality_analysis"
                 )
@@ -284,10 +284,10 @@ class A2ACodeQualityToolAgent(
             }
 
             val agent = agents.first()
-            
+
             val request = AgentMessage.Request(
                 senderId = agentId,
-                requestId = "aggregation-${System.currentTimeMillis()}",
+                messageType = requestType,
                 payload = MessagePayload.CustomPayload(
                     type = requestType,
                     data = mapOf(
@@ -421,8 +421,8 @@ class A2ACodeQualityToolAgent(
         qualityResults: List<Map<String, Any>>,
         aggregatedResults: Map<String, Any>
     ): ComprehensiveQualityReport {
-        val totalIssues = qualityResults.size + 
-            (aggregatedResults["summary"] as? Map<String, Any>)?.get("total_issues") as? Int ?: 0
+        val aggregatedTotal: Int = ((aggregatedResults["summary"] as? Map<String, Any>)?.get("total_issues") as? Int) ?: 0
+        val totalIssues = qualityResults.size + aggregatedTotal
 
         val qualityScore = calculateQualityScore(qualityResults, aggregatedResults)
 
@@ -632,11 +632,10 @@ class A2ACodeQualityToolAgent(
             val event = AgentMessage.Event(
                 senderId = agentId,
                 eventType = eventType,
-                payload = payload,
-                broadcast = true
+                payload = payload
             )
 
-            messageBus.broadcast(event)
+            messageBus.publish(event)
             logger.debug("Published A2A event: $eventType")
 
         } catch (e: Exception) {
@@ -645,7 +644,10 @@ class A2ACodeQualityToolAgent(
     }
 
     // A2AAgent interface implementation
-    override suspend fun handleA2AMessage(message: AgentMessage): AgentMessage? {
+    override suspend fun handleA2AMessage(
+        message: AgentMessage,
+        messageBus: MessageBus
+    ): AgentMessage? {
         return when (message) {
             is AgentMessage.Request -> handleA2ARequest(message)
             is AgentMessage.Event -> {
@@ -685,6 +687,7 @@ class A2ACodeQualityToolAgent(
         // Создаем временный ToolPlanStep для анализа
         val tempStep = ToolPlanStep(
             id = "a2a-${request.id}",
+            description = "Run code quality analysis via A2A request",
             agentType = AgentType.CODE_QUALITY,
             input = StepInput(mapOf("files" to files))
         )
@@ -758,18 +761,10 @@ class A2ACodeQualityToolAgent(
         )
     }
 
-    override fun getSupportedMessageTypes(): Set<String> = supportedMessageTypes
+    // Удалены устаревшие override-методы, не предусмотренные интерфейсом A2AAgent
 
-    override fun getMessageHandler(): suspend (AgentMessage) -> Unit = { message ->
-        handleA2AMessage(message)
-    }
-
-    override suspend fun startA2AListening() {
-        logger.info("Starting A2A message listening for Code Quality Agent")
-    }
-
-    override suspend fun stopA2AListening() {
-        logger.info("Stopping A2A message listening for Code Quality Agent")
+    override fun dispose() {
+        super.dispose()
         aggregationScope.cancel()
     }
 

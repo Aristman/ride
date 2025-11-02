@@ -41,7 +41,7 @@ class A2ABugDetectionToolAgent(
     )
 ), A2AAgent {
 
-    override val agentId: String = "bug-detection-a2a-${hashCode()}"
+    private val agentId: String = "bug-detection-a2a-${hashCode()}"
     override val a2aAgentId: String = agentId
 
     private val analyzer by lazy { BugDetectionAnalyzer(llmProvider) }
@@ -134,7 +134,7 @@ class A2ABugDetectionToolAgent(
             )
 
             StepResult.success(
-                output = mapOf(
+                output = ru.marslab.ide.ride.model.tool.StepOutput.of(
                     "findings" to analysisResults,
                     "total_issues" to analysisResults.size,
                     "files_analyzed" to filesToAnalyze.size,
@@ -179,7 +179,7 @@ class A2ABugDetectionToolAgent(
             // Создаем A2A запрос на получение файлов
             val request = AgentMessage.Request(
                 senderId = agentId,
-                requestId = "file-request-${System.currentTimeMillis()}",
+                messageType = "FILE_DATA_REQUEST",
                 payload = MessagePayload.CustomPayload(
                     type = "FILE_DATA_REQUEST",
                     data = mapOf(
@@ -321,11 +321,10 @@ class A2ABugDetectionToolAgent(
             val event = AgentMessage.Event(
                 senderId = agentId,
                 eventType = eventType,
-                payload = payload,
-                broadcast = true // Рассылаем всем заинтересованным агентам
+                payload = payload
             )
 
-            messageBus.broadcast(event)
+            messageBus.publish(event)
             logger.debug("Published A2A event: $eventType")
 
         } catch (e: Exception) {
@@ -334,7 +333,10 @@ class A2ABugDetectionToolAgent(
     }
 
     // A2AAgent interface implementation
-    override suspend fun handleA2AMessage(message: AgentMessage): AgentMessage? {
+    override suspend fun handleA2AMessage(
+        message: AgentMessage,
+        messageBus: MessageBus
+    ): AgentMessage? {
         return when (message) {
             is AgentMessage.Request -> handleA2ARequest(message)
             is AgentMessage.Event -> {
@@ -404,6 +406,7 @@ class A2ABugDetectionToolAgent(
         // Создаем временный ToolPlanStep для анализа
         val tempStep = ToolPlanStep(
             id = "a2a-${request.id}",
+            description = "Run bug analysis via A2A request",
             agentType = AgentType.BUG_DETECTION,
             input = StepInput(mapOf("files" to files))
         )
@@ -453,21 +456,7 @@ class A2ABugDetectionToolAgent(
         }
     }
 
-    override fun getSupportedMessageTypes(): Set<String> = supportedMessageTypes
-
-    override fun getMessageHandler(): suspend (AgentMessage) -> Unit = { message ->
-        handleA2AMessage(message)
-    }
-
-    override suspend fun startA2AListening() {
-        logger.info("Starting A2A message listening for Bug Detection Agent")
-        // MessageBus subscription будет настроена через A2AAgentRegistry
-    }
-
-    override suspend fun stopA2AListening() {
-        logger.info("Stopping A2A message listening for Bug Detection Agent")
-        // Cleanup будет выполнен через A2AAgentRegistry
-    }
+    // Удалены устаревшие override-методы, не предусмотренные интерфейсом A2AAgent
 
     companion object {
         /**
