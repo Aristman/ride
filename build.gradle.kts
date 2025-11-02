@@ -55,7 +55,19 @@ dependencies {
     testImplementation("org.jetbrains.kotlin:kotlin-test")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
     testImplementation("io.mockk:mockk:1.13.8")
+    // JUnit 5 (Jupiter)
+    testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.2")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.2")
+    // JUnit 4 API still used by part of the test suite
     testImplementation("junit:junit:4.13.2")
+    // Enable running JUnit 3/4 tests on JUnit Platform
+    testRuntimeOnly("org.junit.vintage:junit-vintage-engine:5.10.2")
+
+    // Mockito for existing tests using mockito, any(), verify(), etc.
+    testImplementation("org.mockito:mockito-core:5.12.0")
+    testImplementation("org.mockito.kotlin:mockito-kotlin:5.3.1")
+    // Inline mock maker for final classes (often needed in Kotlin code)
+    testImplementation("org.mockito:mockito-inline:5.2.0")
 
     // A2A smoke tests (isolated) use the same testImplementation classpath
 }
@@ -89,6 +101,11 @@ tasks {
         useJUnit()
         // Run only our smoke test by default
         include("**/A2AAgentsSmokeTest.class")
+    }
+
+    // Use JUnit Platform for default tests (Jupiter)
+    withType<Test> {
+        useJUnitPlatform()
     }
 }
 

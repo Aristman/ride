@@ -10,6 +10,7 @@ import ru.marslab.ide.ride.agent.tools.A2AReportGeneratorToolAgent
 import ru.marslab.ide.ride.agent.BaseToolAgent
 import ru.marslab.ide.ride.agent.AgentOrchestrator
 import ru.marslab.ide.ride.agent.OrchestratorStep
+import ru.marslab.ide.ride.agent.ToolAgent
 import ru.marslab.ide.ride.integration.llm.LLMProvider
 import ru.marslab.ide.ride.model.agent.AgentRequest
 import ru.marslab.ide.ride.model.agent.AgentResponse
@@ -59,6 +60,8 @@ class EnhancedAgentOrchestratorA2A(
         a2aRegistry.registerAgent(reportGenerator)
 
         logger.info("Core A2A agents registered: ${listOf(scanner.a2aAgentId, codeQuality.a2aAgentId, bugDetection.a2aAgentId, reportGenerator.a2aAgentId)}")
+        // Регистрация адаптеров для остальных tool agents
+        registerLegacyToolAdapters()
     }
 
     /**
@@ -72,6 +75,7 @@ class EnhancedAgentOrchestratorA2A(
         a2aRegistry.registerAgent(codeQuality)
 
         logger.info("Basic A2A agents registered: ${listOf(scanner.a2aAgentId, codeQuality.a2aAgentId)}")
+        registerLegacyToolAdapters()
     }
 
     /**
@@ -85,6 +89,7 @@ class EnhancedAgentOrchestratorA2A(
         a2aRegistry.registerAgent(reportGenerator)
 
         logger.info("LLM-based A2A agents registered: ${listOf(bugDetection.a2aAgentId, reportGenerator.a2aAgentId)}")
+        registerLegacyToolAdapters()
     }
 
     /**
@@ -120,7 +125,8 @@ class EnhancedAgentOrchestratorA2A(
                     agentId = "enhanced-orchestrator-a2a",
                     requestId = a2aContext.executionId,
                     timestamp = System.currentTimeMillis()
-                )
+                ),
+                metadata = mapOf("planId" to a2aContext.executionId)
             )
 
             // Создаем план без выполнения
@@ -138,7 +144,8 @@ class EnhancedAgentOrchestratorA2A(
                     requestId = a2aContext.executionId,
                     timestamp = System.currentTimeMillis(),
                     result = result.content
-                )
+                ),
+                metadata = mapOf("planId" to a2aContext.executionId)
             )
 
             result
@@ -155,7 +162,8 @@ class EnhancedAgentOrchestratorA2A(
                     requestId = activeExecutions.keys.firstOrNull() ?: "unknown",
                     timestamp = System.currentTimeMillis(),
                     error = e.message
-                )
+                ),
+                metadata = mapOf("planId" to (activeExecutions.keys.firstOrNull() ?: "unknown"))
             )
 
             // Fallback к legacy режиму
@@ -384,7 +392,8 @@ class EnhancedAgentOrchestratorA2A(
                 var stepResult: Any = emptyMap<String, Any>()
 
                 while (attempt <= policy.maxAttempts && !success) {
-                    val request = buildA2ARequestForStep(step)
+                    val enrichedInput = enrichStepInput(step, stepResults)
+                    val request = buildA2ARequestForStep(step, enrichedInput)
                     response = messageBus.requestResponse(request, a2aConfig.getDefaultTimeoutMs())
 
                     if (response.success) {
@@ -531,37 +540,43 @@ class EnhancedAgentOrchestratorA2A(
         }
     }
 
-    private fun buildA2ARequestForStep(step: PlanStep): AgentMessage.Request {
+    private fun buildA2ARequestForStep(step: PlanStep, input: Map<String, Any> = step.input): AgentMessage.Request {
         val (messageType, payload) = when (step.agentType) {
             AgentType.PROJECT_SCANNER -> {
                 val reqType = if (step.input.containsKey("structure_only")) "PROJECT_STRUCTURE_REQUEST" else "FILE_DATA_REQUEST"
                 reqType to MessagePayload.CustomPayload(
                     type = reqType,
-                    data = step.input
+                    data = input
                 )
             }
             AgentType.BUG_DETECTION -> {
                 "BUG_ANALYSIS_REQUEST" to MessagePayload.CustomPayload(
                     type = "BUG_ANALYSIS_REQUEST",
-                    data = step.input
+                    data = input
                 )
             }
             AgentType.CODE_QUALITY -> {
                 "CODE_QUALITY_REQUEST" to MessagePayload.CustomPayload(
                     type = "CODE_QUALITY_REQUEST",
-                    data = step.input
+                    data = input
                 )
             }
             AgentType.REPORT_GENERATOR -> {
                 "REPORT_GENERATION_REQUEST" to MessagePayload.CustomPayload(
                     type = "REPORT_GENERATION_REQUEST",
-                    data = step.input
+                    data = input
                 )
             }
             else -> {
                 "TOOL_EXECUTION_REQUEST" to MessagePayload.CustomPayload(
                     type = "TOOL_EXECUTION_REQUEST",
-                    data = step.input
+                    data = mapOf(
+                        "stepId" to step.id,
+                        "description" to step.title,
+                        "input" to input,
+                        "dependencies" to step.dependencies.toList(),
+                        "agentType" to step.agentType.name
+                    )
                 )
             }
         }
@@ -602,7 +617,9 @@ class EnhancedAgentOrchestratorA2A(
                 )
             }
             is MessagePayload.TextPayload -> payload.text
-            is MessagePayload.CustomPayload -> payload.data
+            is MessagePayload.CustomPayload -> if (payload.type == "TOOL_EXECUTION_RESULT") {
+                payload.data["output"] ?: payload.data
+            } else payload.data
             is MessagePayload.ErrorPayload -> mapOf("error" to payload.error)
             is MessagePayload.ProgressPayload -> mapOf("status" to payload.status, "progress" to payload.progress)
             is MessagePayload.ExecutionStatusPayload -> mapOf("status" to payload.status, "result" to (payload.result ?: ""))
@@ -610,6 +627,43 @@ class EnhancedAgentOrchestratorA2A(
         }
     }
 
+    private fun enrichStepInput(step: PlanStep, stepResults: Map<String, Any>): Map<String, Any> {
+        // merge original input with data from dependencies if known
+        val base = step.input.toMutableMap()
+        // if any dependency produced files, propagate
+        val filesFromDeps = step.dependencies.mapNotNull { depId ->
+            val res = stepResults[depId]
+            when (res) {
+                is Map<*, *> -> (res["files"] as? List<*>)?.filterIsInstance<String>()
+                else -> null
+            }
+        }.flatten()
+        if (filesFromDeps.isNotEmpty()) {
+            base["files"] = filesFromDeps
+        }
+        return base
+    }
+
+    /**
+     * Регистрирует A2A адаптеры для всех legacy ToolAgents, чтобы обеспечить покрытие для остальных типов
+     */
+    private suspend fun registerLegacyToolAdapters() {
+        runCatching {
+            val registry = baseOrchestrator.getToolAgentRegistry()
+            val tools = registry.listAll()
+            tools.forEach { tool ->
+                val adapter = A2AAgentAdapter.create(
+                    agent = tool,
+                    agentType = tool.agentType,
+                    supportedMessageTypes = setOf("TOOL_EXECUTION_REQUEST", "AGENT_REQUEST", "EXECUTION_STATUS")
+                )
+                a2aRegistry.registerAgent(adapter)
+            }
+            logger.info("Registered A2A adapters for legacy tools: ${tools.map { it.agentType }}")
+        }.onFailure { e ->
+            logger.warn("Failed to register legacy tool adapters", e)
+        }
+    }
     
     private fun subscribeToA2AEvents() {
         // Подписываемся на сообщения от A2A агентов
