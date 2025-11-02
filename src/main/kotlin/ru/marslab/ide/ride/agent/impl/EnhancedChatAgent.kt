@@ -246,7 +246,7 @@ class EnhancedChatAgent(
             }
 
             // Этап 3: Выполнение плана через оркестратор
-            return executePlan(enrichedPlan, request, uncertaintyResult, optimizedPrompt)
+            return executePreparedPlan(enrichedPlan, request, uncertaintyResult, optimizedPrompt)
 
         } catch (e: Exception) {
             logger.error("Error in medium complexity planning", e)
@@ -304,46 +304,20 @@ class EnhancedChatAgent(
     }
 
     /**
-     * Выполняет план через оркестратор
+     * Выполняет готовый план через оркестратор
      */
-    private suspend fun executePlan(
+    private suspend fun executePreparedPlan(
         plan: ExecutionPlan,
         request: AgentRequest,
         uncertaintyResult: UncertaintyResult,
         optimizedPrompt: String
     ): AgentResponse {
-        logger.info("Executing plan ${plan.id} with ${plan.steps.size} steps")
+        logger.info("Executing prepared plan ${plan.id} with ${plan.steps.size} steps")
 
-        val steps = mutableListOf<String>()
-
-        val result = orchestrator.processEnhanced(request) { step ->
-            val stepInfo = when (step) {
-                is ru.marslab.ide.ride.agent.OrchestratorStep.PlanningComplete ->
-                    "📋 Планирование: ${step.content}"
-
-                is ru.marslab.ide.ride.agent.OrchestratorStep.TaskComplete ->
-                    "🔍 Задача ${step.taskId}: ${step.taskTitle}"
-
-                is ru.marslab.ide.ride.agent.OrchestratorStep.AllComplete ->
-                    "✅ Все задачи выполнены: ${step.content}"
-
-                is ru.marslab.ide.ride.agent.OrchestratorStep.Error ->
-                    "❌ Ошибка: ${step.error}"
-            }
-            steps.add(stepInfo)
-        }
+        val result = orchestrator.executePreparedPlan(plan)
 
         // Формируем итоговый ответ
         val content = buildString {
-            appendLine("## Результат выполнения задачи")
-            appendLine()
-            if (steps.isNotEmpty()) {
-                appendLine("### Выполненные шаги:")
-                steps.forEach { step ->
-                    appendLine("- $step")
-                }
-                appendLine()
-            }
             appendLine(result.content)
         }
 
@@ -354,7 +328,7 @@ class EnhancedChatAgent(
                     "score" to uncertaintyResult.score,
                     "complexity" to uncertaintyResult.complexity.name,
                     "reasoning" to uncertaintyResult.reasoning,
-                    "processing_strategy" to "planned_execution_optimized"
+                    "processing_strategy" to "prepared_plan_execution"
                 ),
                 "plan_id" to plan.id,
                 "plan_steps" to plan.steps.size,

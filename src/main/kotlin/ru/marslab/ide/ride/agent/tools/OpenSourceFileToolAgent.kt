@@ -1,5 +1,6 @@
 package ru.marslab.ide.ride.agent.tools
 
+import com.intellij.openapi.application.ApplicationManager
 import ru.marslab.ide.ride.agent.BaseToolAgent
 import ru.marslab.ide.ride.model.orchestrator.AgentType
 import ru.marslab.ide.ride.model.orchestrator.ExecutionContext
@@ -9,6 +10,8 @@ import ru.marslab.ide.ride.model.tool.ToolPlanStep
 import ru.marslab.ide.ride.model.tool.StepInput
 import ru.marslab.ide.ride.service.rag.RagSourceLinkService
 import ru.marslab.ide.ride.model.rag.RagChunkOpenAction
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Инструмент для открытия файлов в IDE по запросу LLM/оркестратора.
@@ -43,14 +46,25 @@ class OpenSourceFileToolAgent : BaseToolAgent(
         val startLine = step.input.get<Int>("start_line") ?: 1
         val endLine = step.input.get<Int>("end_line") ?: startLine
 
-        val command = "open?path=${'$'}path&startLine=${'$'}startLine&endLine=${'$'}endLine"
+        val command = "open?path=$path&startLine=$startLine&endLine=$endLine"
         val service = RagSourceLinkService.getInstance()
 
         // Попытка распарсить и выполнить через сервис
         val openAction = service.extractSourceInfo(command)
             ?: RagChunkOpenAction(command = command, path = path, startLine = startLine, endLine = endLine)
 
-        val success = service.handleOpenAction(openAction)
+        // Выполняем UI операцию в EDT
+        val success = try {
+            withContext(Dispatchers.Main) {
+                var result = false
+                ApplicationManager.getApplication().invokeAndWait {
+                    result = service.handleOpenAction(openAction)
+                }
+                result
+            }
+        } catch (e: Exception) {
+            false
+        }
 
         return if (success) {
             StepResult.success(
@@ -64,7 +78,7 @@ class OpenSourceFileToolAgent : BaseToolAgent(
             )
         } else {
             StepResult.error(
-                error = "Не удалось открыть файл: ${'$'}path",
+                error = "Не удалось открыть файл: $path",
                 output = StepOutput.of(
                     "path" to path,
                     "start_line" to startLine,

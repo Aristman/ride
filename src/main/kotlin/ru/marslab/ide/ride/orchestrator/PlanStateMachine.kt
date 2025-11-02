@@ -101,6 +101,7 @@ class PlanStateMachine {
                 when (toState) {
                     PlanState.IN_PROGRESS -> event is PlanEvent.Start
                     PlanState.REQUIRES_INPUT -> event is PlanEvent.Start
+                    PlanState.COMPLETED -> event is PlanEvent.Complete
                     PlanState.FAILED -> event is PlanEvent.Error
                     PlanState.CANCELLED -> event is PlanEvent.Cancel
                     else -> false
@@ -183,6 +184,7 @@ class PlanStateMachine {
                         }
                     }
 
+                    is PlanEvent.Complete -> PlanState.COMPLETED
                     is PlanEvent.Error -> PlanState.FAILED
                     is PlanEvent.Cancel -> PlanState.CANCELLED
                     else -> currentState
@@ -274,6 +276,7 @@ class PlanStateMachine {
             PlanState.ANALYZING -> listOf(
                 PlanState.IN_PROGRESS,
                 PlanState.REQUIRES_INPUT,
+                PlanState.COMPLETED,
                 PlanState.FAILED,
                 PlanState.CANCELLED
             )

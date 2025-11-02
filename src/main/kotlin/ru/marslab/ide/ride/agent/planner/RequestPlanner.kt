@@ -37,6 +37,7 @@ class RequestPlanner {
 
         // Создаем шаги плана
         val steps = createPlanSteps(requestAnalysis, uncertainty, context)
+        logger.info("Created ${steps.size} plan steps: ${steps.map { "${it.title} (${it.agentType})" }}")
 
         // Формируем план
         return ExecutionPlan(
@@ -64,7 +65,7 @@ class RequestPlanner {
      */
     private fun analyzeRequest(request: String, uncertainty: UncertaintyResult, context: ChatContext): RequestAnalysis {
         val taskType = determineTaskType(request, uncertainty)
-        val requiredTools = determineRequiredTools(taskType, uncertainty)
+        val requiredTools = determineRequiredTools(taskType, uncertainty, request)
         val estimatedComplexity = uncertainty.complexity
         val estimatedSteps = estimateSteps(taskType, uncertainty.complexity)
         val requiresUserInput = determineUserInputRequirement(taskType, uncertainty)
@@ -116,6 +117,10 @@ class RequestPlanner {
             requestLower.contains("миграц") -> TaskType.MIGRATION
             requestLower.contains("качеств") || requestLower.contains("code review") -> TaskType.CODE_ANALYSIS
             requestLower.contains("отчет") || requestLower.contains("report") -> TaskType.REPORT_GENERATION
+            // Проверяем файловые операции в первую очередь
+            requestLower.contains("открой") || requestLower.contains("покаж") || requestLower.contains("прочитай") ||
+            requestLower.contains("open") || requestLower.contains("view") || requestLower.contains("read") ||
+            (requestLower.contains("файл") && (requestLower.contains("path") || requestLower.contains("путь"))) -> TaskType.SIMPLE_QUERY
             uncertainty.complexity == ComplexityLevel.LOW -> TaskType.SIMPLE_QUERY
             else -> TaskType.COMPLEX_MULTI_STEP
         }
@@ -124,8 +129,9 @@ class RequestPlanner {
     /**
      * Определяет необходимые инструменты для задачи
      */
-    private fun determineRequiredTools(taskType: TaskType, uncertainty: UncertaintyResult): Set<AgentType> {
+    private fun determineRequiredTools(taskType: TaskType, uncertainty: UncertaintyResult, request: String): Set<AgentType> {
         val tools = mutableSetOf<AgentType>()
+        val requestLower = request.lowercase()
 
         when (taskType) {
             TaskType.ARCHITECTURE_ANALYSIS -> {
@@ -175,7 +181,13 @@ class RequestPlanner {
             }
 
             TaskType.SIMPLE_QUERY -> {
-                // Для простых запросов дополнительные инструменты не нужны
+                // Проверяем, не является ли это файловой операцией
+                if (requestLower.contains("открой") || requestLower.contains("покаж") || requestLower.contains("прочитай") ||
+                    requestLower.contains("open") || requestLower.contains("view") || requestLower.contains("read") ||
+                    (requestLower.contains("файл") && (requestLower.contains("path") || requestLower.contains("путь")))) {
+                    tools.add(AgentType.FILE_OPERATIONS)
+                }
+                // Для остальных простых запросов инструменты не нужны
             }
 
             TaskType.COMPLEX_MULTI_STEP -> {
@@ -314,17 +326,57 @@ class RequestPlanner {
     // --- Фабричные методы для создания шагов ---
 
     private fun createSimpleQueryStep(analysis: RequestAnalysis, counter: MutableMap<String, Int>): PlanStep {
-        return PlanStep(
-            id = generateStepId("simple_query", counter),
-            title = "Обработка простого запроса",
-            description = "Прямой ответ на простой запрос без дополнительного анализа",
-            agentType = AgentType.USER_INTERACTION,
-            input = mapOf(
-                "request" to (analysis.parameters["original_request"] ?: ""),
-                "complexity" to "low"
-            ),
-            estimatedDurationMs = 1000
-        )
+        // Проверяем, не является ли запрос файловой операцией
+        val request = (analysis.parameters["original_request"] as? String) ?: ""
+        val isFileOperation = request.lowercase().contains("открой") ||
+                               request.lowercase().contains("покаж") ||
+                               request.lowercase().contains("прочитай") ||
+                               request.lowercase().contains("open") ||
+                               request.lowercase().contains("view") ||
+                               request.lowercase().contains("read") ||
+                               (request.lowercase().contains("файл") &&
+                                (request.lowercase().contains("path") || request.lowercase().contains("путь")))
+
+        return if (isFileOperation && analysis.requiredTools.contains(AgentType.FILE_OPERATIONS)) {
+            // Создаем шаг для файловой операции
+            val filePath = extractFilePath(request)
+            logger.info("Creating FILE_OPERATIONS step for path: $filePath")
+            PlanStep(
+                id = generateStepId("file_operation", counter),
+                title = "Открытие файла",
+                description = "Открытие файла в IDE по запросу пользователя",
+                agentType = AgentType.FILE_OPERATIONS,
+                input = mapOf(
+                    "path" to filePath,
+                    "start_line" to 1,
+                    "end_line" to 100, // Открываем первые 100 строк
+                    "request" to request
+                ),
+                estimatedDurationMs = 2000
+            )
+        } else {
+            // Обычный простой запрос
+            PlanStep(
+                id = generateStepId("simple_query", counter),
+                title = "Обработка простого запроса",
+                description = "Прямой ответ на простой запрос без дополнительного анализа",
+                agentType = AgentType.USER_INTERACTION,
+                input = mapOf(
+                    "request" to request,
+                    "complexity" to "low"
+                ),
+                estimatedDurationMs = 1000
+            )
+        }
+    }
+
+    /**
+     * Извлекает путь к файлу из запроса
+     */
+    private fun extractFilePath(request: String): String {
+        val regex = Regex("""(?:файл|file)?\s*([^\s]+\.(?:md|txt|kt|java|py|js|ts|json|yaml|yml|xml|gradle|properties))""", RegexOption.IGNORE_CASE)
+        val match = regex.find(request)
+        return match?.groupValues?.get(1)?.trim() ?: request
     }
 
     private fun createProjectScanStep(analysis: RequestAnalysis, counter: MutableMap<String, Int>): PlanStep {

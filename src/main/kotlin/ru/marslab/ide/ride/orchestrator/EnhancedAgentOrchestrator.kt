@@ -455,23 +455,50 @@ class EnhancedAgentOrchestrator(
         return steps
     }
 
-    private suspend fun executePlan(
-        plan: ExecutionPlan,
-        onStepComplete: suspend (OrchestratorStep) -> Unit
-    ): AgentResponse {
+    /**
+     * Выполняет готовый план извне
+     */
+    suspend fun executePreparedPlan(plan: ExecutionPlan): AgentResponse {
+        logger.info("Executing prepared plan ${plan.id} with ${plan.steps.size} steps")
+
         return try {
             // Переводим план в состояние выполнения
             val executingPlan = stateMachine.transition(plan, PlanEvent.Start(plan.analysis))
             activePlans[plan.id] = executingPlan
             planStorage.update(executingPlan)
 
+            // Создаем коллбэк для шагов
+            val onStepComplete: suspend (OrchestratorStep) -> Unit = { step ->
+                logger.info("Step completed: ${step.javaClass.simpleName}")
+            }
+
+            // Выполняем план
+            executePlan(executingPlan, onStepComplete)
+
+        } catch (e: Exception) {
+            logger.error("Failed to execute prepared plan ${plan.id}", e)
+            AgentResponse.error(
+                error = e.message ?: "Failed to execute plan",
+                content = "Произошла ошибка при выполнении плана: ${e.message}"
+            )
+        }
+    }
+
+    private suspend fun executePlan(
+        plan: ExecutionPlan,
+        onStepComplete: suspend (OrchestratorStep) -> Unit
+    ): AgentResponse {
+        return try {
+            // План уже переведен в ANALYZING в executePreparedPlan, используем его как inProgressPlan
+            val inProgressPlan = plan
+
             // Подготавливаем сканирование проекта если требуется
-            val projectPath = executingPlan.analysis.context.projectPath
-            if (projectPath != null && executingPlan.steps.any { it.agentType.toString().contains("project_scanner") }) {
-                logger.info("Preparing project scan for plan ${executingPlan.id}")
+            val projectPath = inProgressPlan.analysis.context.projectPath
+            if (projectPath != null && inProgressPlan.steps.any { it.agentType.toString().contains("project_scanner") }) {
+                logger.info("Preparing project scan for plan ${inProgressPlan.id}")
 
                 val scanPreparation = projectScannerIntegration.prepareProjectScan(
-                    plan = executingPlan,
+                    plan = inProgressPlan,
                     projectPath = projectPath,
                     forceRescan = false
                 )
@@ -481,9 +508,9 @@ class EnhancedAgentOrchestrator(
                         logger.info("Project scan prepared: ${scanPreparation.files.size} files, from cache: ${scanPreparation.fromCache}")
 
                         // Создаем подписку на дельты для long-running планов
-                        if (executingPlan.steps.size > 3) { // Если в плане больше 3 шагов
+                        if (inProgressPlan.steps.size > 3) { // Если в плане больше 3 шагов
                             projectScannerIntegration.createDeltaSubscriptionForPlan(
-                                plan = executingPlan,
+                                plan = inProgressPlan,
                                 projectPath = projectPath
                             ) { deltaUpdate ->
                                 logger.info("Files changed during plan execution: ${deltaUpdate.changedFiles.size}")
@@ -502,23 +529,28 @@ class EnhancedAgentOrchestrator(
             val completedSteps = mutableListOf<String>()
             val stepResults = mutableMapOf<String, Any>() // Результаты шагов для передачи
 
-            for (step in executingPlan.steps) {
+            logger.info("Starting execution of ${inProgressPlan.steps.size} steps")
+            inProgressPlan.steps.forEachIndexed { index, step ->
+                logger.info("Step $index: ${step.title} (${step.agentType}) - status: ${step.status}")
+            }
+
+            for (step in inProgressPlan.steps) {
                 if (step.status != StepStatus.PENDING) continue
 
                 // Проверяем зависимости
                 if (step.dependencies.all { it in completedSteps }) {
                     // Выполняем шаг с учётом retry/loop
                     val stepResult = if (step.retryPolicy != null || step.loopConfig != null) {
-                        executeStepWithRetryLoop(step, executingPlan.analysis.context, stepResults)
+                        executeStepWithRetryLoop(step, inProgressPlan.analysis.context, stepResults)
                     } else {
-                        executeStep(step, executingPlan.analysis.context, stepResults)
+                        executeStep(step, inProgressPlan.analysis.context, stepResults)
                     }
 
                     completedSteps.add(step.id)
                     stepResults[step.id] = stepResult // Сохраняем результат
 
                     // Обновляем план
-                    val updatedPlan = executingPlan.updateStepStatus(step.id, StepStatus.COMPLETED, stepResult)
+                    val updatedPlan = inProgressPlan.updateStepStatus(step.id, StepStatus.COMPLETED, stepResult)
                     activePlans[plan.id] = updatedPlan
                     planStorage.update(updatedPlan)
 
@@ -527,12 +559,12 @@ class EnhancedAgentOrchestrator(
             }
 
             // Завершаем план
-            val finalPlan = stateMachine.transition(executingPlan, PlanEvent.Complete)
+            val finalPlan = stateMachine.transition(inProgressPlan, PlanEvent.Complete)
             activePlans[plan.id] = finalPlan
             planStorage.update(finalPlan)
 
             // Извлекаем отчет из результата REPORT_GENERATOR
-            val reportGeneratorStep = executingPlan.steps.find { it.agentType == AgentType.REPORT_GENERATOR }
+            val reportGeneratorStep = inProgressPlan.steps.find { it.agentType == AgentType.REPORT_GENERATOR }
             val finalContent = if (reportGeneratorStep != null) {
                 val reportResult = stepResults[reportGeneratorStep.id]
                 logger.info("Report result type: ${reportResult?.javaClass?.name}")
@@ -571,8 +603,49 @@ class EnhancedAgentOrchestrator(
                     }
                 }
             } else {
-                logger.warn("REPORT_GENERATOR step not found")
-                "План успешно выполнен. Завершено ${completedSteps.size} шагов."
+                // Формируем контент на основе результатов выполнения, даже без REPORT_GENERATOR
+                buildString {
+                    appendLine("## Результат выполнения задачи")
+                    appendLine()
+
+                    if (completedSteps.isNotEmpty()) {
+                        appendLine("### Выполненные шаги:")
+                        completedSteps.forEach { stepId ->
+                            val step = inProgressPlan.steps.find { it.id == stepId }
+                            if (step != null) {
+                                appendLine("- ✅ ${step.title}")
+                            }
+                        }
+                        appendLine()
+                    }
+
+                    // Добавляем специфичные результаты если они есть
+                    stepResults.forEach { (stepId, result) ->
+                        val step = inProgressPlan.steps.find { it.id == stepId }
+                        if (step != null) {
+                            when (step.agentType) {
+                                AgentType.FILE_OPERATIONS -> {
+                                    // Для файловых операций показываем информацию об открытом файле
+                                    val path = if (result is Map<*, *>) result["path"] as? String else null
+                                    if (path != null) {
+                                        appendLine("📄 **Файл открыт**: `$path`")
+                                        appendLine()
+                                    }
+                                }
+                                else -> {
+                                    // Для остальных шагов добавляем базовую информацию
+                                    appendLine("### ✅ ${step.title}")
+                                    appendLine("Шаг выполнен успешно.")
+                                    appendLine()
+                                }
+                            }
+                        }
+                    }
+
+                    if (completedSteps.isEmpty()) {
+                        appendLine("Задача выполнена успешно.")
+                    }
+                }
             }
 
             AgentResponse.success(
@@ -583,7 +656,7 @@ class EnhancedAgentOrchestrator(
                 )
             ).also {
                 // Очищаем ресурсы ProjectScanner после успешного выполнения
-                projectScannerIntegration.cleanupForPlan(executingPlan)
+                projectScannerIntegration.cleanupForPlan(inProgressPlan)
             }
 
         } catch (e: Exception) {
