@@ -55,6 +55,41 @@ dependencies {
     testImplementation("org.jetbrains.kotlin:kotlin-test")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
     testImplementation("io.mockk:mockk:1.13.8")
+    testImplementation("junit:junit:4.13.2")
+
+    // A2A smoke tests (isolated) use the same testImplementation classpath
+}
+
+// Isolated source set for headless A2A smoke tests
+sourceSets {
+    val a2aTest by creating {
+        java.srcDir("src/a2aTest/kotlin")
+        resources.srcDir("src/a2aTest/resources")
+        compileClasspath += sourceSets.main.get().output + configurations.testCompileClasspath.get()
+        runtimeClasspath += output + configurations.testRuntimeClasspath.get() + compileClasspath
+    }
+}
+
+configurations {
+    named("a2aTestImplementation") {
+        extendsFrom(testImplementation.get())
+    }
+    named("a2aTestRuntimeOnly") {
+        extendsFrom(testRuntimeOnly.get())
+    }
+}
+
+tasks {
+    // Isolated test task for A2A smoke tests
+    register<Test>("a2aTest") {
+        description = "Runs A2A headless smoke tests"
+        group = "verification"
+        testClassesDirs = sourceSets["a2aTest"].output.classesDirs
+        classpath = sourceSets["a2aTest"].runtimeClasspath
+        useJUnit()
+        // Run only our smoke test by default
+        include("**/A2AAgentsSmokeTest.class")
+    }
 }
 
 intellijPlatform {
