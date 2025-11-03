@@ -151,9 +151,9 @@ class EnhancedChatAgentTest : BasePlatformTestCase() {
             parameters = LLMParameters.BALANCED
         )
 
-        // Мокируем возобновление плана
+        // Мокируем обычный запрос
         coEvery {
-            mockOrchestrator.processResumePlan(planId, userInput, any())
+            mockOrchestrator.processRequest(any(), any())
         } returns AgentResponse.success(
             content = "План продолжает выполнение",
             metadata = mapOf("plan_id" to planId)
@@ -166,7 +166,7 @@ class EnhancedChatAgentTest : BasePlatformTestCase() {
         assertTrue(response.success)
         assertTrue(response.content.contains("План возобновлён"))
         assertEquals(planId, response.metadata["plan_id"])
-        coVerify(exactly = 1) { mockOrchestrator.processResumePlan(planId, userInput, any()) }
+        coVerify(exactly = 1) { mockOrchestrator.processRequest(any(), any()) }
     }
 
     @Test
@@ -272,7 +272,7 @@ class EnhancedChatAgentTest : BasePlatformTestCase() {
 
         // Мокируем ошибку
         coEvery {
-            mockOrchestrator.processResumePlan(planId, userInput, any())
+            mockOrchestrator.processRequest(any(), any())
         } returns AgentResponse.error(
             error = "План не найден",
             content = "План $planId не существует"

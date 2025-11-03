@@ -128,59 +128,22 @@ class ChatService {
             return
         }
 
-        val pretty = when (val payload = event.payload) {
-            is MessagePayload.ExecutionStatusPayload -> {
-                val status = payload.status
-                val agent = payload.agentId ?: event.senderId
-                val result = payload.result
-                val error = payload.error
-                val planId = event.metadata["planId"] ?: payload.requestId ?: ""
-                buildString {
-                    appendLine("### A2A: ${event.eventType}")
-                    appendLine("- agent: $agent")
-                    appendLine("- status: $status")
-                    if (planId.toString().isNotBlank()) appendLine("- planId: $planId")
-                    if (!result.isNullOrBlank()) appendLine("- result: $result")
-                    if (!error.isNullOrBlank()) appendLine("- error: $error")
-                }
-            }
-            is MessagePayload.ProgressPayload -> {
-                val planId = event.metadata["planId"] ?: ""
-                val attempt = event.metadata["attempt"]
-                val attempts = event.metadata["attempts"]
-                buildString {
-                    appendLine("### A2A Progress: ${event.eventType}")
-                    appendLine("- step: ${payload.stepId}")
-                    appendLine("- status: ${payload.status}")
-                    appendLine("- progress: ${payload.progress}%")
-                    if (planId.toString().isNotBlank()) appendLine("- planId: $planId")
-                    if (attempt != null) appendLine("- attempt: $attempt")
-                    if (attempts != null) appendLine("- attempts: $attempts")
-                    if (!payload.message.isNullOrBlank()) appendLine("- message: ${payload.message}")
-                }
-            }
-            is MessagePayload.CustomPayload -> {
-                val type = payload.type
-                val data = payload.data
-                buildString {
-                    appendLine("### A2A Event: ${event.eventType}")
-                    appendLine("- type: $type")
-                    appendLine("- sender: ${event.senderId}")
-                    if (data.isNotEmpty()) appendLine("- data: ${simpleJsonString(data)}")
-                }
-            }
-            else -> {
-                "### A2A Event: ${event.eventType} (payload: ${payload::class.simpleName})\n- sender: ${event.senderId}"
-            }
-        }
+        // Создаем системное сообщение для отображения в чате
+        val systemMessage = createSystemMessageForEvent(event)
+
+        // Создаем детальную информацию для раскрытия по клику
+        val detailedInfo = createDetailedInfoForEvent(event)
 
         val message = Message(
-            content = pretty,
-            role = MessageRole.ASSISTANT,
+            content = systemMessage,
+            role = MessageRole.SYSTEM,
             metadata = mapOf(
-                "type" to "a2a_event",
+                "type" to "a2a_system_event",
                 "eventType" to event.eventType,
-                "senderId" to event.senderId
+                "senderId" to event.senderId,
+                "detailedInfo" to detailedInfo,
+                "agentType" to extractAgentType(event.senderId),
+                "stage" to extractStageFromEvent(event.eventType)
             )
         )
         sendProgressMessageToUI(message)
@@ -189,6 +152,137 @@ class ChatService {
         if (event.eventType == "PLAN_EXECUTION_COMPLETED" || event.eventType == "PLAN_EXECUTION_FAILED" ||
             event.eventType == "ORCHESTRATION_COMPLETED" || event.eventType == "ORCHESTRATION_FAILED") {
             currentPlanId = null
+        }
+    }
+
+    /**
+     * Создает короткое системное сообщение для отображения в чате
+     */
+    private fun createSystemMessageForEvent(event: AgentMessage.Event): String {
+        val agentType = extractAgentType(event.senderId)
+        val stage = extractStageFromEvent(event.eventType)
+
+        return when (event.eventType) {
+            "TOOL_EXECUTION_STARTED" -> "🔄 $agentType: начало работы"
+            "TOOL_EXECUTION_COMPLETED" -> "✅ $agentType: выполнено"
+            "TOOL_EXECUTION_FAILED" -> "❌ $agentType: ошибка"
+            "STEP_STARTED" -> "🔄 $stage"
+            "STEP_COMPLETED" -> "✅ $stage завершен"
+            "STEP_FAILED" -> "❌ $stage: ошибка"
+            "ORCHESTRATION_STARTED" -> "🚀 Запуск многошагового выполнения"
+            "PLAN_EXECUTION_STARTED" -> "📋 Начало выполнения плана"
+            "PLAN_EXECUTION_COMPLETED" -> "🎉 План успешно выполнен"
+            "PLAN_EXECUTION_FAILED" -> "⚠️ Выполнение плана прервано"
+            "ORCHESTRATION_COMPLETED" -> "🏁 Все задачи завершены"
+            else -> "ℹ️ $agentType: $stage"
+        }
+    }
+
+    /**
+     * Создает детальную информацию для отображения при клике на системное сообщение
+     */
+    private fun createDetailedInfoForEvent(event: AgentMessage.Event): String {
+        return when (val payload = event.payload) {
+            is MessagePayload.ExecutionStatusPayload -> {
+                val status = payload.status
+                val agent = payload.agentId ?: event.senderId
+                val result = payload.result
+                val error = payload.error
+                val planId = event.metadata["planId"] ?: payload.requestId ?: ""
+                buildString {
+                    appendLine("## Детальная информация A2A события")
+                    appendLine("**Тип события:** ${event.eventType}")
+                    appendLine("**Агент:** $agent")
+                    appendLine("**Статус:** $status")
+                    if (planId.toString().isNotBlank()) appendLine("**ID плана:** $planId")
+                    if (!result.isNullOrBlank()) appendLine("**Результат:** $result")
+                    if (!error.isNullOrBlank()) appendLine("**Ошибка:** $error")
+                    appendLine("**Время:** ${java.time.Instant.now()}")
+                }
+            }
+            is MessagePayload.ProgressPayload -> {
+                val planId = event.metadata["planId"] ?: ""
+                val attempt = event.metadata["attempt"]
+                val attempts = event.metadata["attempts"]
+                buildString {
+                    appendLine("## Детальная информация о прогрессе")
+                    appendLine("**Тип события:** ${event.eventType}")
+                    appendLine("**Шаг:** ${payload.stepId}")
+                    appendLine("**Статус:** ${payload.status}")
+                    appendLine("**Прогресс:** ${payload.progress}%")
+                    if (planId.toString().isNotBlank()) appendLine("**ID плана:** $planId")
+                    if (attempt != null) appendLine("**Попытка:** $attempt")
+                    if (attempts != null) appendLine("**Всего попыток:** $attempts")
+                    if (!payload.message.isNullOrBlank()) appendLine("**Сообщение:** ${payload.message}")
+                    appendLine("**Время:** ${java.time.Instant.now()}")
+                }
+            }
+            is MessagePayload.CustomPayload -> {
+                val type = payload.type
+                val data = payload.data
+                buildString {
+                    appendLine("## Детальная информация о событии")
+                    appendLine("**Тип события:** ${event.eventType}")
+                    appendLine("**Тип данных:** $type")
+                    appendLine("**Отправитель:** ${event.senderId}")
+                    if (data.isNotEmpty()) {
+                        appendLine("**Данные:**")
+                        appendLine("```json")
+                        appendLine(simpleJsonString(data))
+                        appendLine("```")
+                    }
+                    appendLine("**Время:** ${java.time.Instant.now()}")
+                }
+            }
+            else -> {
+                buildString {
+                    appendLine("## Информация о событии")
+                    appendLine("**Тип:** ${event.eventType}")
+                    appendLine("**Payload:** ${payload::class.simpleName}")
+                    appendLine("**Отправитель:** ${event.senderId}")
+                    appendLine("**Время:** ${java.time.Instant.now()}")
+                }
+            }
+        }
+    }
+
+    /**
+     * Извлекает тип агента из ID отправителя
+     */
+    private fun extractAgentType(senderId: String): String {
+        return when {
+            senderId.contains("code-generator") -> "Генератор кода"
+            senderId.contains("project-scanner") -> "Сканер проекта"
+            senderId.contains("llm-review") -> "LLM ревьюер"
+            senderId.contains("bug-detection") -> "Детектор багов"
+            senderId.contains("architecture") -> "Анализатор архитектуры"
+            senderId.contains("quality") -> "Анализатор качества"
+            senderId.contains("report") -> "Генератор отчетов"
+            senderId.contains("file-operations") -> "Операции с файлами"
+            senderId.contains("embedding") -> "Индексатор"
+            senderId.contains("documentation") -> "Генератор документации"
+            senderId.contains("orchestrator") -> "Оркестратор"
+            else -> "Агент ${senderId.take(8)}..."
+        }
+    }
+
+    /**
+     * Извлекает стадию работы из типа события
+     */
+    private fun extractStageFromEvent(eventType: String): String {
+        return when (eventType) {
+            "TOOL_EXECUTION_STARTED" -> "Запуск"
+            "TOOL_EXECUTION_COMPLETED" -> "Завершение"
+            "TOOL_EXECUTION_FAILED" -> "Ошибка"
+            "STEP_STARTED" -> "Выполнение шага"
+            "STEP_COMPLETED" -> "Шаг завершен"
+            "STEP_FAILED" -> "Шаг завершился с ошибкой"
+            "ORCHESTRATION_STARTED" -> "Начало оркестрации"
+            "PLAN_EXECUTION_STARTED" -> "Начало выполнения плана"
+            "PLAN_EXECUTION_COMPLETED" -> "План выполнен"
+            "PLAN_EXECUTION_FAILED" -> "План не выполнен"
+            "ORCHESTRATION_COMPLETED" -> "Оркестрация завершена"
+            else -> "Обработка"
         }
     }
 

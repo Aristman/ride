@@ -12,6 +12,7 @@ import ru.marslab.ide.ride.model.agent.AgentResponse
 import ru.marslab.ide.ride.model.chat.ChatContext
 import ru.marslab.ide.ride.model.llm.LLMParameters
 import ru.marslab.ide.ride.orchestrator.StandaloneA2AOrchestrator
+import ru.marslab.ide.ride.orchestrator.StandaloneA2AOrchestrator.A2AStepResult
 import com.intellij.openapi.project.Project
 
 /**
@@ -71,7 +72,7 @@ class EnhancedChatAgentRegressionTest {
         whenever(
             mockOrchestrator.processRequest(
                 any<AgentRequest>(),
-                any<suspend (ru.marslab.ide.ride.orchestrator.A2AStepResult) -> Unit>()
+                any<suspend (A2AStepResult) -> Unit>()
             )
         ).thenReturn(expectedResponse)
 

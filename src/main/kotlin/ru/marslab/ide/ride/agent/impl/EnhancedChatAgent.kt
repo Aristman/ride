@@ -316,12 +316,17 @@ class EnhancedChatAgent(
     ): AgentResponse {
         logger.info("Executing prepared plan ${plan.id} with ${plan.steps.size} steps through StandaloneA2AOrchestrator")
 
-        // Создаем новый запрос с оптимизированным промптом
-        val optimizedRequest = request.copy(request = optimizedPrompt)
+        // Создаем новый запрос с оптимизированным промптом и сохраняем план в контексте
+        val optimizedRequest = request.copy(
+            request = optimizedPrompt,
+            context = request.context.copy(
+                additionalContext = request.context.additionalContext + ("execution_plan" to plan)
+            )
+        )
 
-        // Выполняем план через StandaloneA2AOrchestrator
+        // Выполняем план через StandaloneA2AOrchestrator с передачей плана
         val result = try {
-            orchestrator.processRequest(optimizedRequest) { stepResult ->
+            orchestrator.processRequestWithPlan(plan, optimizedRequest) { stepResult ->
                 logger.info("A2A step completed: ${stepResult.stepTitle} - Success: ${stepResult.success}")
                 if (!stepResult.success) {
                     logger.warn("A2A step failed: ${stepResult.error}")
@@ -369,9 +374,9 @@ class EnhancedChatAgent(
 
         val steps = mutableListOf<String>()
 
-        // Выполняем план через A2A оркестратор
+        // Выполняем план через A2A оркестратор с передачей плана
         val executionSuccess = try {
-            // Используем A2A метод processWithA2A
+            // Используем A2A метод processRequestWithPlan
             val executionContext = ru.marslab.ide.ride.model.orchestrator.ExecutionContext(
                 additionalContext = mapOf(
                     "uncertaintyResult" to uncertaintyResult,
@@ -379,7 +384,7 @@ class EnhancedChatAgent(
                     "planId" to plan.id
                 )
             )
-            val a2aResult = orchestrator.processRequest(request) { stepResult ->
+            val a2aResult = orchestrator.processRequestWithPlan(plan, request) { stepResult ->
                 val stepInfo = when (stepResult.stepTitle) {
                     "Сканирование проекта" -> "📋 Сканирование проекта..."
                     "Анализ архитектуры" -> "🏗️ Анализ архитектуры..."

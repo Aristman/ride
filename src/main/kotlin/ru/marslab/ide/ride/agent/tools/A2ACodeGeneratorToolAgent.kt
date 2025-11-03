@@ -499,9 +499,34 @@ class A2ACodeGeneratorToolAgent(
                 LLMParameters()
             )
 
+            // Улучшенный парсинг ответа LLM
             val parts = response.content.split("```")
-            val code = if (parts.size >= 2) parts[1] else response.content
-            val explanation = if (parts.size >= 3) parts[2].trim() else "Generated code based on requirements."
+            val code = if (parts.size >= 2) {
+                // Извлекаем код между тройными кавычками
+                parts[1].trim()
+            } else {
+                // Если нет кодовых блоков, проверяем есть ли вообще код в ответе
+                val content = response.content.trim()
+                if (content.contains("fun ") || content.contains("class ") || content.contains("interface ") ||
+                    content.contains("object ") || content.contains("{") && content.contains("}")) {
+                    content
+                } else {
+                    // Если кода нет, возможно это описание структуры файлов
+                    ""
+                }
+            }
+
+            val explanation = if (parts.size >= 3) {
+                parts[2].trim()
+            } else {
+                // Если нет отдельного объяснения, ищем его после кода или в начале
+                if (code.isNotEmpty() && response.content.contains(code)) {
+                    val afterCode = response.content.substringAfter(code).trim()
+                    if (afterCode.isNotEmpty()) afterCode else "Generated code based on requirements."
+                } else {
+                    response.content.take(200) + (if (response.content.length > 200) "..." else "")
+                }
+            }
 
             CodeGenerationResult(
                 code = code.trim(),

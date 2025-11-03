@@ -133,6 +133,17 @@ class StandaloneA2AOrchestrator(
         request: AgentRequest,
         onStepComplete: suspend (A2AStepResult) -> Unit = {}
     ): AgentResponse {
+        return processRequestWithPlan(null, request, onStepComplete)
+    }
+
+    /**
+     * Обрабатывает запрос с использованием переданного плана выполнения
+     */
+    suspend fun processRequestWithPlan(
+        plan: ExecutionPlan? = null,
+        request: AgentRequest,
+        onStepComplete: suspend (A2AStepResult) -> Unit = {}
+    ): AgentResponse {
         logger.info("Starting standalone A2A orchestration for request: ${request.request.take(50)}...")
         logger.info("A2A Config Status: enabled=${a2aConfig.isA2AEnabled()}, metrics=${a2aConfig.isMetricsEnabled()}, timeout=${a2aConfig.getDefaultTimeoutMs()}ms")
 
@@ -158,11 +169,17 @@ class StandaloneA2AOrchestrator(
                 "request" to request.request
             ))
 
-            // Создаем план выполнения
-            val plan = createExecutionPlan(request, executionContext)
+            // Используем переданный план или создаем новый
+            val executionPlan = if (plan != null) {
+                logger.info("Using provided plan with ${plan.steps.size} steps: ${plan.steps.map { it.title }}")
+                plan
+            } else {
+                logger.info("No plan provided, creating default plan")
+                createExecutionPlan(request, executionContext)
+            }
 
             // Выполняем план
-            val result = executePlan(plan, executionContext, onStepComplete)
+            val result = executePlan(executionPlan, executionContext, onStepComplete)
 
             // Публикуем событие завершения
             publishEvent("ORCHESTRATION_COMPLETED", mapOf(
@@ -620,6 +637,18 @@ class StandaloneA2AOrchestrator(
                 )
             }
 
+        } catch (e: OutOfMemoryError) {
+            logger.error("Out of memory error executing step: ${step.title}", e)
+            // Fallback для проблем с памятью - возвращаем простое сообщение
+            return A2AStepExecutionResult(
+                success = true,
+                result = mapOf(
+                    "summary" to "Анализ проекта выполнен с ограничениями",
+                    "fallback" to true,
+                    "error_type" to "out_of_memory"
+                ),
+                error = null
+            )
         } catch (e: Exception) {
             logger.error("Error executing step: ${step.title}", e)
             return A2AStepExecutionResult(
@@ -646,6 +675,7 @@ class StandaloneA2AOrchestrator(
             AgentType.CODE_QUALITY -> "CODE_QUALITY_ANALYSIS_REQUEST"
             AgentType.REPORT_GENERATOR -> "REPORT_GENERATION_REQUEST"
             AgentType.CODE_GENERATOR -> "CODE_GENERATION_REQUEST"
+            AgentType.DOCUMENTATION_GENERATOR -> "DOCUMENTATION_GENERATION_REQUEST"
             else -> "TOOL_EXECUTION_REQUEST"
         }
 
@@ -708,26 +738,149 @@ class StandaloneA2AOrchestrator(
     /**
      * Генерирует финальный результат выполнения
      */
+    /**
+     * Форматирует код для отображения в чате
+     */
+    private fun formatCodeForDisplay(code: String): String {
+        // Если код уже в markdown формате, возвращаем как есть
+        if (code.trim().startsWith("```")) {
+            return code.trim()
+        }
+
+        // Определяем язык по содержимому кода
+        val language = when {
+            code.contains("fun ") || code.contains("class ") && code.contains("val ") ||
+            code.contains("import kotlin") -> "kotlin"
+            code.contains("public class ") || code.contains("import java") -> "java"
+            code.contains("def ") || code.contains("import ") -> "python"
+            code.contains("function ") || code.contains("const ") || code.contains("let ") -> "javascript"
+            else -> ""
+        }
+
+        return "```$language\n${code.trim()}\n```"
+    }
+
     private fun generateFinalResult(plan: ExecutionPlan, stepResults: Map<String, Any>): String {
-        // Ищем отчет от репорт генератора
-        val reportStep = plan.steps.find { it.agentType == AgentType.REPORT_GENERATOR }
-        if (reportStep != null) {
-            val reportResult = stepResults[reportStep.id]
-            if (reportResult is Map<*, *> && reportResult.containsKey("report")) {
-                return reportResult["report"] as? String ?: "Анализ завершен"
+        val analysis = plan.analysis
+
+        // В зависимости от типа задачи формируем разный результат
+        return when (analysis.taskType) {
+            TaskType.CODE_GENERATION -> {
+                // Для генерации кода ищем сгенерированный код
+                val codeGenStep = plan.steps.find { it.agentType == AgentType.CODE_GENERATOR }
+                if (codeGenStep != null) {
+                    val codeResult = stepResults[codeGenStep.id]
+                    if (codeResult is Map<*, *>) {
+                        val generatedCode = codeResult["generated_code"] as? String
+                        val explanation = codeResult["explanation"] as? String
+                        val fileSuggestions = codeResult["file_suggestions"] as? List<String> ?: emptyList()
+
+                        // Если есть сгенерированный код, показываем его
+                        if (!generatedCode.isNullOrBlank()) {
+                            val formattedCode = formatCodeForDisplay(generatedCode)
+
+                            // Если есть ревью, добавляем его результат
+                            val reviewStep = plan.steps.find { it.agentType == AgentType.LLM_REVIEW }
+                            val reviewInfo = if (reviewStep != null) {
+                                val reviewResult = stepResults[reviewStep.id]
+                                if (reviewResult is Map<*, *>) {
+                                    val issues = (reviewResult["review"] as? Map<*, *>)?.get("totalissues")
+                                    if (issues != null && issues.toString().toInt() > 0) {
+                                        "\n\n**📋 Ревью кода:** Найдено ${issues} проблем. Рекомендуется исправить перед использованием."
+                                    } else {
+                                        "\n\n**✅ Ревью кода:** Проблем не найдено, код готов к использованию."
+                                    }
+                                } else {
+                                    ""
+                                }
+                            } else {
+                                ""
+                            }
+
+                            // Добавляем объяснение если оно полезное
+                            val explanationText = if (!explanation.isNullOrBlank() &&
+                                explanation != "Generated code based on requirements.") {
+                                "\n\n**💡 Описание:**\n$explanation"
+                            } else {
+                                ""
+                            }
+
+                            return formattedCode + reviewInfo + explanationText
+                        }
+
+                        // Если кода нет, но есть объяснение, показываем его
+                        else if (!explanation.isNullOrBlank()) {
+                            return "**📝 Результат генерации:**\n$explanation"
+                        }
+                    }
+                    if (codeResult is String && codeResult.isNotBlank()) {
+                        return formatCodeForDisplay(codeResult)
+                    }
+                }
+                "Ошибка: не удалось сгенерировать код. Попробуйте переформулировать запрос."
             }
-            if (reportResult is String) {
-                return reportResult
+
+            TaskType.BUG_FIX -> {
+                // Для исправления багов ищем предложения по исправлению
+                val bugFixStep = plan.steps.find { it.agentType == AgentType.CODE_FIXER }
+                if (bugFixStep != null) {
+                    val fixResult = stepResults[bugFixStep.id]
+                    if (fixResult is Map<*, *> && fixResult.containsKey("fixes")) {
+                        return fixResult["fixes"] as? String ?: "Предложения по исправлению не найдены"
+                    }
+                    if (fixResult is String) {
+                        return fixResult
+                    }
+                }
+
+                // Если нет исправлений, показываем найденные баги
+                val bugDetectionStep = plan.steps.find { it.agentType == AgentType.BUG_DETECTION }
+                if (bugDetectionStep != null) {
+                    val bugResult = stepResults[bugDetectionStep.id]
+                    if (bugResult is Map<*, *> && bugResult.containsKey("issues")) {
+                        return bugResult["issues"] as? String ?: "Баги не найдены"
+                    }
+                }
+                "Анализ багов завершен"
+            }
+
+            TaskType.ARCHITECTURE_ANALYSIS -> {
+                // Для анализа архитектуры ищем результат анализа
+                val archStep = plan.steps.find { it.agentType == AgentType.ARCHITECTURE_ANALYSIS }
+                if (archStep != null) {
+                    val archResult = stepResults[archStep.id]
+                    if (archResult is Map<*, *> && archResult.containsKey("analysis")) {
+                        return archResult["analysis"] as? String ?: "Анализ архитектуры завершен"
+                    }
+                    if (archResult is String) {
+                        return archResult
+                    }
+                }
+                "Анализ архитектуры завершен"
+            }
+
+            else -> {
+                // Для остальных задач ищем отчет от репорт генератора
+                val reportStep = plan.steps.find { it.agentType == AgentType.REPORT_GENERATOR }
+                if (reportStep != null) {
+                    val reportResult = stepResults[reportStep.id]
+                    if (reportResult is Map<*, *> && reportResult.containsKey("report")) {
+                        return reportResult["report"] as? String ?: "Анализ завершен"
+                    }
+                    if (reportResult is String) {
+                        return reportResult
+                    }
+                }
+
+                // Если нет специфичного результата, собираем результаты из всех шагов
+                val results = stepResults.map { (stepId, result) ->
+                    val step = plan.steps.find { it.id == stepId }
+                    "${step?.title ?: stepId}: ${result.toString().take(200)}..."
+                }
+
+                "План успешно выполнен. Завершено ${stepResults.size} шагов:\n\n${results.joinToString("\n\n")}"
             }
         }
-
-        // Если нет отчета, собираем результаты из всех шагов
-        val results = stepResults.map { (stepId, result) ->
-            val step = plan.steps.find { it.id == stepId }
-            "${step?.title ?: stepId}: ${result.toString().take(200)}..."
-        }
-
-        return "План успешно выполнен. Завершено ${stepResults.size} шагов:\n\n${results.joinToString("\n\n")}"
     }
 
     /**

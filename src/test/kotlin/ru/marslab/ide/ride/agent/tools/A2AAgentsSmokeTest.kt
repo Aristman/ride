@@ -18,7 +18,7 @@ class A2AAgentsSmokeTest {
     fun `architecture agent should handle ARCHITECTURE_ANALYSIS_REQUEST`() = runBlocking {
         val llm = mockk<LLMProvider>(relaxed = true)
         val legacy = ArchitectureToolAgent(llm)
-        val agent = A2AArchitectureToolAgent(legacy, dummyBus)
+        val agent = A2AArchitectureToolAgent()
         val request = AgentMessage.Request(
             senderId = "test",
             messageType = "ARCHITECTURE_ANALYSIS_REQUEST",
@@ -37,7 +37,7 @@ class A2AAgentsSmokeTest {
     @Test
     fun `code chunker agent should handle CODE_CHUNK_REQUEST`() = runBlocking {
         val legacy = CodeChunkerToolAgent()
-        val agent = A2ACodeChunkerToolAgent(legacy, dummyBus)
+        val agent = A2ACodeChunkerToolAgent()
         val request = AgentMessage.Request(
             senderId = "test",
             messageType = "CODE_CHUNK_REQUEST",

@@ -237,6 +237,7 @@ class A2AEmbeddingIndexerToolAgent : BaseA2AAgent(
         projectPath: String,
         includeTests: Boolean
     ): Map<String, Any> = withContext(Dispatchers.IO) {
+        // Очистка предыдущего индекса
         embeddingStore.clear()
 
         val root = if (projectPath.isBlank()) File(".") else File(projectPath)
@@ -247,32 +248,80 @@ class A2AEmbeddingIndexerToolAgent : BaseA2AAgent(
             )
         }
 
-        val sourceFiles = findSourceFiles(root, includeTests)
+        // Ограничения для предотвращения переполнения памяти
+        val maxFiles = 50 // Максимум файлов для обработки
+        val maxFileSize = 1024 * 1024 // 1MB на файл
+        val maxChunks = 500 // Максимум чанков
+        val maxChunkSize = 200 // Уменьшаем размер чанка
+        val overlap = 30
+
+        val sourceFiles = findSourceFiles(root, includeTests, maxFiles, maxFileSize.toLong())
         var processedFiles = 0
         var failedFiles = 0
         var totalChunks = 0
+        var skippedLargeFiles = 0
 
         sourceFiles.forEach { file ->
             try {
-                val chunks = chunkFileContent(file)
-                chunks.forEach { chunk ->
-                    val embedding = generateEmbedding(chunk.content)
+                // Проверяем размер файла
+                if (file.length() > maxFileSize) {
+                    logger.warn("Skipping large file: ${file.path} (${file.length()} bytes)")
+                    skippedLargeFiles++
+                    return@forEach
+                }
+
+                // Проверяем лимит чанков
+                if (totalChunks >= maxChunks) {
+                    logger.info("Reached chunk limit, stopping indexing")
+                    return@forEach
+                }
+
+                val chunks = chunkFileContent(file, maxChunkSize, overlap)
+
+                // Ограничиваем количество чанков от одного файла
+                val chunksToProcess = chunks.take(maxChunks - totalChunks)
+
+                chunksToProcess.forEach { chunk ->
+                    // Создаем урезанную версию контента для экономии памяти
+                    val truncatedContent = if (chunk.content.length > 5000) {
+                        chunk.content.take(5000) + "..."
+                    } else {
+                        chunk.content
+                    }
+
+                    val embedding = generateEmbedding(truncatedContent)
                     embeddingStore[chunk.id] = EmbeddingEntry(
                         id = chunk.id,
                         filePath = file.path,
-                        content = chunk.content,
+                        content = truncatedContent, // Храним урезанную версию
                         embedding = embedding,
                         metadata = mapOf(
                             "file_name" to file.name,
                             "file_type" to file.extension,
                             "chunk_index" to chunk.index,
                             "file_size" to file.length(),
-                            "last_modified" to file.lastModified()
+                            "last_modified" to file.lastModified(),
+                            "original_size" to chunk.content.length,
+                            "truncated" to (truncatedContent.length < chunk.content.length)
                         )
                     )
                 }
                 processedFiles++
-                totalChunks += chunks.size
+                totalChunks += chunksToProcess.size
+            } catch (e: OutOfMemoryError) {
+                logger.error("Out of memory error processing file: ${file.path}", e)
+                // Останавливаем обработку при нехватке памяти
+                return@withContext mapOf(
+                    "status" to "partial_completed",
+                    "total_embeddings" to embeddingStore.size,
+                    "processed_files" to processedFiles,
+                    "failed_files" to failedFiles,
+                    "skipped_large_files" to skippedLargeFiles,
+                    "total_chunks" to totalChunks,
+                    "error" to "out_of_memory",
+                    "index_size_mb" to calculateIndexSize(),
+                    "message" to "Indexing stopped due to memory constraints"
+                )
             } catch (e: Exception) {
                 logger.warn("Failed to process file: ${file.path}", e)
                 failedFiles++
@@ -282,45 +331,55 @@ class A2AEmbeddingIndexerToolAgent : BaseA2AAgent(
         indexInitialized = true
 
         mapOf(
-            "status" to "completed",
+            "status" to if (totalChunks >= maxChunks) "limit_reached" else "completed",
             "total_embeddings" to embeddingStore.size,
             "processed_files" to processedFiles,
             "failed_files" to failedFiles,
+            "skipped_large_files" to skippedLargeFiles,
             "total_chunks" to totalChunks,
+            "max_files_limit" to maxFiles,
+            "max_chunks_limit" to maxChunks,
             "index_size_mb" to calculateIndexSize(),
             "file_types" to sourceFiles.groupBy { it.extension }.mapValues { it.value.size }
         )
     }
 
-    private fun findSourceFiles(root: File, includeTests: Boolean): List<File> {
+    private fun findSourceFiles(root: File, includeTests: Boolean, maxFiles: Int, maxFileSize: Long): List<File> {
         val sourceExtensions = setOf(".kt", ".java", ".scala", ".groovy", ".py", ".js", ".ts", ".jsx", ".tsx")
         val sourceFiles = mutableListOf<File>()
 
-        fun scan(dir: File) {
+        fun scan(dir: File, depth: Int = 0) {
+            // Ограничиваем глубину сканирования
+            if (depth > 5) return
+
             dir.listFiles()?.forEach { file ->
+                if (sourceFiles.size >= maxFiles) return@forEach
+
                 if (file.isDirectory &&
                     !file.name.startsWith(".") &&
                     file.name != "build" &&
                     file.name != "target" &&
                     file.name != "node_modules" &&
+                    file.name != ".git" &&
+                    file.name != "out" &&
                     (includeTests || !file.name.contains("test"))) {
-                    scan(file)
-                } else if (file.isFile && sourceExtensions.any { ext -> file.name.endsWith(ext) }) {
+                    scan(file, depth + 1)
+                } else if (file.isFile &&
+                          sourceExtensions.any { ext -> file.name.endsWith(ext) } &&
+                          file.length() <= maxFileSize) {
                     sourceFiles.add(file)
                 }
             }
         }
 
         scan(root)
-        return sourceFiles
+        return sourceFiles.take(maxFiles)
     }
 
-    private fun chunkFileContent(file: File): List<ContentChunk> {
+    private fun chunkFileContent(file: File, maxChunkSize: Int = 200, overlap: Int = 30): List<ContentChunk> {
         val content = file.readText()
         val lines = content.lines()
         val chunks = mutableListOf<ContentChunk>()
-        val maxChunkSize = 500 // строк
-        val overlap = 50 // строк перекрытия
 
         var startLine = 0
         var chunkIndex = 0
@@ -338,7 +397,8 @@ class A2AEmbeddingIndexerToolAgent : BaseA2AAgent(
                 endLine = endLine
             ))
 
-            startLine = endLine - overlap
+            // Предотвращаем отрицательный индекс
+            startLine = maxOf(0, endLine - overlap)
             chunkIndex++
         }
 

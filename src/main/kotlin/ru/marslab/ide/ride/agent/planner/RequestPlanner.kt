@@ -384,7 +384,7 @@ class RequestPlanner {
                 createdStepIds["project_scan"] = projectScanStep.id
 
                 var ragEnrichmentStep: PlanStep? = null
-                if (uncertainty.suggestedActions.contains("поиск_контекста")) {
+                if (shouldIncludeRagStep(requestAnalysis)) {
                     ragEnrichmentStep = createRagEnrichmentStep(requestAnalysis, stepIdCounter, setOf(projectScanStep.id))
                     steps.add(ragEnrichmentStep)
                     createdStepIds["rag_enrichment"] = ragEnrichmentStep.id
@@ -403,7 +403,8 @@ class RequestPlanner {
                 steps.add(qualityStep)
                 createdStepIds["quality_check"] = qualityStep.id
 
-                val documentationStep = createDocumentationStep(requestAnalysis, stepIdCounter, setOf(analysisStep.id, qualityStep.id))
+                // Используем отчет вместо документации (агент документации не существует)
+                val documentationStep = createReportStep(requestAnalysis, stepIdCounter, setOf(analysisStep.id, qualityStep.id))
                 steps.add(documentationStep)
                 createdStepIds["documentation"] = documentationStep.id
             }
@@ -609,17 +610,23 @@ class RequestPlanner {
     }
 
     private fun createReportStep(analysis: RequestAnalysis, counter: MutableMap<String, Int>, dependencies: Set<String> = emptySet()): PlanStep {
+        // Определяем тип отчета на основе шага
+        val stepId = generateStepId("report", counter)
+        val isDocumentationStep = counter.get("documentation") != null && counter.get("report") == null
+
         return PlanStep(
-            id = generateStepId("report", counter),
-            title = "Создание отчета",
-            description = "Генерация отчета на основе анализа",
+            id = stepId,
+            title = if (isDocumentationStep) "Создание документации" else "Создание отчета",
+            description = if (isDocumentationStep) "Генерация документации по результатам анализа" else "Генерация отчета на основе анализа",
             agentType = AgentType.REPORT_GENERATOR,
             input = mapOf(
-                "report_type" to "comprehensive",
-                "format" to "markdown"
+                "report_type" to if (isDocumentationStep) "documentation" else "comprehensive",
+                "format" to "markdown",
+                "include_recommendations" to true,
+                "include_examples" to if (isDocumentationStep) false else true
             ),
             dependencies = dependencies,
-            estimatedDurationMs = 7000
+            estimatedDurationMs = if (isDocumentationStep) 10000 else 7000 // Дольше для документации
         )
     }
 
@@ -704,5 +711,69 @@ class RequestPlanner {
         val count = counter.getOrPut(stepType) { 0 } + 1
         counter[stepType] = count
         return "${stepType}_${count}"
+    }
+
+    /**
+     * Определяет, нужно ли включать RAG шаг в план
+     *
+     * RAG обогащение используется для:
+     * 1. Конкретных поисковых запросов (найти класс/метод)
+     * 2. Сложных запросов, требующих контекста из проекта
+     * Но с фильтрацией релевантности данных
+     */
+    private fun shouldIncludeRagStep(requestAnalysis: RequestAnalysis): Boolean {
+        val request = (requestAnalysis.parameters["original_request"] as? String) ?: ""
+        val requestLower = request.lowercase()
+        val complexity = requestAnalysis.estimatedComplexity
+
+        // 1. Конкретные поисковые запросы (требуют RAG всегда)
+        val searchKeywords = listOf(
+            "найди", "покажи", "поищи", "где находится", "в каком файле", "как реализован",
+            "использование", "примеры использования", "применение", "реализация",
+            "поиск", "search", "find", "locate", "where is", "how is implemented"
+        )
+
+        val specificSearchKeywords = listOf(
+            "функция", "метод", "класс", "интерфейс", "переменная", "константа",
+            "function", "method", "class", "interface", "variable", "constant"
+        )
+
+        // Расширяем список конкретных объектов для поиска
+        val uiSearchKeywords = listOf(
+            "экран", "диалог", "окно", "форм", "activity", "fragment", "view", "screen", "dialog", "window",
+            "создание", "запись", "регистрация", "login", "registration", "create", "edit", "update",
+            "запись", "record", "entry", "data", "model", "entity", "dto", "pojo"
+        )
+
+        val isSearchQuery = searchKeywords.any { keyword -> requestLower.contains(keyword) }
+        val hasSpecificObjects = specificSearchKeywords.any { keyword -> requestLower.contains(keyword) } ||
+                              uiSearchKeywords.any { keyword -> requestLower.contains(keyword) }
+        val needsRagForSearch = isSearchQuery && hasSpecificObjects
+
+        // 2. Сложные запросы, требующие контекста (с проверкой релевантности)
+        val isComplexQuery = complexity.name in setOf("HIGH", "VERY_HIGH", "EXTREME")
+
+        val complexContextKeywords = listOf(
+            "архитектура", "структура", "взаимодействие", "зависимости", "модули",
+            "рефакторинг", "улучшение", "оптимизация", "производительность",
+            "безопасность", "security"
+        )
+
+        val needsContext = complexContextKeywords.any { keyword -> requestLower.contains(keyword) }
+        val needsRagForComplex = isComplexQuery && needsContext
+
+        // 3. Общие запросы, НЕ требующие RAG
+        val isGeneralAnalysis = setOf(
+            "проанализируй проект", "анализ проекта", "анализируй весь проект",
+            "оцени проект", "обзор проекта", "структура проекта"
+        ).any { pattern -> requestLower.contains(pattern) }
+
+        val shouldUseRag = (needsRagForSearch || needsRagForComplex) && !isGeneralAnalysis
+
+        logger.info("RAG step decision: query='$request', complexity=${complexity.name}, " +
+                   "needsRagForSearch=$needsRagForSearch, needsRagForComplex=$needsRagForComplex, " +
+                   "isGeneral=$isGeneralAnalysis, shouldUse=$shouldUseRag")
+
+        return shouldUseRag
     }
 }
