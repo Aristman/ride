@@ -39,6 +39,13 @@ class YandexSpeechSttServiceTest {
         override fun <T> sendAsync(request: HttpRequest, responseBodyHandler: HttpResponse.BodyHandler<T>): CompletableFuture<HttpResponse<T>> {
             return CompletableFuture.failedFuture(UnsupportedOperationException())
         }
+        override fun <T> sendAsync(
+            request: HttpRequest,
+            responseBodyHandler: HttpResponse.BodyHandler<T>,
+            pushPromiseHandler: HttpResponse.PushPromiseHandler<T>
+        ): CompletableFuture<HttpResponse<T>> {
+            return CompletableFuture.failedFuture(UnsupportedOperationException())
+        }
         override fun cookieHandler(): Optional<java.net.CookieHandler> = Optional.empty()
         override fun connectTimeout(): Optional<Duration> = Optional.of(Duration.ofSeconds(1))
         override fun followRedirects(): Redirect = Redirect.NEVER

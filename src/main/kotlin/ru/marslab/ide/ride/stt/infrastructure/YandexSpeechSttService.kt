@@ -13,16 +13,16 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
 
-class YandexSpeechSttService : SpeechToTextService {
+class YandexSpeechSttService(
+    private val http: HttpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build(),
+    private val settingsProvider: () -> PluginSettings = { service() }
+) : SpeechToTextService {
 
     private val json = Json { ignoreUnknownKeys = true }
-    private val http: HttpClient = HttpClient.newBuilder()
-        .connectTimeout(Duration.ofSeconds(10))
-        .build()
 
     override fun recognizeLpcm(audioBytes: ByteArray, config: SttConfig): Result<String> {
         if (audioBytes.isEmpty()) return Result.failure(IllegalArgumentException("Empty audio"))
-        val settings = service<PluginSettings>()
+        val settings = settingsProvider.invoke()
         val apiKey = settings.getApiKey().trim()
         val folderId = settings.folderId.trim()
         if (apiKey.isBlank() || folderId.isBlank()) {
@@ -49,8 +49,8 @@ class YandexSpeechSttService : SpeechToTextService {
                 throw IllegalStateException("STT error ${resp.statusCode()}: ${resp.body()}")
             }
             val root = json.parseToJsonElement(resp.body()).jsonObject
-            val result = root["result"]?.jsonPrimitive?.contentOrNull
-            if (result.isNullOrBlank()) throw IllegalStateException("STT: empty result")
+            val result = root["result"]?.jsonPrimitive?.content ?: ""
+            if (result.isBlank()) throw IllegalStateException("STT: empty result")
             result
         }
     }
