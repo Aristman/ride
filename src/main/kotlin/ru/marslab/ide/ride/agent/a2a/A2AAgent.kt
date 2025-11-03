@@ -1,5 +1,12 @@
 package ru.marslab.ide.ride.agent.a2a
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import ru.marslab.ide.ride.agent.Agent
@@ -116,6 +123,8 @@ abstract class BaseA2AAgent(
 ) : A2AAgent {
 
     protected val logger = com.intellij.openapi.diagnostic.Logger.getInstance(javaClass)
+    private val a2aSupervisor: Job = SupervisorJob()
+    private val a2aScope = CoroutineScope(Dispatchers.Default + a2aSupervisor)
 
     // Базовая реализация Agent интерфейса
     override val capabilities: AgentCapabilities = AgentCapabilities(
@@ -160,6 +169,77 @@ abstract class BaseA2AAgent(
             is AgentMessage.Request -> handleRequest(message, messageBus)
             is AgentMessage.Event -> handleEvent(message, messageBus)
             else -> null
+        }
+    }
+
+    override suspend fun initializeA2A(
+        messageBus: MessageBus,
+        context: ExecutionContext
+    ) {
+        // Публикуем событие инициализации агента
+        try {
+            val initEvent = AgentMessage.Event(
+                senderId = a2aAgentId,
+                eventType = "AGENT_INITIALIZED",
+                payload = MessagePayload.AgentInfoPayload(
+                    agentId = a2aAgentId,
+                    agentType = agentType.name,
+                    status = "READY"
+                )
+            )
+            messageBus.publish(initEvent)
+        } catch (e: Exception) {
+            logger.warn("Failed to publish AGENT_INITIALIZED event for $a2aAgentId", e)
+        }
+
+        // Подписываемся на запросы, которые данный агент может обработать
+        a2aScope.launch {
+            messageBus
+                .subscribe(AgentMessage.Request::class) { req ->
+                    // Фильтр по типу сообщения и целевому ID (если задан)
+                    supportedMessageTypes.contains(req.messageType) &&
+                        (req.targetId == null || req.targetId == a2aAgentId)
+                }
+                .collect { request ->
+                    try {
+                        val response = handleRequest(request, messageBus)
+                        if (response != null) {
+                            messageBus.publish(response)
+                        }
+                    } catch (ex: Exception) {
+                        logger.error("Error handling A2A request ${request.messageType} in $a2aAgentId", ex)
+                        // Публикуем ошибочный ответ, чтобы не допускать таймаута на стороне отправителя
+                        val errorResponse = AgentMessage.Response(
+                            senderId = a2aAgentId,
+                            requestId = request.id,
+                            success = false,
+                            payload = MessagePayload.ErrorPayload(
+                                error = ex.message ?: "Agent error",
+                                cause = "Exception in $a2aAgentId"
+                            ),
+                            error = ex.message
+                        )
+                        messageBus.publish(errorResponse)
+                    }
+                }
+        }
+    }
+
+    override suspend fun shutdownA2A(messageBus: MessageBus) {
+        try {
+            a2aSupervisor.cancel()
+            val shutdownEvent = AgentMessage.Event(
+                senderId = a2aAgentId,
+                eventType = "AGENT_SHUTDOWN",
+                payload = MessagePayload.AgentInfoPayload(
+                    agentId = a2aAgentId,
+                    agentType = agentType.name,
+                    status = "SHUTDOWN"
+                )
+            )
+            messageBus.publish(shutdownEvent)
+        } catch (e: Exception) {
+            logger.warn("Error during shutdown of $a2aAgentId", e)
         }
     }
 

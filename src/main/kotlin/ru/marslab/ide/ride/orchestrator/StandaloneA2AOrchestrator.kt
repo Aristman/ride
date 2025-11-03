@@ -80,6 +80,36 @@ class StandaloneA2AOrchestrator(
     }
 
     /**
+     * Обеспечивает регистрацию базовых A2A агентов (не требующих LLM)
+     * для предотвращения таймаутов при отсутствии обработчиков на шине
+     */
+    private suspend fun ensureBasicAgentsRegistered() {
+        try {
+            if (a2aRegistry.getRegisteredAgentsCount() > 0) return
+
+            logger.info("Registering basic A2A agents lazily for standalone orchestrator...")
+            val basicAgents = listOf(
+                A2AProjectScannerToolAgent(messageBus),
+                A2AArchitectureToolAgent(),
+                A2AEmbeddingIndexerToolAgent(),
+                A2ACodeChunkerToolAgent(),
+                A2AOpenSourceFileToolAgent(),
+                A2AUserInteractionAgent(),
+                A2ACodeQualityToolAgent()
+            )
+
+            basicAgents.forEach { agent ->
+                a2aRegistry.registerAgent(agent)
+            }
+
+            logger.info("Basic A2A agents registered: ${basicAgents.map { it.a2aAgentId }}")
+        } catch (e: Exception) {
+            logger.error("Failed to ensure basic A2A agents registered", e)
+            throw e
+        }
+    }
+
+    /**
      * Обрабатывает запрос через независимую A2A оркестрацию
      */
     suspend fun processRequest(
@@ -98,6 +128,9 @@ class StandaloneA2AOrchestrator(
                     content = "Невозможно обработать запрос: A2A режим отключен"
                 )
             }
+
+            // Гарантируем регистрацию базовых A2A-агентов, если ещё не зарегистрированы
+            ensureBasicAgentsRegistered()
 
             // Создаем контекст выполнения
             val executionContext = createExecutionContext(request)
