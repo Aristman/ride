@@ -43,11 +43,16 @@ class A2AConfig : PersistentStateComponent<A2AConfig.State> {
                     enableDetailedLogging = true,
                     allowedAgentTypes = setOf(
                         "PROJECT_SCANNER",
-                        "LLM_REVIEW",
-                        "CODE_QUALITY",
+                        "ARCHITECTURE_ANALYSIS",
+                        "REPORT_GENERATOR",
                         "BUG_DETECTION",
+                        "CODE_GENERATOR",
+                        "CODE_QUALITY",
+                        "LLM_REVIEW",
                         "EMBEDDING_INDEXER",
-                        "REPORT_GENERATOR"
+                        "CODE_CHUNKER",
+                        "FILE_OPERATIONS",
+                        "USER_INTERACTION"
                     )
                 )
             }
@@ -90,7 +95,7 @@ class A2AConfig : PersistentStateComponent<A2AConfig.State> {
         EXTERNAL    // Для внешних message brokers
     }
 
-    private var state: State = State.forProduction()
+    private var state: State = State.forDevelopment()
 
     override fun getState(): State = state
 

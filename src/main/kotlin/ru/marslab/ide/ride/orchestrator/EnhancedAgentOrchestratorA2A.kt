@@ -12,16 +12,9 @@ import ru.marslab.ide.ride.agent.tools.A2ALLMReviewToolAgent
 import ru.marslab.ide.ride.agent.tools.A2AEmbeddingIndexerToolAgent
 import ru.marslab.ide.ride.agent.tools.A2ACodeChunkerToolAgent
 import ru.marslab.ide.ride.agent.tools.A2AOpenSourceFileToolAgent
-import ru.marslab.ide.ride.agent.tools.ArchitectureToolAgent
-import ru.marslab.ide.ride.agent.tools.LLMCodeReviewToolAgent
-import ru.marslab.ide.ride.agent.tools.EmbeddingIndexerToolAgent
-import ru.marslab.ide.ride.agent.tools.CodeChunkerToolAgent
-import ru.marslab.ide.ride.agent.tools.OpenSourceFileToolAgent
-import ru.marslab.ide.ride.agent.tools.UserInteractionAgent
 import ru.marslab.ide.ride.agent.tools.A2AUserInteractionAgent
 import ru.marslab.ide.ride.agent.tools.A2ACodeGeneratorToolAgent
-import ru.marslab.ide.ride.agent.tools.CodeGeneratorToolAgent
-import ru.marslab.ide.ride.agent.tools.LLMReviewToolAgent
+import ru.marslab.ide.ride.agent.tools.UserInteractionAgent
 import ru.marslab.ide.ride.agent.BaseToolAgent
 import ru.marslab.ide.ride.agent.AgentOrchestrator
 import ru.marslab.ide.ride.agent.OrchestratorStep
@@ -62,79 +55,103 @@ class EnhancedAgentOrchestratorA2A(
      * Регистрирует базовых A2A-агентов в реестре на общей шине MessageBus
      */
     suspend fun registerCoreAgents(llmProvider: LLMProvider) {
-        // Используем общий messageBus для всех агентов
+        // Независимые A2A агенты без legacy зависимостей
         val scanner = A2AProjectScannerToolAgent(messageBus)
-        val codeQuality = A2ACodeQualityToolAgent(messageBus, a2aRegistry)
-        val bugDetection = A2ABugDetectionToolAgent(llmProvider, messageBus, a2aRegistry)
-        val reportGenerator = A2AReportGeneratorToolAgent(llmProvider, messageBus, a2aRegistry)
+        val architectureAgent = A2AArchitectureToolAgent() // Независимый агент
+        val llmReviewAgent = A2ALLMReviewToolAgent(llmProvider) // Независимый агент
+        val embeddingIndexerAgent = A2AEmbeddingIndexerToolAgent() // Независимый агент
+        val codeChunkerAgent = A2ACodeChunkerToolAgent() // Независимый агент
+        val fileOperationsAgent = A2AOpenSourceFileToolAgent() // Независимый агент
 
-        // Дополнительные специализированные агенты
-        val registry = baseOrchestrator.getToolAgentRegistry()
-        (registry.get(AgentType.ARCHITECTURE_ANALYSIS) as? ToolAgent)?.let {
-            val legacy = ArchitectureToolAgent(llmProvider)
-            a2aRegistry.registerAgent(A2AArchitectureToolAgent(legacy, messageBus))
-        }
-        (registry.get(AgentType.LLM_REVIEW) as? ToolAgent)?.let {
-            val legacy = LLMReviewToolAgent(llmProvider)
-            a2aRegistry.registerAgent(A2ALLMReviewToolAgent(legacy, messageBus))
-        }
-        (registry.get(AgentType.CODE_GENERATOR) as? ToolAgent)?.let {
-            a2aRegistry.registerAgent(A2ACodeGeneratorToolAgent.create(llmProvider, messageBus))
-        }
-        (registry.get(AgentType.EMBEDDING_INDEXER) as? ToolAgent)?.let {
-            val legacy = EmbeddingIndexerToolAgent()
-            a2aRegistry.registerAgent(A2AEmbeddingIndexerToolAgent(legacy, messageBus))
-        }
-        (registry.get(AgentType.CODE_CHUNKER) as? ToolAgent)?.let {
-            val legacy = CodeChunkerToolAgent()
-            a2aRegistry.registerAgent(A2ACodeChunkerToolAgent(legacy, messageBus))
-        }
-        (registry.get(AgentType.FILE_OPERATIONS) as? ToolAgent)?.let {
-            val legacy = OpenSourceFileToolAgent()
-            a2aRegistry.registerAgent(A2AOpenSourceFileToolAgent(legacy, messageBus))
-        }
-        (registry.get(AgentType.USER_INTERACTION) as? ToolAgent)?.let {
-            val legacy = UserInteractionAgent()
-            a2aRegistry.registerAgent(A2AUserInteractionAgent(legacy, messageBus))
-        }
+        // Агенты, требующие LLM провайдера
+        val bugDetection = A2ABugDetectionToolAgent(llmProvider)
+        val reportGenerator = A2AReportGeneratorToolAgent(llmProvider)
+        val codeGenerator = A2ACodeGeneratorToolAgent(llmProvider)
 
-        // Регистрируем
+        // Агенты, которые еще не переписаны (оставляем как есть временно)
+        val codeQuality = A2ACodeQualityToolAgent()
+        val userInteractionAgent = A2AUserInteractionAgent()
+
+        // Регистрируем всех агентов
         a2aRegistry.registerAgent(scanner)
-        a2aRegistry.registerAgent(codeQuality)
+        a2aRegistry.registerAgent(architectureAgent)
+        a2aRegistry.registerAgent(llmReviewAgent)
+        a2aRegistry.registerAgent(embeddingIndexerAgent)
+        a2aRegistry.registerAgent(codeChunkerAgent)
+        a2aRegistry.registerAgent(fileOperationsAgent)
         a2aRegistry.registerAgent(bugDetection)
         a2aRegistry.registerAgent(reportGenerator)
+        a2aRegistry.registerAgent(codeGenerator)
+        a2aRegistry.registerAgent(codeQuality)
+        a2aRegistry.registerAgent(userInteractionAgent)
 
-        logger.info("Core A2A agents registered: ${listOf(scanner.a2aAgentId, codeQuality.a2aAgentId, bugDetection.a2aAgentId, reportGenerator.a2aAgentId)}")
-        // Регистрация адаптеров для остальных tool agents
-        registerLegacyToolAdapters()
+        logger.info("Core A2A agents registered: ${listOf(
+            scanner.a2aAgentId,
+            architectureAgent.a2aAgentId,
+            llmReviewAgent.a2aAgentId,
+            embeddingIndexerAgent.a2aAgentId,
+            codeChunkerAgent.a2aAgentId,
+            fileOperationsAgent.a2aAgentId
+        )}")
     }
 
     /**
-     * Регистрирует базовые (без LLM) A2A-агенты: сканер и качество кода
+     * Регистрирует базовые (без LLM) A2A-агенты: сканер, архитектура, чанкинг, файловые операции
      */
     suspend fun registerCoreAgentsBasic() {
+        // Независимые A2A агенты без LLM зависимостей
         val scanner = A2AProjectScannerToolAgent(messageBus)
-        val codeQuality = A2ACodeQualityToolAgent(messageBus, a2aRegistry)
+        val architectureAgent = A2AArchitectureToolAgent() // Независимый агент
+        val embeddingIndexerAgent = A2AEmbeddingIndexerToolAgent() // Независимый агент
+        val codeChunkerAgent = A2ACodeChunkerToolAgent() // Независимый агент
+        val fileOperationsAgent = A2AOpenSourceFileToolAgent() // Независимый агент
 
+        // Временные агенты с legacy зависимостями (до переписывания)
+        val codeQuality = A2ACodeQualityToolAgent()
+        val userInteractionAgent = A2AUserInteractionAgent()
+
+        // Регистрируем всех агентов
         a2aRegistry.registerAgent(scanner)
+        a2aRegistry.registerAgent(architectureAgent)
+        a2aRegistry.registerAgent(embeddingIndexerAgent)
+        a2aRegistry.registerAgent(codeChunkerAgent)
+        a2aRegistry.registerAgent(fileOperationsAgent)
         a2aRegistry.registerAgent(codeQuality)
+        a2aRegistry.registerAgent(userInteractionAgent)
 
-        logger.info("Basic A2A agents registered: ${listOf(scanner.a2aAgentId, codeQuality.a2aAgentId)}")
-        registerLegacyToolAdapters()
+        logger.info("Basic A2A agents registered: ${listOf(
+            scanner.a2aAgentId,
+            architectureAgent.a2aAgentId,
+            embeddingIndexerAgent.a2aAgentId,
+            codeChunkerAgent.a2aAgentId,
+            fileOperationsAgent.a2aAgentId
+        )}")
     }
 
     /**
      * Регистрирует A2A-агентов, требующих LLM-провайдера
      */
     suspend fun registerLLMBasedAgents(llmProvider: LLMProvider) {
-        val bugDetection = A2ABugDetectionToolAgent(llmProvider, messageBus, a2aRegistry)
-        val reportGenerator = A2AReportGeneratorToolAgent(llmProvider, messageBus, a2aRegistry)
+        // Независимые A2A агенты с LLM зависимостями
+        val llmReviewAgent = A2ALLMReviewToolAgent(llmProvider) // Независимый агент
 
+        // Агенты, требующие LLM провайдера
+        val bugDetection = A2ABugDetectionToolAgent(llmProvider)
+        val reportGenerator = A2AReportGeneratorToolAgent(llmProvider)
+        val codeGenerator = A2ACodeGeneratorToolAgent(llmProvider)
+
+        // Регистрируем всех агентов
+        a2aRegistry.registerAgent(llmReviewAgent)
         a2aRegistry.registerAgent(bugDetection)
         a2aRegistry.registerAgent(reportGenerator)
+        a2aRegistry.registerAgent(codeGenerator)
 
-        logger.info("LLM-based A2A agents registered: ${listOf(bugDetection.a2aAgentId, reportGenerator.a2aAgentId)}")
-        registerLegacyToolAdapters()
+        logger.info("LLM-based A2A agents registered: ${listOf(
+            llmReviewAgent.a2aAgentId,
+            bugDetection.a2aAgentId,
+            reportGenerator.a2aAgentId,
+            codeGenerator.a2aAgentId
+        )}")
     }
 
     /**
@@ -223,39 +240,7 @@ class EnhancedAgentOrchestratorA2A(
         }
     }
 
-    /**
-     * Создает и регистрирует A2A агента для ToolAgent
-     */
-    suspend fun createA2AToolAgent(toolAgent: BaseToolAgent): A2AAgent {
-        val a2aAgent = A2AAgentAdapter.create(
-            agent = toolAgent,
-            a2aAgentId = "${toolAgent.javaClass.simpleName}_${toolAgent.hashCode()}",
-            supportedMessageTypes = setOf(
-                "TOOL_EXECUTION_REQUEST",
-                "TOOL_STATUS_UPDATE"
-            ),
-            publishedEventTypes = setOf(
-                "TOOL_EXECUTION_STARTED",
-                "TOOL_EXECUTION_COMPLETED",
-                "TOOL_EXECUTION_FAILED"
-            )
-        )
-
-        // Регистрируем агент
-        val registered = a2aRegistry.registerAgent(a2aAgent)
-        if (!registered) {
-            throw IllegalStateException("Failed to register A2A tool agent: ${a2aAgent.a2aAgentId}")
-        }
-
-        // Инициализируем агент
-        a2aAgent.initializeA2A(messageBus, ExecutionContext.Empty)
-
-        a2aAgents[a2aAgent.a2aAgentId] = a2aAgent
-        logger.info("Created and registered A2A tool agent: ${a2aAgent.a2aAgentId}")
-
-        return a2aAgent
-    }
-
+  
     /**
      * Отправляет A2A сообщение агенту и ожидает ответ
      */
@@ -296,8 +281,13 @@ class EnhancedAgentOrchestratorA2A(
     /**
      * Получает статистику A2A агентов
      */
-    suspend fun getA2AStatistics(): A2AAgentFactory.A2AStatistics {
-        return A2AAgentFactory.getA2AStatistics()
+    suspend fun getA2AStatistics(): Map<String, Any> {
+        return mapOf(
+            "registered_agents" to 1, // Временно заглушка
+            "total_messages" to 0, // Можно добавить счетчик сообщений
+            "active_plans" to 0, // Временно, пока нет доступа к executionPlans
+            "message_bus_enabled" to true
+        )
     }
 
     /**
@@ -725,27 +715,7 @@ class EnhancedAgentOrchestratorA2A(
         return base
     }
 
-    /**
-     * Регистрирует A2A адаптеры для всех legacy ToolAgents, чтобы обеспечить покрытие для остальных типов
-     */
-    private suspend fun registerLegacyToolAdapters() {
-        runCatching {
-            val registry = baseOrchestrator.getToolAgentRegistry()
-            val tools = registry.listAll()
-            tools.forEach { tool ->
-                val adapter = A2AAgentAdapter.create(
-                    agent = tool,
-                    agentType = tool.agentType,
-                    supportedMessageTypes = setOf("TOOL_EXECUTION_REQUEST", "AGENT_REQUEST", "EXECUTION_STATUS")
-                )
-                a2aRegistry.registerAgent(adapter)
-            }
-            logger.info("Registered A2A adapters for legacy tools: ${tools.map { it.agentType }}")
-        }.onFailure { e ->
-            logger.warn("Failed to register legacy tool adapters", e)
-        }
-    }
-    
+      
     private fun subscribeToA2AEvents() {
         // Подписываемся на сообщения от A2A агентов
         coroutineScope.launch {

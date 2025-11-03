@@ -45,7 +45,7 @@ class A2AAgentsSmokeTest {
 
         // Agents
         val scanner = A2AProjectScannerToolAgent(bus)
-        val bugDetection = A2ABugDetectionToolAgent(llm, bus, registry)
+        val bugDetection = A2ABugDetectionToolAgent(llm)
 
         // Register
         registry.registerAgent(scanner)

@@ -23,8 +23,7 @@ import ru.marslab.ide.ride.model.llm.LLMParameters
 import ru.marslab.ide.ride.model.llm.TokenUsage
 import ru.marslab.ide.ride.model.schema.ResponseFormat
 import ru.marslab.ide.ride.model.schema.ResponseSchema
-import ru.marslab.ide.ride.orchestrator.EnhancedAgentOrchestrator
-import ru.marslab.ide.ride.orchestrator.EnhancedAgentOrchestratorA2A
+import ru.marslab.ide.ride.orchestrator.StandaloneA2AOrchestrator
 import ru.marslab.ide.ride.orchestrator.ToolAgentProgressListener
 import ru.marslab.ide.ride.agent.tools.ProjectScannerToolAgent
 import ru.marslab.ide.ride.model.orchestrator.ExecutionContext
@@ -358,15 +357,16 @@ class ChatService {
     private fun setupProgressListener() {
         // Ищем EnhancedAgentOrchestrator в агенте
         val orchestrator = findEnhancedAgentOrchestrator()
-        if (orchestrator != null) {
-            orchestrator.addProgressListener(toolAgentProgressListener)
-        }
+        // StandaloneA2AOrchestrator не требует addProgressListener - использует A2A события
+        // if (orchestrator != null) {
+        //     orchestrator.addProgressListener(toolAgentProgressListener)
+        // }
     }
 
     /**
      * Ищет EnhancedAgentOrchestratorA2A в текущем агенте
      */
-    private fun findEnhancedAgentOrchestrator(): EnhancedAgentOrchestrator? {
+    private fun findEnhancedAgentOrchestrator(): Any? {
         val currentAgent = agent
         try {
             when (currentAgent) {
@@ -376,12 +376,11 @@ class ChatService {
                     val field = currentAgent::class.java.getDeclaredField("orchestrator")
                     field.isAccessible = true
                     val orchestrator = field.get(currentAgent)
-                    if (orchestrator != null && orchestrator::class.java.simpleName == "EnhancedAgentOrchestratorA2A") {
-                        // Получаем baseOrchestrator из A2A
-                        val baseField = orchestrator::class.java.getDeclaredField("baseOrchestrator")
-                        baseField.isAccessible = true
-                        @Suppress("UNCHECKED_CAST")
-                        return baseField.get(orchestrator) as? EnhancedAgentOrchestrator
+                    if (orchestrator is StandaloneA2AOrchestrator) {
+                        // StandaloneA2AOrchestrator не имеет legacy зависимостей
+                        // Возвращаем null поскольку нет базового оркестратора
+                        logger.info("Using StandaloneA2AOrchestrator - no legacy orchestrator available")
+                        return null
                     }
                 }
 
@@ -858,10 +857,18 @@ class ChatService {
         // Обрабатываем запрос асинхронно
         scope.launch {
             try {
-                // Создаем старый оркестратор как основу для A2A
+                // Создаем StandaloneA2AOrchestrator без зависимостей от легаси
                 val llmProvider = LLMProviderFactory.createLLMProvider()
-                val baseOrchestrator = EnhancedAgentOrchestrator(llmProvider)
-                val enhancedOrchestrator = EnhancedAgentOrchestratorA2A(baseOrchestrator)
+                val enhancedOrchestrator = StandaloneA2AOrchestrator()
+
+                // Инициализируем A2A агентов
+                try {
+                    kotlinx.coroutines.runBlocking {
+                        enhancedOrchestrator.registerAllAgents(llmProvider)
+                    }
+                } catch (e: Exception) {
+                    logger.warn("Failed to initialize StandaloneA2AOrchestrator: ${e.message}", e)
+                }
 
                 // Формируем контекст
                 val context = ChatContext(
@@ -910,16 +917,17 @@ class ChatService {
                     }
                 }
 
-                baseOrchestrator.addProgressListener(progressListener)
+                // StandaloneA2AOrchestrator не использует addProgressListener - события приходят через A2A шину
+                // enhancedOrchestrator.addProgressListener(progressListener)
 
-                // Запускаем оркестратор
-                val result = baseOrchestrator.processEnhanced(agentRequest) { step ->
+                // Запускаем StandaloneA2AOrchestrator
+                val result = enhancedOrchestrator.processRequest(agentRequest) { stepResult ->
                     // Отправляем прогресс в UI
                     withContext(Dispatchers.EDT) {
                         onStepComplete(
                             ru.marslab.ide.ride.model.chat.Message(
                                 role = ru.marslab.ide.ride.model.chat.MessageRole.ASSISTANT,
-                                content = "🔄 Выполняется шаг: ${step.javaClass.simpleName}",
+                                content = "🔄 ${stepResult.stepTitle}: ${if (stepResult.success) "✅" else "❌"}",
                                 timestamp = System.currentTimeMillis()
                             )
                         )
@@ -943,8 +951,8 @@ class ChatService {
                     }
                 }
 
-                // Удаляем listener и очищаем callback
-                baseOrchestrator.removeProgressListener(progressListener)
+                // StandaloneA2AOrchestrator не использует removeProgressListener
+                // baseOrchestrator.removeProgressListener(progressListener)
                 currentResponseCallback = null
 
             } catch (e: Exception) {

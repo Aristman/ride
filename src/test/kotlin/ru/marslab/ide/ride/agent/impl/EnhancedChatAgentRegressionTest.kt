@@ -11,7 +11,7 @@ import ru.marslab.ide.ride.model.agent.AgentRequest
 import ru.marslab.ide.ride.model.agent.AgentResponse
 import ru.marslab.ide.ride.model.chat.ChatContext
 import ru.marslab.ide.ride.model.llm.LLMParameters
-import ru.marslab.ide.ride.orchestrator.EnhancedAgentOrchestrator
+import ru.marslab.ide.ride.orchestrator.StandaloneA2AOrchestrator
 import com.intellij.openapi.project.Project
 
 /**
@@ -23,7 +23,7 @@ class EnhancedChatAgentRegressionTest {
     fun `simple query should use base chat agent`() = runBlocking {
         // Создаем моки
         val mockBaseAgent = mock<ChatAgent>()
-        val mockOrchestrator = mock<EnhancedAgentOrchestrator>()
+        val mockOrchestrator = mock<StandaloneA2AOrchestrator>()
         val mockProject = mock<Project>()
 
         // Настраиваем ответ от базового агента
@@ -52,14 +52,14 @@ class EnhancedChatAgentRegressionTest {
 
         // Проверяем, что базовый агент был вызван, а оркестратор - нет
         verify(mockBaseAgent, times(1)).ask(any<AgentRequest>())
-        verify(mockOrchestrator, never()).processEnhanced(any<AgentRequest>(), any<suspend (ru.marslab.ide.ride.agent.OrchestratorStep) -> Unit>())
+        verify(mockOrchestrator, never()).processRequest(any<AgentRequest>(), any<suspend (ru.marslab.ide.ride.agent.OrchestratorStep) -> Unit>())
     }
 
     @Test
     fun `complex query should use orchestrator`() = runBlocking {
         // Создаем моки
         val mockBaseAgent = mock<ChatAgent>()
-        val mockOrchestrator = mock<EnhancedAgentOrchestrator>()
+        val mockOrchestrator = mock<StandaloneA2AOrchestrator>()
         val mockProject = mock<Project>()
 
         // Настраиваем ответ от оркестратора
@@ -69,7 +69,7 @@ class EnhancedChatAgentRegressionTest {
             uncertainty = 0.1
         )
         whenever(
-            mockOrchestrator.processEnhanced(
+            mockOrchestrator.processRequest(
                 any<AgentRequest>(),
                 any<suspend (ru.marslab.ide.ride.agent.OrchestratorStep) -> Unit>()
             )
@@ -92,7 +92,7 @@ class EnhancedChatAgentRegressionTest {
         assertEquals("Результат анализа кода", response.content)
 
         // Проверяем, что оркестратор был вызван, а базовый агент - нет
-        verify(mockOrchestrator, times(1)).processEnhanced(any<AgentRequest>(), any<suspend (ru.marslab.ide.ride.agent.OrchestratorStep) -> Unit>())
+        verify(mockOrchestrator, times(1)).processRequest(any<AgentRequest>(), any<suspend (ru.marslab.ide.ride.agent.OrchestratorStep) -> Unit>())
         verify(mockBaseAgent, never()).ask(any<AgentRequest>())
     }
 
@@ -100,7 +100,7 @@ class EnhancedChatAgentRegressionTest {
     fun `plan resume should use orchestrator`() = runBlocking {
         // Создаем моки
         val mockBaseAgent = mock<ChatAgent>()
-        val mockOrchestrator = mock<EnhancedAgentOrchestrator>()
+        val mockOrchestrator = mock<StandaloneA2AOrchestrator>()
         val mockProject = mock<Project>()
 
         // Настраиваем ответ от оркестратора
@@ -110,7 +110,7 @@ class EnhancedChatAgentRegressionTest {
             uncertainty = 0.0
         )
         whenever(
-            mockOrchestrator.resumePlanWithCallback(
+            mockOrchestrator.processResumePlan(
                 any<String>(),
                 any<String>(),
                 any<suspend (ru.marslab.ide.ride.agent.OrchestratorStep) -> Unit>()
@@ -139,7 +139,7 @@ class EnhancedChatAgentRegressionTest {
         assertEquals("План возобновлен", response.content)
 
         // Проверяем, что был вызван метод возобновления плана
-        verify(mockOrchestrator, times(1)).resumePlanWithCallback(eq("test-plan-id"), eq("продолжить выполнение"), any())
+        verify(mockOrchestrator, times(1)).processResumePlan(eq("test-plan-id"), eq("продолжить выполнение"), any())
         verify(mockBaseAgent, never()).ask(any<AgentRequest>())
     }
 
@@ -147,7 +147,7 @@ class EnhancedChatAgentRegressionTest {
     fun `RAG enriched query without complex keywords should use base agent`() = runBlocking {
         // Создаем моки
         val mockBaseAgent = mock<ChatAgent>()
-        val mockOrchestrator = mock<EnhancedAgentOrchestrator>()
+        val mockOrchestrator = mock<StandaloneA2AOrchestrator>()
         val mockProject = mock<Project>()
 
         // Настраиваем ответ от базового агента
@@ -189,6 +189,6 @@ class EnhancedChatAgentRegressionTest {
 
         // Проверяем, что базовый агент был вызван
         verify(mockBaseAgent, times(1)).ask(any<AgentRequest>())
-        verify(mockOrchestrator, never()).processEnhanced(any<AgentRequest>(), any<suspend (ru.marslab.ide.ride.agent.OrchestratorStep) -> Unit>())
+        verify(mockOrchestrator, never()).processRequest(any<AgentRequest>(), any<suspend (ru.marslab.ide.ride.agent.OrchestratorStep) -> Unit>())
     }
 }
