@@ -136,12 +136,18 @@ class ChatUiBuilder(
         val clearButton = JButton("Очистить").apply {
             addActionListener { onClearChat() }
         }
+        val micButton = JButton("🎤").apply {
+            toolTipText = "Запись голоса"
+            isEnabled = true
+        }
 
         val buttonPanel = JPanel().apply {
             layout = BoxLayout(this, BoxLayout.X_AXIS)
             add(sendButton)
             add(Box.createHorizontalStrut(5))
             add(clearButton)
+            add(Box.createHorizontalStrut(5))
+            add(micButton)
         }
 
         val panel = JPanel(BorderLayout()).apply {
@@ -154,7 +160,8 @@ class ChatUiBuilder(
             panel = panel,
             inputArea = inputArea,
             sendButton = sendButton,
-            clearButton = clearButton
+            clearButton = clearButton,
+            micButton = micButton
         )
     }
 
