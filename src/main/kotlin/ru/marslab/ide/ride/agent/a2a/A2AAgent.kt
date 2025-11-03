@@ -5,10 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flowOf
 import ru.marslab.ide.ride.agent.Agent
 import ru.marslab.ide.ride.model.agent.AgentCapabilities
 import ru.marslab.ide.ride.model.agent.AgentEvent
@@ -184,7 +181,9 @@ abstract class BaseA2AAgent(
                 payload = MessagePayload.AgentInfoPayload(
                     agentId = a2aAgentId,
                     agentType = agentType.name,
-                    status = "READY"
+                    legacyAgentClass = this@BaseA2AAgent::class.java.name,
+                    supportedMessageTypes = supportedMessageTypes,
+                    timestamp = System.currentTimeMillis()
                 )
             )
             messageBus.publish(initEvent)
@@ -234,7 +233,9 @@ abstract class BaseA2AAgent(
                 payload = MessagePayload.AgentInfoPayload(
                     agentId = a2aAgentId,
                     agentType = agentType.name,
-                    status = "SHUTDOWN"
+                    legacyAgentClass = this@BaseA2AAgent::class.java.name,
+                    supportedMessageTypes = supportedMessageTypes,
+                    timestamp = System.currentTimeMillis()
                 )
             )
             messageBus.publish(shutdownEvent)

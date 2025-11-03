@@ -42,7 +42,7 @@ class StandaloneA2AOrchestrator(
         try {
             // Базовые агенты без LLM
             val basicAgents = listOf(
-                A2AProjectScannerToolAgent(messageBus),
+                A2AProjectScannerToolAgent(),
                 A2AArchitectureToolAgent(),
                 A2AEmbeddingIndexerToolAgent(),
                 A2ACodeChunkerToolAgent(),
@@ -85,24 +85,41 @@ class StandaloneA2AOrchestrator(
      */
     private suspend fun ensureBasicAgentsRegistered() {
         try {
-            if (a2aRegistry.getRegisteredAgentsCount() > 0) return
-
-            logger.info("Registering basic A2A agents lazily for standalone orchestrator...")
-            val basicAgents = listOf(
-                A2AProjectScannerToolAgent(messageBus),
-                A2AArchitectureToolAgent(),
-                A2AEmbeddingIndexerToolAgent(),
-                A2ACodeChunkerToolAgent(),
-                A2AOpenSourceFileToolAgent(),
-                A2AUserInteractionAgent(),
-                A2ACodeQualityToolAgent()
+            // Проверяем наличие ключевых агентов по типам
+            val requiredTypes = listOf(
+                AgentType.PROJECT_SCANNER,
+                AgentType.ARCHITECTURE_ANALYSIS,
+                AgentType.EMBEDDING_INDEXER,
+                AgentType.CODE_CHUNKER,
+                AgentType.FILE_OPERATIONS,
+                AgentType.USER_INTERACTION,
+                AgentType.CODE_QUALITY
             )
 
-            basicAgents.forEach { agent ->
-                a2aRegistry.registerAgent(agent)
+            val toRegister = mutableListOf<A2AAgent>()
+
+            requiredTypes.forEach { type ->
+                val exists = a2aRegistry.getAgentsByType(type).isNotEmpty()
+                if (!exists) {
+                    when (type) {
+                        AgentType.PROJECT_SCANNER -> toRegister += A2AProjectScannerToolAgent()
+                        AgentType.ARCHITECTURE_ANALYSIS -> toRegister += A2AArchitectureToolAgent()
+                        AgentType.EMBEDDING_INDEXER -> toRegister += A2AEmbeddingIndexerToolAgent()
+                        AgentType.CODE_CHUNKER -> toRegister += A2ACodeChunkerToolAgent()
+                        AgentType.FILE_OPERATIONS -> toRegister += A2AOpenSourceFileToolAgent()
+                        AgentType.USER_INTERACTION -> toRegister += A2AUserInteractionAgent()
+                        AgentType.CODE_QUALITY -> toRegister += A2ACodeQualityToolAgent()
+                        else -> {}
+                    }
+                }
             }
 
-            logger.info("Basic A2A agents registered: ${basicAgents.map { it.a2aAgentId }}")
+            if (toRegister.isNotEmpty()) {
+                logger.info("Registering missing basic A2A agents: ${toRegister.map { it.agentType }}")
+                toRegister.forEach { agent -> a2aRegistry.registerAgent(agent) }
+            } else {
+                logger.info("All basic A2A agents already registered")
+            }
         } catch (e: Exception) {
             logger.error("Failed to ensure basic A2A agents registered", e)
             throw e

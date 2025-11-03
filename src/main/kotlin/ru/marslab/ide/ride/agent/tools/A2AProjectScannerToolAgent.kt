@@ -1,5 +1,9 @@
 package ru.marslab.ide.ride.agent.tools
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import ru.marslab.ide.ride.agent.BaseToolAgent
 import ru.marslab.ide.ride.agent.ValidationResult
@@ -19,9 +23,7 @@ import java.io.File
  * A2A-версия ProjectScannerToolAgent.
  * Обрабатывает FILE_DATA_REQUEST и PROJECT_STRUCTURE_REQUEST через шину MessageBus.
  */
-class A2AProjectScannerToolAgent(
-    private val messageBus: MessageBus
-) : BaseToolAgent(
+class A2AProjectScannerToolAgent() : BaseToolAgent(
     agentType = AgentType.PROJECT_SCANNER,
     toolCapabilities = setOf(
         "file_listing",
@@ -32,6 +34,9 @@ class A2AProjectScannerToolAgent(
 
     private val agentId: String = "project-scanner-a2a-${hashCode()}"
     override val a2aAgentId: String = agentId
+
+    private val a2aJob: Job = SupervisorJob()
+    private val a2aScope = CoroutineScope(Dispatchers.Default + a2aJob)
 
     override val supportedMessageTypes: Set<String> = setOf(
         "FILE_DATA_REQUEST",
@@ -91,6 +96,61 @@ class A2AProjectScannerToolAgent(
             is AgentMessage.Response -> null
             is AgentMessage.Ack -> null
         }
+    }
+
+    override suspend fun initializeA2A(
+        messageBus: MessageBus,
+        context: ExecutionContext
+    ) {
+        // Публикуем событие инициализации
+        try {
+            val init = AgentMessage.Event(
+                senderId = a2aAgentId,
+                eventType = "AGENT_INITIALIZED",
+                payload = MessagePayload.AgentInfoPayload(
+                    agentId = a2aAgentId,
+                    agentType = agentType.name,
+                    legacyAgentClass = this@A2AProjectScannerToolAgent::class.java.name,
+                    supportedMessageTypes = supportedMessageTypes,
+                    timestamp = System.currentTimeMillis()
+                )
+            )
+            messageBus.publish(init)
+        } catch (e: Exception) {
+            logger.warn("Failed to publish init event for $a2aAgentId", e)
+        }
+
+        // Подписка на запросы по поддерживаемым типам и (опционально) адресу agentId
+        a2aScope.launch {
+            messageBus
+                .subscribe(AgentMessage.Request::class) { req ->
+                    supportedMessageTypes.contains(req.messageType) &&
+                        (req.targetId == null || req.targetId == a2aAgentId)
+                }
+                .collect { req ->
+                    try {
+                        val resp = handleRequest(req)
+                        messageBus.publish(resp)
+                    } catch (e: Exception) {
+                        logger.error("A2AProjectScannerToolAgent failed to handle request ${req.messageType}", e)
+                        val error = AgentMessage.Response(
+                            senderId = a2aAgentId,
+                            requestId = req.id,
+                            success = false,
+                            payload = MessagePayload.ErrorPayload(
+                                error = e.message ?: "Scanner error",
+                                cause = "A2AProjectScannerToolAgent exception"
+                            ),
+                            error = e.message
+                        )
+                        messageBus.publish(error)
+                    }
+                }
+        }
+    }
+
+    override suspend fun shutdownA2A(messageBus: MessageBus) {
+        a2aJob.cancel()
     }
 
     private suspend fun handleRequest(request: AgentMessage.Request): AgentMessage.Response {

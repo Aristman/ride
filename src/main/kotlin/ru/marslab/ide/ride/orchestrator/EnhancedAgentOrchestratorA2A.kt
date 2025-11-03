@@ -56,7 +56,7 @@ class EnhancedAgentOrchestratorA2A(
      */
     suspend fun registerCoreAgents(llmProvider: LLMProvider) {
         // Независимые A2A агенты без legacy зависимостей
-        val scanner = A2AProjectScannerToolAgent(messageBus)
+        val scanner = A2AProjectScannerToolAgent()
         val architectureAgent = A2AArchitectureToolAgent() // Независимый агент
         val llmReviewAgent = A2ALLMReviewToolAgent(llmProvider) // Независимый агент
         val embeddingIndexerAgent = A2AEmbeddingIndexerToolAgent() // Независимый агент
@@ -100,7 +100,7 @@ class EnhancedAgentOrchestratorA2A(
      */
     suspend fun registerCoreAgentsBasic() {
         // Независимые A2A агенты без LLM зависимостей
-        val scanner = A2AProjectScannerToolAgent(messageBus)
+        val scanner = A2AProjectScannerToolAgent()
         val architectureAgent = A2AArchitectureToolAgent() // Независимый агент
         val embeddingIndexerAgent = A2AEmbeddingIndexerToolAgent() // Независимый агент
         val codeChunkerAgent = A2ACodeChunkerToolAgent() // Независимый агент
