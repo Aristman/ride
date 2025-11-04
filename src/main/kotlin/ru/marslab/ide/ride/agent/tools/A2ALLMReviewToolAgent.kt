@@ -158,6 +158,18 @@ class A2ALLMReviewToolAgent(
         try {
             val systemPromptWithRules = applyRulesToPrompt(systemPrompt)
 
+            // Логируем промпт до отправки в LLM
+            logUserPrompt(
+                action = "A2A_LLM_REVIEW",
+                systemPrompt = systemPromptWithRules,
+                userPrompt = userPrompt,
+                extraMeta = mapOf(
+                    "language" to language,
+                    "focus_areas" to focusAreas.joinToString(","),
+                    "include_suggestions" to includeSuggestions
+                )
+            )
+
             val response = llmProvider.sendRequest(
                 systemPrompt = systemPromptWithRules,
                 userMessage = userPrompt,

@@ -496,6 +496,14 @@ class A2ACodeGeneratorToolAgent(
             val systemPromptWithRules = applyRulesToPrompt(baseSystemPrompt)
             logger.info("System prompt with rules: $systemPromptWithRules")
 
+            // Логирование промпта
+            logUserPrompt(
+                action = "A2A_CODE_GENERATE",
+                systemPrompt = systemPromptWithRules,
+                userPrompt = prompt,
+                extraMeta = mapOf("mode" to "general", "language" to language)
+            )
+
             val response = llmProvider.sendRequest(
                 systemPrompt = systemPromptWithRules,
                 userMessage = prompt,
@@ -592,6 +600,14 @@ class A2ACodeGeneratorToolAgent(
         }
 
         try {
+            // Логирование промпта
+            logUserPrompt(
+                action = "A2A_CLASS_GENERATE",
+                systemPrompt = "Ты — эксперт по ООП. Генерируй хорошо спроектированные классы, строго соблюдая принципы SOLID.",
+                userPrompt = prompt,
+                extraMeta = mapOf("language" to language, "class_name" to className)
+            )
+
             val response = llmProvider.sendRequest(
                 systemPrompt = "Ты — эксперт по ООП. Генерируй хорошо спроектированные классы, строго соблюдая принципы SOLID.",
                 userMessage = prompt,
@@ -660,6 +676,14 @@ class A2ACodeGeneratorToolAgent(
         }
 
         try {
+            // Логирование промпта
+            logUserPrompt(
+                action = "A2A_FUNCTION_GENERATE",
+                systemPrompt = "Ты — эксперт по алгоритмам. Генерируй эффективные, хорошо документированные функции.",
+                userPrompt = prompt,
+                extraMeta = mapOf("language" to language, "function_name" to functionName)
+            )
+
             val response = llmProvider.sendRequest(
                 systemPrompt = "Ты — эксперт по алгоритмам. Генерируй эффективные, хорошо документированные функции.",
                 userMessage = prompt,
@@ -667,6 +691,8 @@ class A2ACodeGeneratorToolAgent(
                 LLMParameters()
             )
 
+{{ ... }}
+                systemPrompt = "Ты — эксперт по тестированию. Генерируй качественные тесты с покрытием крайних случаев.",
             val parts = response.content.split("```")
             val code = if (parts.size >= 2) parts[1] else response.content
             val explanation = if (parts.size >= 3) parts[2].trim() else "Generated function implementation."
@@ -723,6 +749,14 @@ class A2ACodeGeneratorToolAgent(
         }
 
         try {
+            // Логирование промпта
+            logUserPrompt(
+                action = "A2A_ALGORITHM_GENERATE",
+                systemPrompt = "Ты — эксперт по алгоритмам. Генерируй оптимизированные алгоритмы с корректным анализом сложности.",
+                userPrompt = prompt,
+                extraMeta = mapOf("language" to language, "algorithm_type" to algorithmType)
+            )
+
             val response = llmProvider.sendRequest(
                 systemPrompt = "Ты — эксперт по алгоритмам. Генерируй оптимизированные алгоритмы с корректным анализом сложности.",
                 userMessage = prompt,

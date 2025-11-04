@@ -356,4 +356,34 @@ abstract class BaseA2AAgent(
             return basePrompt
         }
     }
+
+    /**
+     * Логирует промпты, отправляемые в LLM, с безопасным усечением.
+     * Использовать во всех наследниках перед вызовом LLM.
+     */
+    protected fun logUserPrompt(
+        action: String,
+        systemPrompt: String?,
+        userPrompt: String,
+        extraMeta: Map<String, Any> = emptyMap()
+    ) {
+        val maxLen = 2000 // ограничение для логов, чтобы не раздувать
+        fun truncate(s: String?): String {
+            if (s == null) return ""
+            return if (s.length > maxLen) s.take(maxLen) + "\n... [truncated ${s.length - maxLen} chars]" else s
+        }
+
+        val sys = truncate(systemPrompt)
+        val usr = truncate(userPrompt)
+
+        val meta = buildString {
+            append("agentId=$a2aAgentId, agentType=${agentType.name}, action=$action")
+            if (extraMeta.isNotEmpty()) {
+                append(", meta=")
+                append(extraMeta.entries.joinToString(prefix = "{", postfix = "}") { "${it.key}=${it.value}" })
+            }
+        }
+
+        logger.info("[PROMPT] $meta\n[SYSTEM]\n$sys\n[USER]\n$usr")
+    }
 }

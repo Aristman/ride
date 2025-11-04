@@ -76,6 +76,17 @@ class CodeGeneratorToolAgent(
             }
 
             logger.info("CODE_GENERATOR sending request to LLM")
+            // Логируем промпт пользователя
+            logUserPrompt(
+                action = "CODE_GENERATION",
+                systemPrompt = systemPrompt,
+                userPrompt = fullUserPrompt,
+                extraMeta = mapOf(
+                    "code_type" to codeType,
+                    "language" to language,
+                    "has_context" to (contextFiles.isNotEmpty())
+                )
+            )
 
             // Отправляем запрос в LLM
             val response = llmProvider.sendRequest(

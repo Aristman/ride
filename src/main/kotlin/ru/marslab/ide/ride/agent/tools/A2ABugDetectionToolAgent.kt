@@ -394,6 +394,17 @@ class A2ABugDetectionToolAgent(
         val userPrompt = buildBugAnalysisUserPrompt(code, filePath, language)
 
         try {
+            // Логирование промпта
+            logUserPrompt(
+                action = "A2A_BUG_ANALYSIS",
+                systemPrompt = systemPromptWithRules,
+                userPrompt = userPrompt,
+                extraMeta = mapOf(
+                    "file" to filePath,
+                    "language" to language
+                )
+            )
+
             val response = llmProvider.sendRequest(
                 systemPrompt = systemPromptWithRules,
                 userMessage = userPrompt,
