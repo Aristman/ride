@@ -1091,7 +1091,11 @@ class SettingsConfigurable : Configurable {
                         empty(5)
                     )
                 }
-                globalRulesScroll = JScrollPane(globalRulesList).apply {
+                // Обёртка для выравнивания содержимого по верхнему краю внутри скролла
+                val globalWrapper = JPanel(BorderLayout()).apply {
+                    add(globalRulesList, BorderLayout.NORTH)
+                }
+                globalRulesScroll = JScrollPane(globalWrapper).apply {
                     preferredSize = Dimension(300, 200)
                     verticalScrollBarPolicy = JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED
                     horizontalScrollBarPolicy = JScrollPane.HORIZONTAL_SCROLLBAR_NEVER
@@ -1119,13 +1123,17 @@ class SettingsConfigurable : Configurable {
             }
             row {
                 projectRulesList = JPanel().apply {
-                    layout = BoxLayout(this, BoxLayout.Y_AXIS)
+                    layout = BoxLayout(this, BoxLayout.PAGE_AXIS)
                     border = compound(
                         customLine(borderColor(), 1),
                         empty(5)
                     )
                 }
-                projectRulesScroll = JScrollPane(projectRulesList).apply {
+                // Обёртка для выравнивания содержимого по верхнему краю внутри скролла
+                val projectWrapper = JPanel(BorderLayout()).apply {
+                    add(projectRulesList, BorderLayout.NORTH)
+                }
+                projectRulesScroll = JScrollPane(projectWrapper).apply {
                     preferredSize = Dimension(300, 200)
                     verticalScrollBarPolicy = JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED
                     horizontalScrollBarPolicy = JScrollPane.HORIZONTAL_SCROLLBAR_NEVER

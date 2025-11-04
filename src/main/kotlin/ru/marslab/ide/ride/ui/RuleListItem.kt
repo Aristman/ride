@@ -2,10 +2,10 @@ package ru.marslab.ide.ride.ui
 
 import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.components.JBLabel
-import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.util.ui.JBUI
 import java.awt.BorderLayout
 import java.awt.Cursor
+import java.awt.Dimension
 import java.awt.FlowLayout
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
@@ -32,6 +32,7 @@ class RuleListItem(
     }
 
     private val deleteButton: JButton = JButton("-").apply {
+        preferredSize = Dimension(30, 30)
         addActionListener {
             onDelete(fileName)
         }
@@ -53,14 +54,13 @@ class RuleListItem(
         border = JBUI.Borders.empty(2)
 
         // Панель с чекбоксом и кнопкой удаления
-        val controlsPanel = JPanel(FlowLayout(FlowLayout.LEFT, 2, 0)).apply {
-            add(checkBox)
-            add(label)
-            add(deleteButton)
+        val controlsPanel = JPanel(FlowLayout(FlowLayout.TRAILING, 2, 0)).apply {
+            add(checkBox, BorderLayout.WEST)
+            add(label, BorderLayout.CENTER)
+            add(deleteButton, BorderLayout.EAST)
         }
 
         add(controlsPanel, BorderLayout.WEST)
-//        add(label, BorderLayout.CENTER)
     }
 
     fun setActive(active: Boolean) {
