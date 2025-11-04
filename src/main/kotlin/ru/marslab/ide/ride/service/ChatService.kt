@@ -23,7 +23,7 @@ import ru.marslab.ide.ride.model.llm.LLMParameters
 import ru.marslab.ide.ride.model.llm.TokenUsage
 import ru.marslab.ide.ride.model.schema.ResponseFormat
 import ru.marslab.ide.ride.model.schema.ResponseSchema
-import ru.marslab.ide.ride.orchestrator.EnhancedAgentOrchestrator
+import ru.marslab.ide.ride.orchestrator.StandaloneA2AOrchestrator
 import ru.marslab.ide.ride.orchestrator.ToolAgentProgressListener
 import ru.marslab.ide.ride.agent.tools.ProjectScannerToolAgent
 import ru.marslab.ide.ride.model.orchestrator.ExecutionContext
@@ -34,6 +34,9 @@ import ru.marslab.ide.ride.service.storage.ChatStorageService
 import ru.marslab.ide.ride.settings.PluginSettings
 import ru.marslab.ide.ride.ui.chat.JcefChatView
 import ru.marslab.ide.ride.util.TokenEstimator
+import ru.marslab.ide.ride.agent.a2a.AgentMessage
+import ru.marslab.ide.ride.agent.a2a.MessagePayload
+import ru.marslab.ide.ride.agent.a2a.MessageBusProvider
 import java.time.Instant
 
 /**
@@ -59,6 +62,8 @@ class ChatService {
     // Текущие настройки формата ответа (для UI)
     private var currentFormat: ResponseFormat? = null
     private var currentSchema: ResponseSchema? = null
+    // Активный план для фильтрации A2A событий в UI
+    private var currentPlanId: String? = null
 
     // Агент создаётся и может быть пересоздан при смене настроек
     // EnhancedChatAgent автоматически определяет сложность задачи:
@@ -85,6 +90,199 @@ class ChatService {
         }
         override fun onToolAgentFailed(message: ToolAgentStatusMessage, error: String) {
             displayToolAgentStatus(message)
+        }
+    }
+
+    /**
+     * Подписка на A2A события и отображение прогресса в чате
+     */
+    private fun startA2AEventSubscription() {
+        // Запускаем сбор событий в фоне
+        scope.launch {
+            try {
+                MessageBusProvider.get().subscribeAll().collect { msg ->
+                    when (msg) {
+                        is AgentMessage.Event -> handleA2AUiEvent(msg)
+                        else -> { /* ignore */ }
+                    }
+                }
+            } catch (e: Exception) {
+                logger.warn("ChatService: A2A event subscription error: ${e.message}", e)
+            }
+        }
+    }
+
+    private fun handleA2AUiEvent(event: AgentMessage.Event) {
+        // Определяем planId из metadata/payload
+        val metaPlanId = event.metadata["planId"] as? String
+        val payloadRequestId = (event.payload as? MessagePayload.ExecutionStatusPayload)?.requestId
+        val planIdForEvent = metaPlanId ?: payloadRequestId
+
+        // Захватываем текущий planId на старте оркестрации/плана
+        if (currentPlanId == null && (event.eventType == "ORCHESTRATION_STARTED" || event.eventType == "PLAN_EXECUTION_STARTED")) {
+            currentPlanId = planIdForEvent
+        }
+
+        // Фильтрация событий других планов
+        if (currentPlanId != null && planIdForEvent != null && planIdForEvent != currentPlanId) {
+            return
+        }
+
+        // Создаем системное сообщение для отображения в чате
+        val systemMessage = createSystemMessageForEvent(event)
+
+        // Создаем детальную информацию для раскрытия по клику
+        val detailedInfo = createDetailedInfoForEvent(event)
+
+        val message = Message(
+            content = systemMessage,
+            role = MessageRole.SYSTEM,
+            metadata = mapOf(
+                "type" to "a2a_system_event",
+                "eventType" to event.eventType,
+                "senderId" to event.senderId,
+                "detailedInfo" to detailedInfo,
+                "agentType" to extractAgentType(event.senderId),
+                "stage" to extractStageFromEvent(event.eventType)
+            )
+        )
+        sendProgressMessageToUI(message)
+
+        // Сброс план-контекста при завершении
+        if (event.eventType == "PLAN_EXECUTION_COMPLETED" || event.eventType == "PLAN_EXECUTION_FAILED" ||
+            event.eventType == "ORCHESTRATION_COMPLETED" || event.eventType == "ORCHESTRATION_FAILED") {
+            currentPlanId = null
+        }
+    }
+
+    /**
+     * Создает короткое системное сообщение для отображения в чате
+     */
+    private fun createSystemMessageForEvent(event: AgentMessage.Event): String {
+        val agentType = extractAgentType(event.senderId)
+        val stage = extractStageFromEvent(event.eventType)
+
+        return when (event.eventType) {
+            "TOOL_EXECUTION_STARTED" -> "🔄 $agentType: начало работы"
+            "TOOL_EXECUTION_COMPLETED" -> "✅ $agentType: выполнено"
+            "TOOL_EXECUTION_FAILED" -> "❌ $agentType: ошибка"
+            "STEP_STARTED" -> "🔄 $stage"
+            "STEP_COMPLETED" -> "✅ $stage завершен"
+            "STEP_FAILED" -> "❌ $stage: ошибка"
+            "ORCHESTRATION_STARTED" -> "🚀 Запуск многошагового выполнения"
+            "PLAN_EXECUTION_STARTED" -> "📋 Начало выполнения плана"
+            "PLAN_EXECUTION_COMPLETED" -> "🎉 План успешно выполнен"
+            "PLAN_EXECUTION_FAILED" -> "⚠️ Выполнение плана прервано"
+            "ORCHESTRATION_COMPLETED" -> "🏁 Все задачи завершены"
+            else -> "ℹ️ $agentType: $stage"
+        }
+    }
+
+    /**
+     * Создает детальную информацию для отображения при клике на системное сообщение
+     */
+    private fun createDetailedInfoForEvent(event: AgentMessage.Event): String {
+        return when (val payload = event.payload) {
+            is MessagePayload.ExecutionStatusPayload -> {
+                val status = payload.status
+                val agent = payload.agentId ?: event.senderId
+                val result = payload.result
+                val error = payload.error
+                val planId = event.metadata["planId"] ?: payload.requestId ?: ""
+                buildString {
+                    appendLine("## Детальная информация A2A события")
+                    appendLine("**Тип события:** ${event.eventType}")
+                    appendLine("**Агент:** $agent")
+                    appendLine("**Статус:** $status")
+                    if (planId.toString().isNotBlank()) appendLine("**ID плана:** $planId")
+                    if (!result.isNullOrBlank()) appendLine("**Результат:** $result")
+                    if (!error.isNullOrBlank()) appendLine("**Ошибка:** $error")
+                    appendLine("**Время:** ${java.time.Instant.now()}")
+                }
+            }
+            is MessagePayload.ProgressPayload -> {
+                val planId = event.metadata["planId"] ?: ""
+                val attempt = event.metadata["attempt"]
+                val attempts = event.metadata["attempts"]
+                buildString {
+                    appendLine("## Детальная информация о прогрессе")
+                    appendLine("**Тип события:** ${event.eventType}")
+                    appendLine("**Шаг:** ${payload.stepId}")
+                    appendLine("**Статус:** ${payload.status}")
+                    appendLine("**Прогресс:** ${payload.progress}%")
+                    if (planId.toString().isNotBlank()) appendLine("**ID плана:** $planId")
+                    if (attempt != null) appendLine("**Попытка:** $attempt")
+                    if (attempts != null) appendLine("**Всего попыток:** $attempts")
+                    if (!payload.message.isNullOrBlank()) appendLine("**Сообщение:** ${payload.message}")
+                    appendLine("**Время:** ${java.time.Instant.now()}")
+                }
+            }
+            is MessagePayload.CustomPayload -> {
+                val type = payload.type
+                val data = payload.data
+                buildString {
+                    appendLine("## Детальная информация о событии")
+                    appendLine("**Тип события:** ${event.eventType}")
+                    appendLine("**Тип данных:** $type")
+                    appendLine("**Отправитель:** ${event.senderId}")
+                    if (data.isNotEmpty()) {
+                        appendLine("**Данные:**")
+                        appendLine("```json")
+                        appendLine(simpleJsonString(data))
+                        appendLine("```")
+                    }
+                    appendLine("**Время:** ${java.time.Instant.now()}")
+                }
+            }
+            else -> {
+                buildString {
+                    appendLine("## Информация о событии")
+                    appendLine("**Тип:** ${event.eventType}")
+                    appendLine("**Payload:** ${payload::class.simpleName}")
+                    appendLine("**Отправитель:** ${event.senderId}")
+                    appendLine("**Время:** ${java.time.Instant.now()}")
+                }
+            }
+        }
+    }
+
+    /**
+     * Извлекает тип агента из ID отправителя
+     */
+    private fun extractAgentType(senderId: String): String {
+        return when {
+            senderId.contains("code-generator") -> "Генератор кода"
+            senderId.contains("project-scanner") -> "Сканер проекта"
+            senderId.contains("llm-review") -> "LLM ревьюер"
+            senderId.contains("bug-detection") -> "Детектор багов"
+            senderId.contains("architecture") -> "Анализатор архитектуры"
+            senderId.contains("quality") -> "Анализатор качества"
+            senderId.contains("report") -> "Генератор отчетов"
+            senderId.contains("file-operations") -> "Операции с файлами"
+            senderId.contains("embedding") -> "Индексатор"
+            senderId.contains("documentation") -> "Генератор документации"
+            senderId.contains("orchestrator") -> "Оркестратор"
+            else -> "Агент ${senderId.take(8)}..."
+        }
+    }
+
+    /**
+     * Извлекает стадию работы из типа события
+     */
+    private fun extractStageFromEvent(eventType: String): String {
+        return when (eventType) {
+            "TOOL_EXECUTION_STARTED" -> "Запуск"
+            "TOOL_EXECUTION_COMPLETED" -> "Завершение"
+            "TOOL_EXECUTION_FAILED" -> "Ошибка"
+            "STEP_STARTED" -> "Выполнение шага"
+            "STEP_COMPLETED" -> "Шаг завершен"
+            "STEP_FAILED" -> "Шаг завершился с ошибкой"
+            "ORCHESTRATION_STARTED" -> "Начало оркестрации"
+            "PLAN_EXECUTION_STARTED" -> "Начало выполнения плана"
+            "PLAN_EXECUTION_COMPLETED" -> "План выполнен"
+            "PLAN_EXECUTION_FAILED" -> "План не выполнен"
+            "ORCHESTRATION_COMPLETED" -> "Оркестрация завершена"
+            else -> "Обработка"
         }
     }
 
@@ -228,6 +426,8 @@ class ChatService {
         this.chatView = view
         // Добавляем listener к orchestrator если он есть
         setupProgressListener()
+        // Подписка на A2A события для отображения прогресса
+        startA2AEventSubscription()
     }
 
     /**
@@ -251,15 +451,16 @@ class ChatService {
     private fun setupProgressListener() {
         // Ищем EnhancedAgentOrchestrator в агенте
         val orchestrator = findEnhancedAgentOrchestrator()
-        if (orchestrator != null) {
-            orchestrator.addProgressListener(toolAgentProgressListener)
-        }
+        // StandaloneA2AOrchestrator не требует addProgressListener - использует A2A события
+        // if (orchestrator != null) {
+        //     orchestrator.addProgressListener(toolAgentProgressListener)
+        // }
     }
 
     /**
-     * Ищет EnhancedAgentOrchestrator в текущем агенте
+     * Ищет EnhancedAgentOrchestratorA2A в текущем агенте
      */
-    private fun findEnhancedAgentOrchestrator(): EnhancedAgentOrchestrator? {
+    private fun findEnhancedAgentOrchestrator(): Any? {
         val currentAgent = agent
         try {
             when (currentAgent) {
@@ -269,9 +470,11 @@ class ChatService {
                     val field = currentAgent::class.java.getDeclaredField("orchestrator")
                     field.isAccessible = true
                     val orchestrator = field.get(currentAgent)
-                    if (orchestrator != null && orchestrator::class.java.simpleName == "EnhancedAgentOrchestrator") {
-                        @Suppress("UNCHECKED_CAST")
-                        return orchestrator as? EnhancedAgentOrchestrator
+                    if (orchestrator is StandaloneA2AOrchestrator) {
+                        // StandaloneA2AOrchestrator не имеет legacy зависимостей
+                        // Возвращаем null поскольку нет базового оркестратора
+                        logger.info("Using StandaloneA2AOrchestrator - no legacy orchestrator available")
+                        return null
                     }
                 }
 
@@ -748,9 +951,18 @@ class ChatService {
         // Обрабатываем запрос асинхронно
         scope.launch {
             try {
-                // Создаем улучшенный оркестратор
+                // Создаем StandaloneA2AOrchestrator без зависимостей от легаси
                 val llmProvider = LLMProviderFactory.createLLMProvider()
-                val enhancedOrchestrator = EnhancedAgentOrchestrator(llmProvider)
+                val enhancedOrchestrator = StandaloneA2AOrchestrator()
+
+                // Инициализируем A2A агентов
+                try {
+                    kotlinx.coroutines.runBlocking {
+                        enhancedOrchestrator.registerAllAgents(llmProvider)
+                    }
+                } catch (e: Exception) {
+                    logger.warn("Failed to initialize StandaloneA2AOrchestrator: ${e.message}", e)
+                }
 
                 // Формируем контекст
                 val context = ChatContext(
@@ -799,10 +1011,22 @@ class ChatService {
                     }
                 }
 
-                enhancedOrchestrator.addProgressListener(progressListener)
+                // StandaloneA2AOrchestrator не использует addProgressListener - события приходят через A2A шину
+                // enhancedOrchestrator.addProgressListener(progressListener)
 
-                // Запускаем оркестратор
-                val result = enhancedOrchestrator.executePlan(agentRequest)
+                // Запускаем StandaloneA2AOrchestrator
+                val result = enhancedOrchestrator.processRequest(agentRequest) { stepResult ->
+                    // Отправляем прогресс в UI
+                    withContext(Dispatchers.EDT) {
+                        onStepComplete(
+                            ru.marslab.ide.ride.model.chat.Message(
+                                role = ru.marslab.ide.ride.model.chat.MessageRole.ASSISTANT,
+                                content = "🔄 ${stepResult.stepTitle}: ${if (stepResult.success) "✅" else "❌"}",
+                                timestamp = System.currentTimeMillis()
+                            )
+                        )
+                    }
+                }
 
                 withContext(Dispatchers.EDT) {
                     if (result.success) {
@@ -821,8 +1045,8 @@ class ChatService {
                     }
                 }
 
-                // Удаляем listener и очищаем callback
-                enhancedOrchestrator.removeProgressListener(progressListener)
+                // StandaloneA2AOrchestrator не использует removeProgressListener
+                // baseOrchestrator.removeProgressListener(progressListener)
                 currentResponseCallback = null
 
             } catch (e: Exception) {

@@ -74,6 +74,11 @@ class RAGPlanEnricher(
 
     /**
      * Проверяет, нужно ли использовать RAG обогащение
+     *
+     * RAG обогащение используется для:
+     * 1. Конкретных поисковых запросов (найти класс/метод)
+     * 2. Сложных запросов, требующих контекста из проекта
+     * Но с фильтрацией релевантности данных
      */
     private fun shouldUseRagEnrichment(plan: ExecutionPlan, request: String): Boolean {
         // Проверяем настройки
@@ -81,25 +86,52 @@ class RAGPlanEnricher(
             return false
         }
 
-        // Проверяем, что запрос достаточно сложный
-        if (plan.analysis.estimatedComplexity.name == "LOW") {
-            return false
-        }
-
-        // Проверяем, что запрос связан с кодом
         val requestLower = request.lowercase()
-        val codeKeywords = listOf("код", "файл", "проект", "класс", "метод", "функция", "архитектура")
-        if (!codeKeywords.any { keyword -> requestLower.contains(keyword) }) {
-            return false
-        }
 
-        // Проверяем, что план еще не содержит RAG шагов
-        val hasRagStep = plan.steps.any { it.agentType.name == "EMBEDDING_INDEXER" }
-        if (hasRagStep) {
-            return false
-        }
+        // 1. Конкретные поисковые запросы (требуют RAG всегда)
+        val searchKeywords = listOf(
+            "найди", "покажи", "поищи", "где находится", "в каком файле", "как реализован",
+            "использование", "примеры использования", "применение", "реализация",
+            "поиск", "search", "find", "locate", "where is", "how is implemented"
+        )
 
-        return true
+        val specificSearchKeywords = listOf(
+            "функция", "метод", "класс", "интерфейс", "переменная", "константа",
+            "function", "method", "class", "interface", "variable", "constant"
+        )
+
+        val isSearchQuery = searchKeywords.any { keyword -> requestLower.contains(keyword) }
+        val hasSpecificObjects = specificSearchKeywords.any { keyword -> requestLower.contains(keyword) }
+        val needsRagForSearch = isSearchQuery && hasSpecificObjects
+
+        // 2. Сложные запросы, требующие контекста (с проверкой релевантности)
+        val complexity = plan.analysis.estimatedComplexity
+        val isComplexQuery = complexity.name in setOf("HIGH", "VERY_HIGH", "EXTREME")
+
+        // Сложные запросы, где нужен контекст проекта
+        val complexContextKeywords = listOf(
+            "архитектура", "структура", "взаимодействие", "зависимости", "модули",
+            "архитектура", "структура", "взаимодействие", "зависимости", "модули",
+            "рефакторинг", "улучшение", "оптимизация", "производительность",
+            "безопасность", "security", "безопасность", "оптимизация"
+        )
+
+        val needsContext = complexContextKeywords.any { keyword -> requestLower.contains(keyword) }
+        val needsRagForComplex = isComplexQuery && needsContext
+
+        // 3. Общие запросы, НЕ требующие RAG
+        val isGeneralAnalysis = setOf(
+            "проанализируй проект", "анализ проекта", "анализируй весь проект",
+            "оцени проект", "обзор проекта", "структура проекта"
+        ).any { pattern -> requestLower.contains(pattern) }
+
+        val shouldUseRag = (needsRagForSearch || needsRagForComplex) && !isGeneralAnalysis
+
+        logger.info("RAG enrichment decision: query='$request', complexity=${complexity.name}, " +
+                   "needsRagForSearch=$needsRagForSearch, needsRagForComplex=$needsRagForComplex, " +
+                   "isGeneral=$isGeneralAnalysis, shouldUse=$shouldUseRag")
+
+        return shouldUseRag
     }
 
     /**
@@ -143,7 +175,19 @@ class RAGPlanEnricher(
             )
         }
 
-        val relevantFiles = ragResult.chunks.groupBy { it.filePath }
+        // Фильтруем найденные данные по релевантности
+        val relevantChunks = filterChunksByRelevance(ragResult.chunks, request)
+        if (relevantChunks.isEmpty()) {
+            logger.warn("Found chunks but none passed relevance filter")
+            return FileAnalysisResult(
+                relevantFiles = emptyList(),
+                suggestedSteps = emptyList(),
+                complexityAdjustment = 0.0,
+                reasoning = "Found chunks but none passed relevance filter"
+            )
+        }
+
+        val relevantFiles = relevantChunks.groupBy { it.filePath }
         val suggestedSteps = mutableListOf<String>()
         var complexityAdjustment = 0.0
 
@@ -553,6 +597,131 @@ class RAGPlanEnricher(
         return "${stepType}_${count}"
     }
 }
+
+    /**
+     * Фильтрует найденные чанки по релевантности к запросу
+     *
+     * @param chunks Найденные чанки из RAG
+     * @param request Оригинальный запрос
+     * @return Отфильтрованные релевантные чанки
+     */
+    private fun filterChunksByRelevance(chunks: List<ru.marslab.ide.ride.service.rag.RagChunk>, request: String): List<ru.marslab.ide.ride.service.rag.RagChunk> {
+        val requestLower = request.lowercase()
+        val requestKeywords = extractKeywords(requestLower)
+
+        return chunks.filter { chunk ->
+            val contentLower = chunk.content.lowercase()
+            val fileNameLower = chunk.filePath.substringAfterLast("/").lowercase()
+
+            // 1. Проверяем прямое совпадение ключевых слов
+            val keywordMatch = requestKeywords.any { keyword ->
+                contentLower.contains(keyword) || fileNameLower.contains(keyword)
+            }
+
+            // 2. Проверяем семантическую релевантность
+            val semanticRelevance = calculateSemanticRelevance(contentLower, requestKeywords)
+
+            // 3. Проверяем консистентность (не устаревший код, не TODO/FIXME без запроса)
+            val isConsistent = !isOutdatedContent(contentLower, requestLower)
+
+            // 4. Проверяем качество кода (не мусорный код)
+            val isQualityContent = isQualityCode(contentLower)
+
+            val finalScore = when {
+                keywordMatch -> 0.8 // Прямое совпадение - высокий приоритет
+                semanticRelevance > 0.5 -> 0.6 // Семантическая релевантность
+                semanticRelevance > 0.3 -> 0.4 // Слабая релевантность
+                else -> 0.0
+            }
+
+            // Применяем штрафы за консистентность и качество
+            val adjustedScore = finalScore * when {
+                !isConsistent -> 0.3 // Штраф за неконсистентность
+                !isQualityContent -> 0.5 // Штраф за низкое качество
+                else -> 1.0
+            }
+
+            // Возвращаем только достаточно релевантные чанки
+            adjustedScore >= 0.4
+        }.sortedByDescending { chunk ->
+            // Дополнительная сортировка по релевантности
+            val contentLower = chunk.content.lowercase()
+            calculateSemanticRelevance(contentLower, requestKeywords)
+        }
+    }
+
+    /**
+     * Извлекает ключевые слова из запроса
+     */
+    private fun extractKeywords(request: String): Set<String> {
+        val stopWords = setOf("и", "в", "на", "с", "для", "по", "из", "к", "от", "об", "без", "через", "под", "над", "при", "о", "а", "но", "да", "или", "что", "как", "где", "когда", "зачем", "почему")
+
+        return request.split(Regex("[^a-zA-Zа-яА-Я0-9_]+"))
+            .filter { it.length > 2 }
+            .filter { it !in stopWords }
+            .toSet()
+    }
+
+    /**
+     * Вычисляет семантическую релевантность контента к ключевым словам
+     */
+    private fun calculateSemanticRelevance(content: String, keywords: Set<String>): Double {
+        if (keywords.isEmpty()) return 0.0
+
+        val contentWords = content.split(Regex("[^a-zA-Zа-яА-Я0-9_]+")).toSet()
+        val intersection = keywords.intersect(contentWords)
+
+        // Базовая релевантность по ключевым словам
+        val keywordScore = intersection.size.toDouble() / keywords.size
+
+        // Бонус за связанные термины
+        val relatedTermsBonus = when {
+            keywords.any { it.contains("архитект") } && content.contains("структура") -> 0.2
+            keywords.any { it.contains("производ") } && content.contains("оптимиз") -> 0.2
+            keywords.any { it.contains("безопас") } && content.contains("security") -> 0.2
+            keywords.any { it.contains("зависим") } && content.contains("import") -> 0.2
+            else -> 0.0
+        }
+
+        return (keywordScore + relatedTermsBonus).coerceAtMost(1.0)
+    }
+
+    /**
+     * Проверяет, не является ли контент устаревшим
+     */
+    private fun isOutdatedContent(content: String, request: String): Boolean {
+        // Проверяем на явные маркеры устаревшего кода
+        val outdatedMarkers = listOf(
+            "deprecated", "@deprecated", "todo", "fixme", "hack", "workaround",
+            "legacy", "old code", "remove", "delete", "obsolete"
+        )
+
+        // Если в запросе не запрашиваются TODO/FIXME, то считаем их устаревшими
+        val requestWantsTodos = request.contains("todo") || request.contains("fixme")
+
+        return outdatedMarkers.any { marker ->
+            content.contains(marker, ignoreCase = true) && !requestWantsTodos
+        }
+    }
+
+    /**
+     * Проверяет качество контента
+     */
+    private fun isQualityCode(content: String): Boolean {
+        // Проверяем на мусорный контент
+        val junkPatterns = listOf(
+            Regex("[a-zA-Z]\\s*[a-zA-Z]\\s*[a-zA-Z]\\s*[a-zA-Z]"), // Слишком короткие слова
+            Regex("[{}\\[\\]]\\s*[{}\\[\\]]\\s*[{}\\[\\]]"), // Пустые скобки
+            Regex("(\\s*\\n){3,}"), // Много пустых строк
+            Regex("^[\\s\\W\\d_]+$") // Только символы без букв
+        )
+
+        // Проверяем минимальное содержательное содержимое
+        val hasMeaningfulContent = content.length > 50 &&
+                                   content.contains(Regex("[a-zA-Zа-яА-Я]{4,}")) // Есть слова длиной > 3
+
+        return !junkPatterns.any { it.containsMatchIn(content) } && hasMeaningfulContent
+    }
 
 /**
  * Результат анализа файлов найденных через RAG

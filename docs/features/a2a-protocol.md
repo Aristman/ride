@@ -1,3 +1,51 @@
+## 5. Unified TOOL_EXECUTION protocol (A2A)
+
+### 5.1 Request: TOOL_EXECUTION_REQUEST
+
+Payload (CustomPayload):
+
+```json
+{
+  "type": "TOOL_EXECUTION_REQUEST",
+  "data": {
+    "stepId": "<uuid>",
+    "description": "<string>",
+    "agentType": "<AgentType>",
+    "input": { "...": "..." },
+    "dependencies": ["<stepId>"]
+  }
+}
+```
+
+Metadata:
+- stepId, agentType, planId (если известно)
+
+### 5.2 Response: TOOL_EXECUTION_RESULT
+
+Payload (CustomPayload):
+
+```json
+{
+  "type": "TOOL_EXECUTION_RESULT",
+  "data": {
+    "output": { "...": "..." },
+    "error": "<string|optional>",
+    "metadata": { "...": "..." }
+  }
+}
+```
+
+### 5.3 Data contracts (producers → consumers)
+
+- PROJECT_SCANNER → produces: `files`, `directories`, `project_type`
+  - consumers: BUG_DETECTION, CODE_QUALITY, LLM_REVIEW, ARCHITECTURE_ANALYSIS
+- BUG_DETECTION / CODE_QUALITY / LLM_REVIEW / ARCHITECTURE_ANALYSIS → may produce: `findings`, `summary`, `processed_files`
+- REPORT_GENERATOR → consumes aggregated results and produces: `report`, `format`, `size`
+
+### 5.4 Orchestration events (metadata)
+
+- ORCHESTRATION_*, PLAN_EXECUTION_*, STEP_* — всегда содержат `planId` в metadata
+
 # Feature: A2A Protocol (Agent-to-Agent Communication)
 
 ## Обзор
@@ -167,12 +215,13 @@ data class FileData(
 
     override fun hashCode(): Int {
         var result = filePath.hashCode()
-        result = 31 * result + content.contentHashCode()
+        result = 31 * result + content.(content unchanged)
         return result
     }
 }
 
 // Domain-specific payloads
+### 5.1 TOOL_EXECUTION_REQUEST
 data class CodeAnalysisResult(
     val findings: List<CodeFinding>,
     val metrics: AnalysisMetrics,

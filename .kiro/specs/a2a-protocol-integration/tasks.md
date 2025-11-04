@@ -1,29 +1,29 @@
 # Implementation Plan
 
-- [ ] 1. Implement Core A2A Protocol Infrastructure
+- [x] 1. Implement Core A2A Protocol Infrastructure
   - Create foundational message types and interfaces for A2A communication
   - Implement MessageBus with in-memory routing and basic error handling
   - _Requirements: 1.1, 1.2, 1.3, 2.1, 2.2_
 
-- [ ] 1.1 Create AgentMessage hierarchy and value objects
+- [x] 1.1 Create AgentMessage hierarchy and value objects
   - Implement AgentId and MessageId value classes with validation
   - Create sealed AgentMessage class with Request/Response/Event variants
   - Add Priority, ResponseStatus enums and ErrorInfo data class
   - _Requirements: 1.1, 1.3_
 
-- [ ] 1.2 Implement MessagePayload type system
+- [x] 1.2 Implement MessagePayload type system
   - Create base MessagePayload sealed class with type property
   - Implement RequestPayload, ResponsePayload, EventPayload hierarchies
   - Add domain-specific payloads: CodeAnalysisResult, ProjectStructure, StatusUpdate
   - _Requirements: 1.5, 9.1, 9.2, 9.3_
 
-- [ ] 1.3 Create MessageBus interface and InMemoryMessageBus implementation
+- [x] 1.3 Create MessageBus interface and InMemoryMessageBus implementation
   - Define MessageBus interface with send, broadcast, requestResponse methods
   - Implement InMemoryMessageBus with ConcurrentHashMap-based routing
   - Add subscription management with Flow-based message delivery
   - _Requirements: 2.1, 2.2, 2.4, 2.5_
 
-- [ ] 1.4 Add message serialization and validation
+- [x] 1.4 Add message serialization and validation
   - Implement JSON serialization for all message types using kotlinx.serialization
   - Add message size validation and compression for large payloads
   - Create schema validation for structured payloads
@@ -35,24 +35,24 @@
   - Test error handling for invalid messages and timeouts
   - _Requirements: 1.1, 1.2, 1.3, 2.1, 2.2_
 
-- [ ] 2. Create A2AAgent interface and legacy integration
+- [x] 2. Create A2AAgent interface and legacy integration
   - Extend existing Agent interface with A2A capabilities
   - Implement A2AAgentAdapter for seamless legacy agent integration
   - _Requirements: 1.4, 3.1, 3.2, 3.3, 3.4, 3.5_
 
-- [ ] 2.1 Define A2AAgent interface extending Agent
+- [x] 2.1 Define A2AAgent interface extending Agent
   - Add agentId, messageBus properties to A2AAgent interface
   - Implement handleA2AMessage, getSupportedMessageTypes methods
   - Create message handler registration and lifecycle methods
   - _Requirements: 1.4, 3.1_
 
-- [ ] 2.2 Implement A2AAgentAdapter for legacy agent integration
+- [x] 2.2 Implement A2AAgentAdapter for legacy agent integration
   - Create adapter class wrapping existing Agent implementations
   - Implement conversion methods between A2A and AgentRequest/AgentResponse formats
   - Add error handling and logging for conversion failures
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5_
 
-- [ ] 2.3 Create A2AAgentRegistry for agent lifecycle management
+- [x] 2.3 Create A2AAgentRegistry for agent lifecycle management
   - Implement agent registration with automatic MessageBus subscription
   - Add capability discovery and agent health monitoring
   - Create unregistration with proper resource cleanup
@@ -64,30 +64,30 @@
   - Test error scenarios and graceful degradation
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5_
 
-- [ ] 3. Integrate A2A protocol with ToolAgent system
+- [x] 3. Integrate A2A protocol with ToolAgent system
   - Enable ToolAgent communication through A2A for data exchange
   - Implement cross-agent data sharing for analysis workflows
   - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_
 
-- [ ] 3.1 Modify ProjectScannerToolAgent for A2A broadcasting
+- [x] 3.1 Modify ProjectScannerToolAgent for A2A broadcasting
   - Add A2A event broadcasting when scan completes
   - Implement ProjectStructure payload creation from scan results
   - Create subscription handling for file data requests from other agents
   - _Requirements: 4.2_
 
-- [ ] 3.2 Update BugDetectionToolAgent for A2A file requests
+- [x] 3.2 Update BugDetectionToolAgent for A2A file requests
   - Implement A2A request to ProjectScannerToolAgent for file data
   - Add handling of ProjectStructure payload for analysis input
   - Create CodeAnalysisResult payload for bug detection results
   - _Requirements: 4.3_
 
-- [ ] 3.3 Enhance CodeQualityToolAgent with A2A result aggregation
+- [x] 3.3 Enhance CodeQualityToolAgent with A2A result aggregation
   - Add A2A subscription to receive analysis results from other agents
   - Implement result correlation and aggregation logic
   - Create quality metrics payload combining multiple analysis sources
   - _Requirements: 4.4_
 
-- [ ] 3.4 Modify ReportGeneratorToolAgent for A2A data collection
+- [x] 3.4 Modify ReportGeneratorToolAgent for A2A data collection
   - Implement A2A requests to collect results from all analysis agents
   - Add result aggregation and correlation by analysis session
   - Create comprehensive report payload with all collected data

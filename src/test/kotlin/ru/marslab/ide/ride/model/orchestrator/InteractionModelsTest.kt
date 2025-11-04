@@ -2,6 +2,7 @@ package ru.marslab.ide.ride.model.orchestrator
 
 import org.junit.Assert.*
 import org.junit.Test
+import ru.marslab.ide.ride.agent.ValidationResult
 
 /**
  * Тесты для моделей интерактивного взаимодействия

@@ -56,7 +56,8 @@ object UncertaintyThresholds {
      * Проверяет, нужно ли использовать RAG обогащение
      */
     fun shouldUseRAGEnrichment(uncertaintyResult: UncertaintyResult): Boolean {
-        return uncertaintyResult.score >= ragEnrichmentThreshold &&
-               uncertaintyResult.suggestedActions.contains("поиск_контекста")
+        // Отключаем автоматическое RAG обогащение
+        // RAG должен использоваться только при ручном запуске из настроек
+        return false
     }
 }

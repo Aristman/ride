@@ -22,7 +22,7 @@ import ru.marslab.ide.ride.model.agent.AgentRequest
 import ru.marslab.ide.ride.model.agent.AgentResponse
 import ru.marslab.ide.ride.model.agent.AgentSettings
 import ru.marslab.ide.ride.model.orchestrator.*
-import ru.marslab.ide.ride.orchestrator.EnhancedAgentOrchestrator
+import ru.marslab.ide.ride.orchestrator.StandaloneA2AOrchestrator
 import ru.marslab.ide.ride.settings.PluginSettings
 import java.util.UUID
 
@@ -43,7 +43,7 @@ import java.util.UUID
  */
 class EnhancedChatAgent(
     private val baseChatAgent: ChatAgent,
-    private val orchestrator: EnhancedAgentOrchestrator,
+    private val orchestrator: StandaloneA2AOrchestrator,
     private val uncertaintyAnalyzer: UncertaintyAnalyzer = UncertaintyAnalyzer,
     private val complexityAnalyzer: RequestComplexityAnalyzer = RequestComplexityAnalyzer(),
     private val requestPlanner: RequestPlanner = RequestPlanner(),
@@ -55,6 +55,8 @@ class EnhancedChatAgent(
 ) : Agent {
 
     private val logger = Logger.getInstance(EnhancedChatAgent::class.java)
+
+    private var lastExecutionResult: String = ""
 
     override val capabilities: AgentCapabilities = AgentCapabilities(
         stateful = true,
@@ -312,9 +314,29 @@ class EnhancedChatAgent(
         uncertaintyResult: UncertaintyResult,
         optimizedPrompt: String
     ): AgentResponse {
-        logger.info("Executing prepared plan ${plan.id} with ${plan.steps.size} steps")
+        logger.info("Executing prepared plan ${plan.id} with ${plan.steps.size} steps through StandaloneA2AOrchestrator")
 
-        val result = orchestrator.executePreparedPlan(plan)
+        // Создаем новый запрос с оптимизированным промптом и сохраняем план в контексте
+        val optimizedRequest = request.copy(
+            request = optimizedPrompt,
+            context = request.context.copy(
+                additionalContext = request.context.additionalContext + ("execution_plan" to plan)
+            )
+        )
+
+        // Выполняем план через StandaloneA2AOrchestrator с передачей плана
+        val result = try {
+            orchestrator.processRequestWithPlan(plan, optimizedRequest) { stepResult ->
+                logger.info("A2A step completed: ${stepResult.stepTitle} - Success: ${stepResult.success}")
+                if (!stepResult.success) {
+                    logger.warn("A2A step failed: ${stepResult.error}")
+                }
+            }
+        } catch (e: Exception) {
+            logger.error("Error executing plan through StandaloneA2AOrchestrator", e)
+            // Fallback к базовому агенту
+            baseChatAgent.ask(request)
+        }
 
         // Формируем итоговый ответ
         val content = buildString {
@@ -328,8 +350,9 @@ class EnhancedChatAgent(
                     "score" to uncertaintyResult.score,
                     "complexity" to uncertaintyResult.complexity.name,
                     "reasoning" to uncertaintyResult.reasoning,
-                    "processing_strategy" to "prepared_plan_execution"
+                    "processing_strategy" to "standalone_a2a_execution"
                 ),
+                "orchestrator_type" to "StandaloneA2AOrchestrator",
                 "plan_id" to plan.id,
                 "plan_steps" to plan.steps.size,
                 "plan_version" to plan.version,
@@ -350,24 +373,36 @@ class EnhancedChatAgent(
         logger.info("Executing adaptive plan ${plan.id} with ${plan.steps.size} steps")
 
         val steps = mutableListOf<String>()
-        var currentPlan = plan
 
-        // Используем уже созданный адаптивный план вместо создания нового
-        val result = orchestrator.executePreparedPlan(plan) { step ->
-            val stepInfo = when (step) {
-                is ru.marslab.ide.ride.agent.OrchestratorStep.PlanningComplete ->
-                    "📋 Планирование: ${step.content}"
-
-                is ru.marslab.ide.ride.agent.OrchestratorStep.TaskComplete ->
-                    "🔍 Задача ${step.taskId}: ${step.taskTitle}"
-
-                is ru.marslab.ide.ride.agent.OrchestratorStep.AllComplete ->
-                    "✅ Все задачи выполнены: ${step.content}"
-
-                is ru.marslab.ide.ride.agent.OrchestratorStep.Error ->
-                    "❌ Ошибка: ${step.error}"
+        // Выполняем план через A2A оркестратор с передачей плана
+        val executionSuccess = try {
+            // Используем A2A метод processRequestWithPlan
+            val executionContext = ru.marslab.ide.ride.model.orchestrator.ExecutionContext(
+                additionalContext = mapOf(
+                    "uncertaintyResult" to uncertaintyResult,
+                    "optimizedPrompt" to optimizedPrompt,
+                    "planId" to plan.id
+                )
+            )
+            val a2aResult = orchestrator.processRequestWithPlan(plan, request) { stepResult ->
+                val stepInfo = when (stepResult.stepTitle) {
+                    "Сканирование проекта" -> "📋 Сканирование проекта..."
+                    "Анализ архитектуры" -> "🏗️ Анализ архитектуры..."
+                    "Генерация отчета" -> "📊 Генерация отчета..."
+                    else -> "⚙️ ${stepResult.stepTitle}"
+                }
+                steps.add(stepInfo)
             }
-            steps.add(stepInfo)
+
+            // Сохраняем результат для использования ниже
+            lastExecutionResult = a2aResult.content
+
+            // Проверяем успешность выполнения
+            !a2aResult.content.contains("ошибка") && !a2aResult.content.contains("Error")
+        } catch (e: Exception) {
+            logger.error("Error executing plan", e)
+            lastExecutionResult = "Ошибка выполнения: ${e.message}"
+            false
         }
 
         // Здесь можно добавить логику динамической модификации на основе результатов
@@ -384,12 +419,17 @@ class EnhancedChatAgent(
                 }
                 appendLine()
             }
-            appendLine(result.content)
+            appendLine(lastExecutionResult)
         }
 
-        return result.copy(
+        // Создаем новый AgentResponse с результатами выполнения
+        return AgentResponse(
             content = content,
-            metadata = result.metadata + mapOf(
+            success = executionSuccess,
+            uncertainty = uncertaintyResult.score,
+            isFinal = true,
+            parsedContent = null,
+            metadata = mapOf(
                 "uncertainty_analysis" to mapOf(
                     "score" to uncertaintyResult.score,
                     "complexity" to uncertaintyResult.complexity.name,
@@ -400,7 +440,8 @@ class EnhancedChatAgent(
                 "plan_steps" to plan.steps.size,
                 "plan_version" to plan.version,
                 "adaptive_plan" to true,
-                "prompt_optimization" to true
+                "prompt_optimization" to true,
+                "execution_result" to lastExecutionResult
             )
         )
     }
@@ -417,7 +458,17 @@ class EnhancedChatAgent(
 
         val steps = mutableListOf<String>()
 
-        val result = orchestrator.resumePlanWithCallback(planId, userInput) { step ->
+        // Получаем baseOrchestrator из A2A
+        val baseOrchestrator = if (orchestrator is ru.marslab.ide.ride.orchestrator.EnhancedAgentOrchestratorA2A) {
+            val field = orchestrator::class.java.getDeclaredField("baseOrchestrator")
+            field.isAccessible = true
+            @Suppress("UNCHECKED_CAST")
+            field.get(orchestrator) as? ru.marslab.ide.ride.orchestrator.EnhancedAgentOrchestrator
+        } else {
+            orchestrator as? ru.marslab.ide.ride.orchestrator.EnhancedAgentOrchestrator
+        }
+
+        val result = baseOrchestrator?.resumePlanWithCallback(planId, userInput) { step ->
             val stepInfo = when (step) {
                 is ru.marslab.ide.ride.agent.OrchestratorStep.PlanningComplete ->
                     "📋 Планирование: ${step.content}"
@@ -432,6 +483,21 @@ class EnhancedChatAgent(
                     "❌ Ошибка: ${step.error}"
             }
             steps.add(stepInfo)
+        } ?: run {
+            logger.warn("Base orchestrator not found, using fallback")
+            baseChatAgent.ask(AgentRequest(
+                request = userInput,
+                context = ru.marslab.ide.ride.model.chat.ChatContext(
+                    project = context.project,
+                    history = context.history,
+                    selectedText = context.selectedText,
+                    additionalContext = context.additionalContext + mapOf(
+                        "chat_history" to context.history.map { it.content },
+                        "selected_text" to (context.selectedText ?: ""),
+                        "current_file" to (context.currentFile?.path ?: "")
+                    )
+                )
+            ))
         }
 
         // Формируем итоговый ответ
@@ -499,10 +565,19 @@ class EnhancedChatAgent(
          */
         fun create(llmProvider: LLMProvider): EnhancedChatAgent {
             val baseChatAgent = ChatAgent(llmProvider)
-            val orchestrator = EnhancedAgentOrchestrator(llmProvider)
 
-            // Регистрируем все доступные ToolAgents
-            registerToolAgents(orchestrator, llmProvider)
+            // Создаем новый StandaloneA2AOrchestrator без зависимостей от легаси
+            val orchestrator = StandaloneA2AOrchestrator()
+
+            // Инициализируем A2A-орчестратор и регистрируем A2A-агентов на общей шине
+            try {
+                // Регистрируем базовых агентов без LLM, затем LLM-зависимых
+                kotlinx.coroutines.runBlocking {
+                    orchestrator.registerAllAgents(llmProvider)
+                }
+            } catch (e: Exception) {
+                Logger.getInstance(EnhancedChatAgent::class.java).warn("Failed to initialize StandaloneA2AOrchestrator: ${e.message}", e)
+            }
 
             return EnhancedChatAgent(
                 baseChatAgent = baseChatAgent,
@@ -512,7 +587,9 @@ class EnhancedChatAgent(
 
         /**
          * Регистрирует все ToolAgents в оркестраторе
+         * НЕ НУЖЕН для StandaloneA2AOrchestrator - он сам регистрирует агентов
          */
+        /*
         private fun registerToolAgents(
             orchestrator: EnhancedAgentOrchestrator,
             llmProvider: LLMProvider
@@ -549,5 +626,6 @@ class EnhancedChatAgent(
                 OpenSourceFileToolAgent()
             )
         }
+        */
     }
 }

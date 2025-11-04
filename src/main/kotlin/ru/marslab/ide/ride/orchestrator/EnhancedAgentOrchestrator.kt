@@ -3,6 +3,7 @@ package ru.marslab.ide.ride.orchestrator
 import com.intellij.openapi.diagnostic.Logger
 import kotlinx.coroutines.*
 import ru.marslab.ide.ride.agent.OrchestratorStep
+import ru.marslab.ide.ride.agent.ToolAgentInitializer
 import ru.marslab.ide.ride.agent.ToolAgentRegistry
 import ru.marslab.ide.ride.agent.UncertaintyAnalyzer
 import ru.marslab.ide.ride.integration.llm.LLMProvider
@@ -21,6 +22,8 @@ import kotlin.random.Random
 /**
  * Расширенный оркестратор с поддержкой интерактивности и персистентности
  *
+ * @deprecated Use EnhancedAgentOrchestratorA2A instead for new A2A protocol support
+ *
  * Интегрирует все компоненты Phase 1 и Phase 2:
  * - RequestAnalyzer для анализа запросов
  * - PlanStateMachine для управления состояниями
@@ -28,6 +31,7 @@ import kotlin.random.Random
  * - ProgressTracker для отслеживания прогресса
  * - ToolAgentRegistry для управления Tool Agents
  */
+@Deprecated("Use EnhancedAgentOrchestratorA2A instead for new A2A protocol support", ReplaceWith("EnhancedAgentOrchestratorA2A"))
 class EnhancedAgentOrchestrator(
     private val llmProvider: LLMProvider,
     private val uncertaintyAnalyzer: UncertaintyAnalyzer = UncertaintyAnalyzer,
@@ -50,6 +54,9 @@ class EnhancedAgentOrchestrator(
         // Добавляем слушателей
         stateMachine.addListener(this)
         progressTracker.addListener(this)
+
+        // Регистрируем всех Tool Agents
+        ToolAgentInitializer.registerAllAgents(toolAgentRegistry)
     }
 
     /**
@@ -293,6 +300,44 @@ class EnhancedAgentOrchestrator(
      */
     suspend fun getPlanProgress(planId: String): PlanProgress? {
         return progressTracker.getProgress(planId)
+    }
+
+    /**
+     * Создает план для запроса без его выполнения (для A2A-оркестратора)
+     */
+    suspend fun createPlanFor(request: AgentRequest): ExecutionPlan {
+        logger.info("Creating plan only (no execution) for A2A path")
+
+        // 1. Анализируем запрос
+        val userRequest = UserRequest(
+            originalRequest = request.request,
+            context = ExecutionContext(
+                projectPath = request.context.project.basePath,
+                additionalContext = mapOf(
+                    "selected_files" to emptyList<String>(),
+                    "chat_history" to emptyList<String>()
+                )
+            )
+        )
+
+        val analysis = requestAnalyzer.analyze(userRequest)
+
+        // 2. Валидируем доступность требуемых ToolAgents
+        val availableTools = analysis.requiredTools.filter { toolAgentRegistry.isAvailable(it) }.toSet()
+        val adjustedAnalysis = analysis.copy(requiredTools = availableTools)
+
+        // 3. Создаем план (без запуска)
+        val plan = createExecutionPlan(userRequest, adjustedAnalysis)
+
+        // 4. Сохраняем план и состояния
+        planStorage.save(plan)
+        activePlans[plan.id] = plan
+        val analyzing = stateMachine.transition(plan, PlanEvent.Start(adjustedAnalysis))
+        activePlans[plan.id] = analyzing
+        planStorage.update(analyzing)
+        progressTracker.startTracking(analyzing)
+
+        return analyzing
     }
 
     /**

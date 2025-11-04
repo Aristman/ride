@@ -31,7 +31,7 @@ data class StepInput(
         fun of(vararg pairs: Pair<String, Any>) = StepInput(pairs.toMap())
     }
 
-    fun <T> get(key: String): T? {
+    operator fun <T> get(key: String): T? {
         @Suppress("UNCHECKED_CAST")
         return data[key] as? T
     }
@@ -61,10 +61,12 @@ data class StepOutput(
         fun of(vararg pairs: Pair<String, Any>) = StepOutput(pairs.toMap())
     }
 
-    fun <T> get(key: String): T? {
+    operator fun <T> get(key: String): T? {
         @Suppress("UNCHECKED_CAST")
         return data[key] as? T
     }
+
+    operator fun contains(key: String): Boolean = data.containsKey(key)
 }
 
 /**

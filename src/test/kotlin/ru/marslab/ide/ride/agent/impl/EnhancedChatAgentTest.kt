@@ -23,13 +23,13 @@ import ru.marslab.ide.ride.model.chat.ChatContext
 import ru.marslab.ide.ride.model.llm.LLMParameters
 import ru.marslab.ide.ride.model.llm.LLMResponse
 import ru.marslab.ide.ride.mcp.MCPServerManager
-import ru.marslab.ide.ride.orchestrator.EnhancedAgentOrchestrator
+import ru.marslab.ide.ride.orchestrator.StandaloneA2AOrchestrator
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class EnhancedChatAgentTest : BasePlatformTestCase() {
 
     private lateinit var mockLLMProvider: LLMProvider
-    private lateinit var mockOrchestrator: EnhancedAgentOrchestrator
+    private lateinit var mockOrchestrator: StandaloneA2AOrchestrator
     private lateinit var mockApplication: Application
     private lateinit var mockMCPServerManager: MCPServerManager
     private lateinit var baseChatAgent: ChatAgent
@@ -102,7 +102,7 @@ class EnhancedChatAgentTest : BasePlatformTestCase() {
         // Then: используется базовый ChatAgent (не оркестратор)
         assertTrue(response.success)
         assertFalse(response.content.contains("Выполненные шаги"))
-        coVerify(exactly = 0) { mockOrchestrator.processEnhanced(any(), any()) }
+        coVerify(exactly = 0) { mockOrchestrator.processRequest(any(), any()) }
     }
 
     @Test
@@ -121,7 +121,7 @@ class EnhancedChatAgentTest : BasePlatformTestCase() {
 
         // Мокируем ответ от оркестратора
         coEvery {
-            mockOrchestrator.processEnhanced(any(), any())
+            mockOrchestrator.processRequest(any(), any())
         } returns AgentResponse.success(
             content = "Анализ завершён. Найдено 5 багов.",
             metadata = mapOf("bugs_found" to 5)
@@ -133,7 +133,7 @@ class EnhancedChatAgentTest : BasePlatformTestCase() {
         // Then: используется оркестратор
         assertTrue(response.success)
         assertTrue(response.content.contains("Результат выполнения задачи"))
-        coVerify(exactly = 1) { mockOrchestrator.processEnhanced(any(), any()) }
+        coVerify(exactly = 1) { mockOrchestrator.processRequest(any(), any()) }
     }
 
     @Test
@@ -151,9 +151,9 @@ class EnhancedChatAgentTest : BasePlatformTestCase() {
             parameters = LLMParameters.BALANCED
         )
 
-        // Мокируем возобновление плана
+        // Мокируем обычный запрос
         coEvery {
-            mockOrchestrator.resumePlanWithCallback(planId, userInput, any())
+            mockOrchestrator.processRequest(any(), any())
         } returns AgentResponse.success(
             content = "План продолжает выполнение",
             metadata = mapOf("plan_id" to planId)
@@ -166,7 +166,7 @@ class EnhancedChatAgentTest : BasePlatformTestCase() {
         assertTrue(response.success)
         assertTrue(response.content.contains("План возобновлён"))
         assertEquals(planId, response.metadata["plan_id"])
-        coVerify(exactly = 1) { mockOrchestrator.resumePlanWithCallback(planId, userInput, any()) }
+        coVerify(exactly = 1) { mockOrchestrator.processRequest(any(), any()) }
     }
 
     @Test
@@ -185,7 +185,7 @@ class EnhancedChatAgentTest : BasePlatformTestCase() {
 
         // Мокируем оркестратор
         coEvery {
-            mockOrchestrator.processEnhanced(any(), any())
+            mockOrchestrator.processRequest(any(), any())
         } returns AgentResponse.success(
             content = "Анализ завершён",
             metadata = emptyMap()
@@ -196,7 +196,7 @@ class EnhancedChatAgentTest : BasePlatformTestCase() {
 
         // Then: используется оркестратор (сложная задача)
         assertTrue(response.success)
-        coVerify(exactly = 1) { mockOrchestrator.processEnhanced(any(), any()) }
+        coVerify(exactly = 1) { mockOrchestrator.processRequest(any(), any()) }
     }
 
     @Test
@@ -215,7 +215,7 @@ class EnhancedChatAgentTest : BasePlatformTestCase() {
 
         // Мокируем оркестратор
         coEvery {
-            mockOrchestrator.processEnhanced(any(), any())
+            mockOrchestrator.processRequest(any(), any())
         } returns AgentResponse.success(
             content = "Проверка качества завершена",
             metadata = emptyMap()
@@ -226,7 +226,7 @@ class EnhancedChatAgentTest : BasePlatformTestCase() {
 
         // Then: используется оркестратор
         assertTrue(response.success)
-        coVerify(exactly = 1) { mockOrchestrator.processEnhanced(any(), any()) }
+        coVerify(exactly = 1) { mockOrchestrator.processRequest(any(), any()) }
     }
 
     @Test
@@ -249,7 +249,10 @@ class EnhancedChatAgentTest : BasePlatformTestCase() {
 
         // Then: агент создан корректно
         assertNotNull(agent)
-        assertEquals(3, agent.capabilities.tools.size)
+        val tools = agent.capabilities.tools
+        assertTrue(tools.contains("orchestration"))
+        assertTrue(tools.contains("user_interaction"))
+        assertTrue(tools.contains("plan_management"))
     }
 
     @Test
@@ -269,7 +272,7 @@ class EnhancedChatAgentTest : BasePlatformTestCase() {
 
         // Мокируем ошибку
         coEvery {
-            mockOrchestrator.resumePlanWithCallback(planId, userInput, any())
+            mockOrchestrator.processRequest(any(), any())
         } returns AgentResponse.error(
             error = "План не найден",
             content = "План $planId не существует"
@@ -301,7 +304,7 @@ class EnhancedChatAgentTest : BasePlatformTestCase() {
 
         // Мокируем оркестратор
         coEvery {
-            mockOrchestrator.processEnhanced(any(), any())
+            mockOrchestrator.processRequest(any(), any())
         } returns AgentResponse.success(
             content = "Анализ завершён",
             metadata = emptyMap()
@@ -312,6 +315,6 @@ class EnhancedChatAgentTest : BasePlatformTestCase() {
 
         // Then: используется оркестратор
         assertTrue(response.success)
-        coVerify(exactly = 1) { mockOrchestrator.processEnhanced(any(), any()) }
+        coVerify(exactly = 1) { mockOrchestrator.processRequest(any(), any()) }
     }
 }

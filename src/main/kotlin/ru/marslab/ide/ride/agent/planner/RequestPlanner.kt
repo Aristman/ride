@@ -111,6 +111,9 @@ class RequestPlanner {
             requestLower.contains("архитектур") -> TaskType.ARCHITECTURE_ANALYSIS
             requestLower.contains("баг") || requestLower.contains("ошибк") -> TaskType.BUG_FIX
             requestLower.contains("рефактор") -> TaskType.REFACTORING
+            requestLower.contains("создай") || requestLower.contains("напиши") || requestLower.contains("генерируй") ||
+            requestLower.contains("create") || requestLower.contains("write") || requestLower.contains("generate") ||
+            requestLower.contains("сделай") || requestLower.contains("implement") -> TaskType.CODE_GENERATION
             requestLower.contains("оптимиз") || requestLower.contains("производительность") -> TaskType.PERFORMANCE_OPTIMIZATION
             requestLower.contains("тест") -> TaskType.TESTING
             requestLower.contains("документ") -> TaskType.DOCUMENTATION
@@ -152,6 +155,13 @@ class RequestPlanner {
                 tools.add(AgentType.CODE_QUALITY)
                 tools.add(AgentType.LLM_REVIEW)
                 tools.add(AgentType.CODE_FIXER)
+            }
+            TaskType.CODE_GENERATION -> {
+                tools.add(AgentType.CODE_GENERATOR)
+                tools.add(AgentType.LLM_REVIEW)
+                if (requestLower.contains("класс") || requestLower.contains("class")) {
+                    tools.add(AgentType.ARCHITECTURE_ANALYSIS)
+                }
             }
 
             TaskType.PERFORMANCE_OPTIMIZATION -> {
@@ -219,6 +229,7 @@ class RequestPlanner {
             TaskType.BUG_FIX -> 3
             TaskType.REFACTORING -> 3
             TaskType.PERFORMANCE_OPTIMIZATION -> 3
+            TaskType.CODE_GENERATION -> 2
             TaskType.REPORT_GENERATION -> 3
             TaskType.ARCHITECTURE_ANALYSIS -> 4
             TaskType.MIGRATION -> 4
@@ -243,6 +254,7 @@ class RequestPlanner {
             TaskType.SIMPLE_QUERY -> false
             TaskType.BUG_FIX -> uncertainty.score > 0.3 // Требует уточнения для сложных багов
             TaskType.REFACTORING -> uncertainty.score > 0.4 // Требует понимания требований
+            TaskType.CODE_GENERATION -> uncertainty.score > 0.4 // Требует уточнения для сложной генерации
             TaskType.ARCHITECTURE_ANALYSIS -> true // Всегда требует уточнения
             TaskType.MIGRATION -> true // Сложные миграции требуют уточнения
             else -> uncertainty.score > 0.5
@@ -301,6 +313,25 @@ class RequestPlanner {
                 createdStepIds["bug_fix"] = bugFixStep.id
             }
 
+            TaskType.CODE_GENERATION -> {
+                // Сначала сканирование проекта для получения контекста
+                val projectScanStep = createProjectScanStep(requestAnalysis, stepIdCounter)
+                steps.add(projectScanStep)
+                createdStepIds["project_scan"] = projectScanStep.id
+
+                // Затем генерация кода с использованием контекста
+                val codeGenerationDependencies = setOf(projectScanStep.id)
+                val codeGenerationStep = createCodeGenerationStep(requestAnalysis, stepIdCounter, codeGenerationDependencies)
+                steps.add(codeGenerationStep)
+                createdStepIds["code_generation"] = codeGenerationStep.id
+
+                // И ревью сгенерированного кода
+                val reviewDependencies = setOf(codeGenerationStep.id)
+                val reviewStep = createLLMReviewStep(requestAnalysis, stepIdCounter, reviewDependencies)
+                steps.add(reviewStep)
+                createdStepIds["llm_review"] = reviewStep.id
+            }
+
             TaskType.REFACTORING -> {
                 val qualityStep = createQualityCheckStep(requestAnalysis, stepIdCounter)
                 steps.add(qualityStep)
@@ -353,7 +384,7 @@ class RequestPlanner {
                 createdStepIds["project_scan"] = projectScanStep.id
 
                 var ragEnrichmentStep: PlanStep? = null
-                if (uncertainty.suggestedActions.contains("поиск_контекста")) {
+                if (shouldIncludeRagStep(requestAnalysis)) {
                     ragEnrichmentStep = createRagEnrichmentStep(requestAnalysis, stepIdCounter, setOf(projectScanStep.id))
                     steps.add(ragEnrichmentStep)
                     createdStepIds["rag_enrichment"] = ragEnrichmentStep.id
@@ -372,7 +403,8 @@ class RequestPlanner {
                 steps.add(qualityStep)
                 createdStepIds["quality_check"] = qualityStep.id
 
-                val documentationStep = createDocumentationStep(requestAnalysis, stepIdCounter, setOf(analysisStep.id, qualityStep.id))
+                // Используем отчет вместо документации (агент документации не существует)
+                val documentationStep = createReportStep(requestAnalysis, stepIdCounter, setOf(analysisStep.id, qualityStep.id))
                 steps.add(documentationStep)
                 createdStepIds["documentation"] = documentationStep.id
             }
@@ -578,17 +610,23 @@ class RequestPlanner {
     }
 
     private fun createReportStep(analysis: RequestAnalysis, counter: MutableMap<String, Int>, dependencies: Set<String> = emptySet()): PlanStep {
+        // Определяем тип отчета на основе шага
+        val stepId = generateStepId("report", counter)
+        val isDocumentationStep = counter.get("documentation") != null && counter.get("report") == null
+
         return PlanStep(
-            id = generateStepId("report", counter),
-            title = "Создание отчета",
-            description = "Генерация отчета на основе анализа",
+            id = stepId,
+            title = if (isDocumentationStep) "Создание документации" else "Создание отчета",
+            description = if (isDocumentationStep) "Генерация документации по результатам анализа" else "Генерация отчета на основе анализа",
             agentType = AgentType.REPORT_GENERATOR,
             input = mapOf(
-                "report_type" to "comprehensive",
-                "format" to "markdown"
+                "report_type" to if (isDocumentationStep) "documentation" else "comprehensive",
+                "format" to "markdown",
+                "include_recommendations" to true,
+                "include_examples" to if (isDocumentationStep) false else true
             ),
             dependencies = dependencies,
-            estimatedDurationMs = 7000
+            estimatedDurationMs = if (isDocumentationStep) 10000 else 7000 // Дольше для документации
         )
     }
 
@@ -622,11 +660,120 @@ class RequestPlanner {
     }
 
     /**
+     * Создает шаг для генерации кода
+     */
+    private fun createCodeGenerationStep(
+        analysis: RequestAnalysis,
+        counter: MutableMap<String, Int>,
+        dependencies: Set<String> = emptySet()
+    ): PlanStep {
+        return PlanStep(
+            id = generateStepId("code_generation", counter),
+            title = "Генерация кода",
+            description = "Генерация кода на основе запроса",
+            agentType = AgentType.CODE_GENERATOR,
+            input = mapOf<String, Any>(
+                "request" to (analysis.parameters["original_request"] ?: ""),
+                "language" to "kotlin",
+                "project_path" to (analysis.context.projectPath ?: "")
+            ),
+            dependencies = dependencies,
+            estimatedDurationMs = 10000
+        )
+    }
+
+    /**
+     * Создает шаг для LLM ревью
+     */
+    private fun createLLMReviewStep(
+        analysis: RequestAnalysis,
+        counter: MutableMap<String, Int>,
+        dependencies: Set<String> = emptySet()
+    ): PlanStep {
+        return PlanStep(
+            id = generateStepId("llm_review", counter),
+            title = "LLM ревью кода",
+            description = "Ревью сгенерированного кода",
+            agentType = AgentType.LLM_REVIEW,
+            input = mapOf<String, Any>(
+                "review_type" to "general",
+                "language" to "kotlin"
+            ),
+            dependencies = dependencies,
+            estimatedDurationMs = 8000
+        )
+    }
+
+    /**
      * Генерирует уникальный ID для шага с учетом типа шага
      */
     private fun generateStepId(stepType: String, counter: MutableMap<String, Int>): String {
         val count = counter.getOrPut(stepType) { 0 } + 1
         counter[stepType] = count
         return "${stepType}_${count}"
+    }
+
+    /**
+     * Определяет, нужно ли включать RAG шаг в план
+     *
+     * RAG обогащение используется для:
+     * 1. Конкретных поисковых запросов (найти класс/метод)
+     * 2. Сложных запросов, требующих контекста из проекта
+     * Но с фильтрацией релевантности данных
+     */
+    private fun shouldIncludeRagStep(requestAnalysis: RequestAnalysis): Boolean {
+        val request = (requestAnalysis.parameters["original_request"] as? String) ?: ""
+        val requestLower = request.lowercase()
+        val complexity = requestAnalysis.estimatedComplexity
+
+        // 1. Конкретные поисковые запросы (требуют RAG всегда)
+        val searchKeywords = listOf(
+            "найди", "покажи", "поищи", "где находится", "в каком файле", "как реализован",
+            "использование", "примеры использования", "применение", "реализация",
+            "поиск", "search", "find", "locate", "where is", "how is implemented"
+        )
+
+        val specificSearchKeywords = listOf(
+            "функция", "метод", "класс", "интерфейс", "переменная", "константа",
+            "function", "method", "class", "interface", "variable", "constant"
+        )
+
+        // Расширяем список конкретных объектов для поиска
+        val uiSearchKeywords = listOf(
+            "экран", "диалог", "окно", "форм", "activity", "fragment", "view", "screen", "dialog", "window",
+            "создание", "запись", "регистрация", "login", "registration", "create", "edit", "update",
+            "запись", "record", "entry", "data", "model", "entity", "dto", "pojo"
+        )
+
+        val isSearchQuery = searchKeywords.any { keyword -> requestLower.contains(keyword) }
+        val hasSpecificObjects = specificSearchKeywords.any { keyword -> requestLower.contains(keyword) } ||
+                              uiSearchKeywords.any { keyword -> requestLower.contains(keyword) }
+        val needsRagForSearch = isSearchQuery && hasSpecificObjects
+
+        // 2. Сложные запросы, требующие контекста (с проверкой релевантности)
+        val isComplexQuery = complexity.name in setOf("HIGH", "VERY_HIGH", "EXTREME")
+
+        val complexContextKeywords = listOf(
+            "архитектура", "структура", "взаимодействие", "зависимости", "модули",
+            "рефакторинг", "улучшение", "оптимизация", "производительность",
+            "безопасность", "security"
+        )
+
+        val needsContext = complexContextKeywords.any { keyword -> requestLower.contains(keyword) }
+        val needsRagForComplex = isComplexQuery && needsContext
+
+        // 3. Общие запросы, НЕ требующие RAG
+        val isGeneralAnalysis = setOf(
+            "проанализируй проект", "анализ проекта", "анализируй весь проект",
+            "оцени проект", "обзор проекта", "структура проекта"
+        ).any { pattern -> requestLower.contains(pattern) }
+
+        val shouldUseRag = (needsRagForSearch || needsRagForComplex) && !isGeneralAnalysis
+
+        logger.info("RAG step decision: query='$request', complexity=${complexity.name}, " +
+                   "needsRagForSearch=$needsRagForSearch, needsRagForComplex=$needsRagForComplex, " +
+                   "isGeneral=$isGeneralAnalysis, shouldUse=$shouldUseRag")
+
+        return shouldUseRag
     }
 }
