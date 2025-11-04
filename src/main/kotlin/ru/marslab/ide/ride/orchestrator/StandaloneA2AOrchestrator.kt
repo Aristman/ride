@@ -1,16 +1,17 @@
 package ru.marslab.ide.ride.orchestrator
 
 import com.intellij.openapi.diagnostic.Logger
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import ru.marslab.ide.ride.agent.a2a.*
 import ru.marslab.ide.ride.agent.tools.*
+import ru.marslab.ide.ride.formatter.ChatOutputFormatter
 import ru.marslab.ide.ride.integration.llm.LLMProvider
 import ru.marslab.ide.ride.model.agent.AgentRequest
 import ru.marslab.ide.ride.model.agent.AgentResponse
 import ru.marslab.ide.ride.model.orchestrator.*
-import ru.marslab.ide.ride.model.schema.ParsedResponse
-import ru.marslab.ide.ride.formatter.ChatOutputFormatter
-import java.util.*
 
 /**
  * Независимый A2A оркестратор, работающий только с A2A агентами
@@ -879,7 +880,7 @@ class StandaloneA2AOrchestrator(
                 // Если нет специфичного результата, собираем результаты из всех шагов
                 val results = stepResults.map { (stepId, result) ->
                     val step = plan.steps.find { it.id == stepId }
-                    "${step?.title ?: stepId}: ${result.toString().take(200)}..."
+                    "${step?.title ?: stepId}: $result"
                 }
 
                 "План успешно выполнен. Завершено ${stepResults.size} шагов:\n\n${results.joinToString("\n\n")}"

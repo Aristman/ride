@@ -523,12 +523,12 @@ class A2ACodeGeneratorToolAgent(
             val explanation = if (parts.size >= 3) {
                 parts[2].trim()
             } else {
-                // Если нет отдельного объяснения, ищем его после кода или в начале
+                // Если нет отдельного объяснения, ищем его после кода или используем весь ответ без усечения
                 if (code.isNotEmpty() && response.content.contains(code)) {
                     val afterCode = response.content.substringAfter(code).trim()
                     if (afterCode.isNotEmpty()) afterCode else "Generated code based on requirements."
                 } else {
-                    response.content.take(200) + (if (response.content.length > 200) "..." else "")
+                    response.content
                 }
             }
 
