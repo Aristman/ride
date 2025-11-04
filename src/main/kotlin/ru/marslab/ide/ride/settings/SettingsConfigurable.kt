@@ -9,15 +9,11 @@ import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.DialogPanel
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.ui.Messages.showErrorDialog
-import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.ui.ColorPanel
 import com.intellij.ui.components.*
 import com.intellij.ui.dsl.builder.*
-import com.intellij.util.ui.JBUI
-import com.intellij.util.ui.JBUI.Borders.compound
-import com.intellij.util.ui.JBUI.Borders.customLine
-import com.intellij.util.ui.JBUI.Borders.empty
+import com.intellij.util.ui.JBUI.Borders.*
 import com.intellij.util.ui.JBUI.CurrentTheme.Label.disabledForeground
 import com.intellij.util.ui.JBUI.CurrentTheme.ToolWindow.borderColor
 import ru.marslab.ide.ride.agent.tools.EmbeddingIndexerToolAgent

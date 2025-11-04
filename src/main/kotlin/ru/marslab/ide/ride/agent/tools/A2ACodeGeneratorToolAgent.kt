@@ -492,8 +492,9 @@ class A2ACodeGeneratorToolAgent(
         }
 
         try {
-            val baseSystemPrompt = "You are a senior software developer. Generate high-quality, production-ready code with proper documentation."
+            val baseSystemPrompt = "Ты — опытный разработчик. Генерируй высококачественный, готовый к продакшену код с корректной документацией."
             val systemPromptWithRules = applyRulesToPrompt(baseSystemPrompt)
+            logger.info("System prompt with rules: $systemPromptWithRules")
 
             val response = llmProvider.sendRequest(
                 systemPrompt = systemPromptWithRules,
@@ -592,7 +593,7 @@ class A2ACodeGeneratorToolAgent(
 
         try {
             val response = llmProvider.sendRequest(
-                systemPrompt = "You are an OOP expert. Generate well-designed classes following SOLID principles.",
+                systemPrompt = "Ты — эксперт по ООП. Генерируй хорошо спроектированные классы, строго соблюдая принципы SOLID.",
                 userMessage = prompt,
                 conversationHistory = emptyList(),
                 LLMParameters()
@@ -660,7 +661,7 @@ class A2ACodeGeneratorToolAgent(
 
         try {
             val response = llmProvider.sendRequest(
-                systemPrompt = "You are an algorithm expert. Generate efficient, well-documented functions.",
+                systemPrompt = "Ты — эксперт по алгоритмам. Генерируй эффективные, хорошо документированные функции.",
                 userMessage = prompt,
                 conversationHistory = emptyList(),
                 LLMParameters()
@@ -723,7 +724,7 @@ class A2ACodeGeneratorToolAgent(
 
         try {
             val response = llmProvider.sendRequest(
-                systemPrompt = "You are an algorithm expert. Generate optimized algorithms with proper complexity analysis.",
+                systemPrompt = "Ты — эксперт по алгоритмам. Генерируй оптимизированные алгоритмы с корректным анализом сложности.",
                 userMessage = prompt,
                 conversationHistory = emptyList(),
                 LLMParameters()

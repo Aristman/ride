@@ -193,18 +193,18 @@ class A2ALLMReviewToolAgent(
             " Identify issues but do not provide detailed suggestions."
         }
 
-        return """You are an expert code reviewer specializing in $language programming language.
+        return """Ты — эксперт по ревью кода на языке $language.
 
-Your task is to analyze the provided code and identify:
-1. Security vulnerabilities and potential risks
-2. Performance issues and optimization opportunities
-3. Code quality and maintainability concerns
-4. Best practice violations
-5. Potential bugs and edge cases
+Твоя задача — проанализировать предоставленный код и выявить:
+1. Уязвимости безопасности и потенциальные риски
+2. Проблемы производительности и возможности оптимизации
+3. Вопросы качества кода и поддерживаемости
+4. Нарушения лучших практик
+5. Потенциальные баги и крайние случаи
 
 $focusText$suggestionText
 
-Format your response as structured JSON with the following fields:
+Верни ответ в структурированном JSON со следующими полями:
 {
   "overall_score": 0-100,
   "summary": {
@@ -219,15 +219,15 @@ Format your response as structured JSON with the following fields:
       "type": "security|performance|quality|bug|best_practice",
       "severity": "critical|major|minor",
       "line_number": number,
-      "description": "Clear description of the issue",
-      "suggestion": "Specific recommendation for fixing (if applicable)"
+      "description": "Четкое описание проблемы",
+      "suggestion": "Конкретная рекомендация по исправлению (если применимо)"
     }
   ],
-  "positive_points": ["List of well-implemented aspects"],
-  "recommendations": ["High-level improvement suggestions"]
+  "positive_points": ["Список сильных сторон реализации"],
+  "recommendations": ["Высокоуровневые рекомендации по улучшению"]
 }
 
-Be constructive and educational in your feedback."""
+Дай конструктивную и обучающую обратную связь."""
     }
 
     private fun buildUserPrompt(code: String, language: String, focusAreas: List<String>): String {

@@ -42,7 +42,7 @@ class RulesServiceTest : BasePlatformTestCase() {
     }
 
     @Test
-    fun `test composeSystemPromptWithRules with no rules and disabled`() {
+    fun `test composeSystemPromptWithActiveRules with no rules and disabled`() {
         // Given
         val basePrompt = "Base system prompt"
 
@@ -50,14 +50,14 @@ class RulesServiceTest : BasePlatformTestCase() {
         disableRulesInSettings()
 
         // When
-        val result = rulesService.composeSystemPromptWithRules(basePrompt, testProject)
+        val result = rulesService.composeSystemPromptWithActiveRules(basePrompt, testProject)
 
         // Then
         assertEquals(basePrompt, result)
     }
 
     @Test
-    fun `test composeSystemPromptWithRules with no rules and enabled`() {
+    fun `test composeSystemPromptWithActiveRules with no rules and enabled`() {
         // Given
         val basePrompt = "Base system prompt"
 
@@ -65,14 +65,14 @@ class RulesServiceTest : BasePlatformTestCase() {
         enableRulesInSettings()
 
         // When
-        val result = rulesService.composeSystemPromptWithRules(basePrompt, testProject)
+        val result = rulesService.composeSystemPromptWithActiveRules(basePrompt, testProject)
 
         // Then
         assertEquals(basePrompt, result)
     }
 
     @Test
-    fun `test composeSystemPromptWithRules with global rules only`() {
+    fun `test composeSystemPromptWithActiveRules with global rules only`() {
         // Given
         val basePrompt = "Base system prompt"
         val globalRulesDir = createGlobalRulesDirectory()
@@ -82,7 +82,7 @@ class RulesServiceTest : BasePlatformTestCase() {
         enableRulesInSettings()
 
         // When
-        val result = rulesService.composeSystemPromptWithRules(basePrompt, testProject)
+        val result = rulesService.composeSystemPromptWithActiveRules(basePrompt, testProject)
 
         // Then
         assertTrue(result.contains(basePrompt))
@@ -92,7 +92,7 @@ class RulesServiceTest : BasePlatformTestCase() {
     }
 
     @Test
-    fun `test composeSystemPromptWithRules with project rules only`() {
+    fun `test composeSystemPromptWithActiveRules with project rules only`() {
         // Given
         val basePrompt = "Base system prompt"
         val projectRulesDir = createProjectRulesDirectory()
@@ -102,7 +102,7 @@ class RulesServiceTest : BasePlatformTestCase() {
         enableRulesInSettings()
 
         // When
-        val result = rulesService.composeSystemPromptWithRules(basePrompt, testProject)
+        val result = rulesService.composeSystemPromptWithActiveRules(basePrompt, testProject)
 
         // Then
         assertTrue(result.contains(basePrompt))
@@ -112,7 +112,7 @@ class RulesServiceTest : BasePlatformTestCase() {
     }
 
     @Test
-    fun `test composeSystemPromptWithRules with both global and project rules`() {
+    fun `test composeSystemPromptWithActiveRules with both global and project rules`() {
         // Given
         val basePrompt = "Base system prompt"
         val globalRulesDir = createGlobalRulesDirectory()
@@ -125,7 +125,7 @@ class RulesServiceTest : BasePlatformTestCase() {
         enableRulesInSettings()
 
         // When
-        val result = rulesService.composeSystemPromptWithRules(basePrompt, testProject)
+        val result = rulesService.composeSystemPromptWithActiveRules(basePrompt, testProject)
 
         // Then
         assertTrue(result.contains(basePrompt))
@@ -136,7 +136,7 @@ class RulesServiceTest : BasePlatformTestCase() {
     }
 
     @Test
-    fun `test composeSystemPromptWithRules with multiple rule files`() {
+    fun `test composeSystemPromptWithActiveRules with multiple rule files`() {
         // Given
         val basePrompt = "Base system prompt"
         val globalRulesDir = createGlobalRulesDirectory()
@@ -149,7 +149,7 @@ class RulesServiceTest : BasePlatformTestCase() {
         enableRulesInSettings()
 
         // When
-        val result = rulesService.composeSystemPromptWithRules(basePrompt, testProject)
+        val result = rulesService.composeSystemPromptWithActiveRules(basePrompt, testProject)
 
         // Then
         assertTrue(result.contains(basePrompt))
@@ -290,14 +290,14 @@ class RulesServiceTest : BasePlatformTestCase() {
         enableRulesInSettings()
 
         // Load rules to populate cache
-        val firstResult = rulesService.composeSystemPromptWithRules(basePrompt, testProject)
+        val firstResult = rulesService.composeSystemPromptWithActiveRules(basePrompt, testProject)
         assertTrue(firstResult.contains("# Test"))
 
         // Modify the file
         createRuleFile(globalDir, "test.md", "# Modified Test")
 
         // Before clear cache - should still return old cached content
-        val cachedResult = rulesService.composeSystemPromptWithRules(basePrompt, testProject)
+        val cachedResult = rulesService.composeSystemPromptWithActiveRules(basePrompt, testProject)
         assertTrue(cachedResult.contains("# Test"))
         assertFalse(cachedResult.contains("# Modified Test"))
 
@@ -305,7 +305,7 @@ class RulesServiceTest : BasePlatformTestCase() {
         rulesService.clearCache()
 
         // Then - should return new content
-        val freshResult = rulesService.composeSystemPromptWithRules(basePrompt, testProject)
+        val freshResult = rulesService.composeSystemPromptWithActiveRules(basePrompt, testProject)
         assertTrue(freshResult.contains("# Modified Test"))
         assertFalse(freshResult.contains("# Test"))
     }
@@ -324,7 +324,7 @@ class RulesServiceTest : BasePlatformTestCase() {
         enableRulesInSettings()
 
         // When
-        val result = rulesService.composeSystemPromptWithRules(basePrompt, testProject)
+        val result = rulesService.composeSystemPromptWithActiveRules(basePrompt, testProject)
 
         // Then
         assertTrue(result.contains("# Test Rule"))

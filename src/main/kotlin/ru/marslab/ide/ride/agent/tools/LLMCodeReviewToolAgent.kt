@@ -70,7 +70,7 @@ class LLMCodeReviewToolAgent(
 
             val response = withContext(Dispatchers.IO) {
                 llmProvider.sendRequest(
-                    systemPrompt = "You are a senior code reviewer. Provide ONLY JSON as requested.",
+                    systemPrompt = "Ты — опытный ревьюер кода. Возвращай ТОЛЬКО JSON в требуемом формате.",
                     userMessage = prompt,
                     conversationHistory = emptyList(),
                     parameters = LLMParameters.PRECISE
@@ -218,6 +218,6 @@ class LLMCodeReviewToolAgent(
     }
 
     companion object {
-        private const val SYSTEM_PROMPT = "You are a senior code reviewer. Provide ONLY JSON as requested."
+        private const val SYSTEM_PROMPT = "Ты — опытный ревьюер кода. Возвращай ТОЛЬКО JSON в требуемом формате."
     }
 }

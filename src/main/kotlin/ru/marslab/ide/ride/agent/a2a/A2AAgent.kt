@@ -14,6 +14,7 @@ import ru.marslab.ide.ride.model.agent.AgentResponse
 import ru.marslab.ide.ride.model.agent.AgentSettings
 import ru.marslab.ide.ride.model.orchestrator.AgentType
 import ru.marslab.ide.ride.model.orchestrator.ExecutionContext
+import ru.marslab.ide.ride.service.rules.PromptRulesHelper
 
 /**
  * Расширенный интерфейс агента с поддержкой A2A коммуникации
@@ -336,15 +337,19 @@ abstract class BaseA2AAgent(
             // Преобразуем projectPath в Project если возможно
             val project = currentExecutionContext.projectPath?.let { path ->
                 // Пытаемся получить Project из projectPath
-                // В IntelliJ Platform доступ к Project осуществляется через ProjectManager
                 runCatching {
                     val projectManager = com.intellij.openapi.project.ProjectManager.getInstance()
                     projectManager.openProjects.find { it.basePath == path }
                 }.getOrNull()
+            } ?: run {
+                // Резерв: берём первый открытый проект, чтобы подтянуть проектные правила
+                runCatching {
+                    com.intellij.openapi.project.ProjectManager.getInstance().openProjects.firstOrNull()
+                }.getOrNull()
             }
 
             // Используем универсальный помощник для применения правил
-            return ru.marslab.ide.ride.service.rules.PromptRulesHelper.applyRulesToPrompt(basePrompt, project)
+            return PromptRulesHelper.applyRulesToPrompt(basePrompt, project)
         } catch (e: Exception) {
             logger.warn("Failed to apply rules to prompt in $a2aAgentId: ${e.message}", e)
             // В случае ошибки возвращаем базовый промпт

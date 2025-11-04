@@ -319,7 +319,7 @@ class A2AReportGeneratorToolAgent(
             }
 
             val response = llmProvider.sendRequest(
-                systemPrompt = "You are a technical report generator. Create clear, actionable reports for development teams.",
+                systemPrompt = "Ты — генератор технических отчётов. Создавай понятные и практичные отчёты для команд разработки.",
                 userMessage = prompt,
                 conversationHistory = emptyList(),
                 LLMParameters()

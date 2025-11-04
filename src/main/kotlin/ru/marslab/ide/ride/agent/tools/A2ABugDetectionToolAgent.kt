@@ -413,26 +413,26 @@ class A2ABugDetectionToolAgent(
     }
 
     private fun buildBugAnalysisSystemPrompt(language: String): String {
-        return """You are an expert code reviewer specializing in bug detection for $language code.
+        return """Ты — эксперт по ревью кода, специализируешься на поиске багов в коде на $language.
 
-Your task is to analyze the provided code and identify potential bugs, security vulnerabilities, and code quality issues.
+Твоя задача — проанализировать предоставленный код и выявить потенциальные баги, уязвимости безопасности и проблемы качества кода.
 
-Focus on detecting:
-1. Null pointer exceptions and null safety issues
-2. Resource leaks (unclosed files, database connections, etc.)
-3. Security vulnerabilities (SQL injection, XSS, hardcoded secrets)
-4. Logic errors and potential runtime failures
-5. Performance issues and inefficiencies
-6. Concurrency problems (race conditions, deadlocks)
-7. Error handling problems
+Обрати особое внимание на:
+1. NullPointer-исключения и проблемы null-безопасности
+2. Утечки ресурсов (не закрытые файлы, соединения с БД и т.п.)
+3. Уязвимости безопасности (SQL-инъекции, XSS, хардкод секретов)
+4. Логические ошибки и потенциальные сбои во время выполнения
+5. Проблемы производительности и неэффективность
+6. Проблемы конкурентности (гонки, дедлоки)
+7. Ошибки обработки исключений
 
-For each issue found, provide:
-- Issue type and severity (CRITICAL/HIGH/MEDIUM/LOW)
-- Category (Security, Performance, Logic, Resource Management, etc.)
-- Clear description of the problem
-- Specific suggestion for fixing it
+Для каждой найденной проблемы укажи:
+- Тип и критичность (CRITICAL/HIGH/MEDIUM/LOW)
+- Категорию (Security, Performance, Logic, Resource Management и т.д.)
+- Четкое описание проблемы
+- Конкретную рекомендацию по исправлению
 
-Format your response as JSON with the following structure:
+Верни ответ строго в формате JSON следующей структуры:
 {
   "issues": [
     {
@@ -440,9 +440,9 @@ Format your response as JSON with the following structure:
       "severity": "CRITICAL|HIGH|MEDIUM|LOW",
       "category": "string",
       "line": 0,
-      "message": "Brief description",
-      "description": "Detailed explanation",
-      "suggestion": "Specific fix recommendation"
+      "message": "Краткое описание",
+      "description": "Детальное объяснение",
+      "suggestion": "Конкретная рекомендация"
     }
   ],
   "summary": {

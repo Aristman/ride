@@ -38,30 +38,6 @@ class RulesService {
     }
 
     /**
-     * Создает системный промпт с добавленными правилами
-     *
-     * @param basePrompt Базовый системный промпт
-     * @param project Текущий проект (может быть null)
-     * @return Системный промпт с правилами
-     */
-    fun composeSystemPromptWithRules(basePrompt: String, project: Project?): String {
-        if (!areRulesEnabled()) {
-            return basePrompt
-        }
-
-        val rulesContent = loadRules(project)
-        return if (rulesContent.isNotBlank()) {
-            buildString {
-                append(basePrompt)
-                append("\n\n")
-                append(rulesContent)
-            }
-        } else {
-            basePrompt
-        }
-    }
-
-    /**
      * Создает системный промпт с добавленными активными правилами
      *
      * @param basePrompt Базовый системный промпт
