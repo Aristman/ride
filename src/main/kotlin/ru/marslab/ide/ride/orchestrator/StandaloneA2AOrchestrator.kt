@@ -523,7 +523,7 @@ class StandaloneA2AOrchestrator(
                 }
 
                 // Выполняем шаг
-                val stepResult = executeStep(step, stepResults, context)
+                val stepResult = executeStep(plan, step, stepResults, context)
 
                 if (stepResult.success) {
                     completedSteps.add(step.id)
@@ -611,6 +611,7 @@ class StandaloneA2AOrchestrator(
      * Выполняет отдельный шаг через A2A агента
      */
     private suspend fun executeStep(
+        plan: ExecutionPlan,
         step: PlanStep,
         stepResults: Map<String, Any>,
         context: A2AExecutionContext
@@ -619,10 +620,25 @@ class StandaloneA2AOrchestrator(
 
         try {
             // Обогащаем входные данными из предыдущих шагов
-            val enrichedInput = enrichStepInput(step, stepResults)
+            val enrichedInputBase = enrichStepInput(step, stepResults)
+
+            // Для REPORT_GENERATOR формируем динамические требования к данным на основе зависимостей шага
+            val enrichedInput = if (step.agentType == AgentType.REPORT_GENERATOR) {
+                val requirements = step.dependencies.mapNotNull { depId ->
+                    val depStep = plan.steps.find { it.id == depId }
+                    depStep?.agentType?.name
+                }.distinct().map { agentTypeName ->
+                    mapOf(
+                        "agent_type" to agentTypeName,
+                        // событие прогресса, которое будем учитывать как завершение сбора
+                        "event_type" to "TOOL_EXECUTION_COMPLETED"
+                    )
+                }
+                if (requirements.isNotEmpty()) enrichedInputBase + ("data_requirements" to requirements) else enrichedInputBase
+            } else enrichedInputBase
 
             // Создаем A2A запрос
-            val request = createA2ARequest(step, enrichedInput)
+            val request = createA2ARequest(step, enrichedInput, plan.id)
 
             // Отправляем запрос агенту
             val response = messageBus.requestResponse(request, a2aConfig.getDefaultTimeoutMs())
@@ -667,7 +683,7 @@ class StandaloneA2AOrchestrator(
     /**
      * Создает A2A запрос для шага
      */
-    private fun createA2ARequest(step: PlanStep, input: Map<String, Any>): AgentMessage.Request {
+    private fun createA2ARequest(step: PlanStep, input: Map<String, Any>, planId: String): AgentMessage.Request {
         val messageType = when (step.agentType) {
             AgentType.PROJECT_SCANNER -> "PROJECT_STRUCTURE_REQUEST"
             AgentType.ARCHITECTURE_ANALYSIS -> "ARCHITECTURE_ANALYSIS_REQUEST"
@@ -694,7 +710,8 @@ class StandaloneA2AOrchestrator(
             metadata = mapOf(
                 "stepId" to step.id,
                 "stepTitle" to step.title,
-                "agentType" to step.agentType.name
+                "agentType" to step.agentType.name,
+                "planId" to planId
             )
         )
     }
