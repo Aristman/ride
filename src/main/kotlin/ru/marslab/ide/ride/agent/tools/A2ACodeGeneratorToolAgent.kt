@@ -58,7 +58,8 @@ class A2ACodeGeneratorToolAgent(
         messageBus: MessageBus
     ): AgentMessage.Response {
         val data = (request.payload as? MessagePayload.CustomPayload)?.data ?: emptyMap<String, Any>()
-        val description = data["description"] as? String ?: ""
+        val description = (data["description"] as? String)?.takeIf { it.isNotBlank() }
+            ?: (data["request"] as? String).orEmpty()
         val language = (data["language"] as? String).orEmpty()
         val context = data["context"] as? String ?: ""
         val files = data["files"] as? List<String> ?: emptyList()
@@ -691,8 +692,6 @@ class A2ACodeGeneratorToolAgent(
                 LLMParameters()
             )
 
-{{ ... }}
-                systemPrompt = "Ты — эксперт по тестированию. Генерируй качественные тесты с покрытием крайних случаев.",
             val parts = response.content.split("```")
             val code = if (parts.size >= 2) parts[1] else response.content
             val explanation = if (parts.size >= 3) parts[2].trim() else "Generated function implementation."
