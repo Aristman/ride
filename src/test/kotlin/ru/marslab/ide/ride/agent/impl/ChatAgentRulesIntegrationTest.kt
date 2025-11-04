@@ -9,13 +9,14 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.io.TempDir
 import ru.marslab.ide.ride.integration.llm.LLMProvider
-import ru.marslab.ide.ride.integration.llm.LLMResponse
 import ru.marslab.ide.ride.model.agent.AgentRequest
+import ru.marslab.ide.ride.model.llm.LLMResponse
 import ru.marslab.ide.ride.model.chat.*
 import ru.marslab.ide.ride.model.llm.LLMParameters
 import ru.marslab.ide.ride.service.rules.RulesService
 import java.io.File
 import java.nio.file.Path
+import kotlinx.coroutines.runBlocking
 
 /**
  * Интеграционные тесты для ChatAgent с настраиваемыми правилами
@@ -65,7 +66,7 @@ class ChatAgentRulesIntegrationTest : BasePlatformTestCase() {
         )
 
         // When
-        val response = chatAgent.ask(request)
+        val response = runBlocking { chatAgent.ask(request) }
 
         // Then
         assertTrue(response.success)
@@ -91,7 +92,7 @@ class ChatAgentRulesIntegrationTest : BasePlatformTestCase() {
         )
 
         // When
-        val response = chatAgent.ask(request)
+        val response = runBlocking { chatAgent.ask(request) }
 
         // Then
         assertTrue(response.success)
@@ -119,7 +120,7 @@ class ChatAgentRulesIntegrationTest : BasePlatformTestCase() {
         )
 
         // When
-        val response = chatAgent.ask(request)
+        val response = runBlocking { chatAgent.ask(request) }
 
         // Then
         assertTrue(response.success)
@@ -150,7 +151,7 @@ class ChatAgentRulesIntegrationTest : BasePlatformTestCase() {
         )
 
         // When
-        val response = chatAgent.ask(request)
+        val response = runBlocking { chatAgent.ask(request) }
 
         // Then
         assertTrue(response.success)
@@ -174,7 +175,7 @@ class ChatAgentRulesIntegrationTest : BasePlatformTestCase() {
             parameters = LLMParameters.DEFAULT
         )
 
-        val response1 = chatAgent.ask(request1)
+        val response1 = runBlocking { chatAgent.ask(request1) }
         assertTrue(response1.success)
 
         val firstSystemPrompt = mockLLMProvider.lastSystemPrompt
@@ -190,7 +191,7 @@ class ChatAgentRulesIntegrationTest : BasePlatformTestCase() {
             parameters = LLMParameters.DEFAULT
         )
 
-        val response2 = chatAgent.ask(request2)
+        val response2 = runBlocking { chatAgent.ask(request2) }
         assertTrue(response2.success)
 
         val secondSystemPrompt = mockLLMProvider.lastSystemPrompt
@@ -215,7 +216,7 @@ class ChatAgentRulesIntegrationTest : BasePlatformTestCase() {
         )
 
         // When
-        val response = chatAgent.ask(request)
+        val response = runBlocking { chatAgent.ask(request) }
 
         // Then
         assertTrue(response.success)
@@ -241,17 +242,13 @@ class ChatAgentRulesIntegrationTest : BasePlatformTestCase() {
             callCount++
             lastSystemPrompt = systemPrompt
 
-            return LLMResponse(
-                success = true,
-                content = "Response for: $userMessage",
-                usage = null,
-                error = null
+            return LLMResponse.success(
+                content = "Response for: $userMessage"
             )
         }
 
         override fun getProviderName(): String = "MockProvider"
         override fun isAvailable(): Boolean = true
-        override fun getModelName(): String = "mock-model"
     }
 
     private fun enableRules() {
