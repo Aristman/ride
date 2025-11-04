@@ -9,6 +9,7 @@ import ru.marslab.ide.ride.model.agent.AgentRequest
 import ru.marslab.ide.ride.model.agent.AgentResponse
 import ru.marslab.ide.ride.model.orchestrator.*
 import ru.marslab.ide.ride.model.schema.ParsedResponse
+import ru.marslab.ide.ride.formatter.ChatOutputFormatter
 import java.util.*
 
 /**
@@ -23,6 +24,7 @@ class StandaloneA2AOrchestrator(
 
     private val logger = Logger.getInstance(StandaloneA2AOrchestrator::class.java)
     private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val chatOutputFormatter = ChatOutputFormatter()
 
     // A2A состояния
     private val activeExecutions = mutableMapOf<String, A2AExecutionContext>()
@@ -578,8 +580,10 @@ class StandaloneA2AOrchestrator(
                 "totalSteps" to plan.steps.size
             ))
 
+            val formatted = chatOutputFormatter.formatAsHtml(finalContent)
             return AgentResponse.success(
                 content = finalContent,
+                formattedOutput = formatted,
                 metadata = mapOf(
                     "planId" to plan.id,
                     "completedSteps" to completedSteps.size,
