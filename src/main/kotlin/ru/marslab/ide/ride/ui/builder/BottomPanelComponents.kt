@@ -11,5 +11,6 @@ data class BottomPanelComponents(
     val panel: JPanel,
     val inputArea: JBTextArea,
     val sendButton: JButton,
-    val clearButton: JButton
+    val clearButton: JButton,
+    val micButton: JButton
 )

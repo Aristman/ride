@@ -17,6 +17,8 @@ import ru.marslab.ide.ride.ui.config.ChatPanelConfig
 import ru.marslab.ide.ride.ui.manager.HtmlDocumentManager
 import ru.marslab.ide.ride.ui.manager.MessageDisplayManager
 import ru.marslab.ide.ride.ui.renderer.ChatContentRenderer
+import ru.marslab.ide.ride.stt.app.SttFacade
+import ru.marslab.ide.ride.stt.domain.SttConfig
 import java.awt.BorderLayout
 import javax.swing.JPanel
 import javax.swing.SwingUtilities
@@ -29,6 +31,7 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
 
     private val chatService = service<ChatService>()
     private val settings = service<PluginSettings>()
+    private val sttFacade = service<SttFacade>()
 
     // Компоненты UI
     private lateinit var uiBuilder: ChatUiBuilder
@@ -116,6 +119,70 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
             onClearChat = { clearChat() }
         )
         add(bottomComponents.panel, BorderLayout.SOUTH)
+
+        // Обработчик кнопки микрофона
+        bottomComponents.micButton.addActionListener { onMicClicked() }
+    }
+
+    // =========================
+    // STT: запись и распознавание
+    // =========================
+    @Volatile
+    private var isRecording: Boolean = false
+
+    private fun onMicClicked() {
+        if (!isRecording) {
+            startRecording()
+        } else {
+            stopAndRecognize()
+        }
+    }
+
+    private fun startRecording() {
+        val started = sttFacade.startRecording(SttConfig(lang = "ru-RU"))
+        if (started) {
+            isRecording = true
+            bottomComponents.micButton.text = "⏹"
+            bottomComponents.micButton.toolTipText = "Остановить запись"
+            messageDisplayManager.displaySystemMessage("🎙️ Запись... Нажмите стоп для распознавания")
+        } else {
+            messageDisplayManager.displaySystemMessage("${ChatPanelConfig.Icons.ERROR} Не удалось начать запись")
+        }
+    }
+
+    private fun stopAndRecognize() {
+        isRecording = false
+        bottomComponents.micButton.isEnabled = false
+        bottomComponents.micButton.text = "⏳"
+        bottomComponents.micButton.toolTipText = "Распознавание..."
+        messageDisplayManager.displaySystemMessage("🔎 Распознавание речи...")
+
+        ApplicationManager.getApplication().executeOnPooledThread {
+            val result = sttFacade.stopAndRecognize(SttConfig(lang = "ru-RU"))
+            SwingUtilities.invokeLater {
+                bottomComponents.micButton.isEnabled = true
+                bottomComponents.micButton.text = "🎤"
+                bottomComponents.micButton.toolTipText = "Запись голоса"
+                when {
+                    result.isSuccess -> {
+                        val text = result.getOrNull().orEmpty()
+                        if (text.isNotBlank()) {
+                            // Подставляем текст в поле ввода (без авто-отправки)
+                            val existing = bottomComponents.inputArea.text
+                            bottomComponents.inputArea.text = if (existing.isBlank()) text else "$existing ${'$'}text"
+                            uiBuilder.focusInputField(bottomComponents.inputArea)
+                            messageDisplayManager.displaySystemMessage("✅ Текст распознан и подставлен в поле ввода")
+                        } else {
+                            messageDisplayManager.displaySystemMessage("${ChatPanelConfig.Icons.ERROR} Пустой результат распознавания")
+                        }
+                    }
+                    else -> {
+                        val err = result.exceptionOrNull()?.message ?: "Ошибка распознавания"
+                        messageDisplayManager.displaySystemMessage("${ChatPanelConfig.Icons.ERROR} $err")
+                    }
+                }
+            }
+        }
     }
 
     /**
