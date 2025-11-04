@@ -123,6 +123,10 @@ abstract class BaseA2AAgent(
     private val a2aSupervisor: Job = SupervisorJob()
     private val a2aScope = CoroutineScope(Dispatchers.Default + a2aSupervisor)
 
+    // Контекст выполнения для доступа к проекту
+    protected var currentExecutionContext: ExecutionContext = ExecutionContext.Empty
+        private set
+
     // Базовая реализация Agent интерфейса
     override val capabilities: AgentCapabilities = AgentCapabilities(
         stateful = false,
@@ -173,6 +177,10 @@ abstract class BaseA2AAgent(
         messageBus: MessageBus,
         context: ExecutionContext
     ) {
+        // Сохраняем контекст для дальнейшего использования
+        currentExecutionContext = context
+        logger.debug("A2A agent $a2aAgentId initialized with context: projectPath=${context.projectPath}")
+
         // Публикуем событие инициализации агента
         try {
             val initEvent = AgentMessage.Event(
@@ -312,5 +320,35 @@ abstract class BaseA2AAgent(
             metadata = metadata
         )
         return messageBus.publish(response)
+    }
+
+    /**
+     * Универсальный метод для применения правил к системному промпту
+     *
+     * Используется всеми A2A агентами для добавления настраиваемых правил
+     * к системным промптам без дублирования логики
+     *
+     * @param basePrompt Базовый системный промпт агента
+     * @return Системный промпт с добавленными правилами (если включены)
+     */
+    protected fun applyRulesToPrompt(basePrompt: String): String {
+        try {
+            // Преобразуем projectPath в Project если возможно
+            val project = currentExecutionContext.projectPath?.let { path ->
+                // Пытаемся получить Project из projectPath
+                // В IntelliJ Platform доступ к Project осуществляется через ProjectManager
+                runCatching {
+                    val projectManager = com.intellij.openapi.project.ProjectManager.getInstance()
+                    projectManager.openProjects.find { it.basePath == path }
+                }.getOrNull()
+            }
+
+            // Используем универсальный помощник для применения правил
+            return ru.marslab.ide.ride.service.rules.PromptRulesHelper.applyRulesToPrompt(basePrompt, project)
+        } catch (e: Exception) {
+            logger.warn("Failed to apply rules to prompt in $a2aAgentId: ${e.message}", e)
+            // В случае ошибки возвращаем базовый промпт
+            return basePrompt
+        }
     }
 }

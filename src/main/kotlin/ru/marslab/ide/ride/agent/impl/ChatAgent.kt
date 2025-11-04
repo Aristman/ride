@@ -4,6 +4,7 @@ import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import ru.marslab.ide.ride.agent.Agent
+import ru.marslab.ide.ride.service.rules.PromptRulesHelper
 import ru.marslab.ide.ride.agent.UncertaintyAnalyzer
 import ru.marslab.ide.ride.agent.formatter.PromptFormatter
 import ru.marslab.ide.ride.formatter.ChatOutputFormatter
@@ -271,19 +272,13 @@ class ChatAgent(
      */
     private fun buildSystemPrompt(project: Project?): String {
         val settings = service<PluginSettings>()
-        val base = if (settings.enableUncertaintyAnalysis) {
-            systemPrompt
-        } else {
-            SIMPLE_SYSTEM_PROMPT
-        }
 
-        // Добавляем правила к системному промпту
-        val rulesService = service<RulesService>()
-        val promptWithRules = rulesService.composeSystemPromptWithRules(base, project)
-
-        return if (responseSchema != null && settings.enableUncertaintyAnalysis) {
-            PromptFormatter.formatPrompt(promptWithRules, responseSchema)
-        } else promptWithRules
+        return PromptRulesHelper.applyRulesAndFormatting(
+            basePrompt = systemPrompt,
+            project = project,
+            enableUncertaintyAnalysis = settings.enableUncertaintyAnalysis,
+            responseFormat = responseSchema
+        )
     }
 
     /**

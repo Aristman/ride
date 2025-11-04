@@ -156,8 +156,10 @@ class A2ALLMReviewToolAgent(
         )
 
         try {
+            val systemPromptWithRules = applyRulesToPrompt(systemPrompt)
+
             val response = llmProvider.sendRequest(
-                systemPrompt = systemPrompt,
+                systemPrompt = systemPromptWithRules,
                 userMessage = userPrompt,
                 conversationHistory = emptyList(),
                 parameters = agentRequest.parameters

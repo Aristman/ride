@@ -492,8 +492,11 @@ class A2ACodeGeneratorToolAgent(
         }
 
         try {
+            val baseSystemPrompt = "You are a senior software developer. Generate high-quality, production-ready code with proper documentation."
+            val systemPromptWithRules = applyRulesToPrompt(baseSystemPrompt)
+
             val response = llmProvider.sendRequest(
-                systemPrompt = "You are a senior software developer. Generate high-quality, production-ready code with proper documentation.",
+                systemPrompt = systemPromptWithRules,
                 userMessage = prompt,
                 conversationHistory = emptyList(),
                 LLMParameters()

@@ -389,12 +389,13 @@ class A2ABugDetectionToolAgent(
         val cacheKey = "${filePath}_${code.hashCode()}"
         analysisCache[cacheKey]?.let { return emptyList() } // Простая кэшизация
 
-        val systemPrompt = buildBugAnalysisSystemPrompt(language)
+        val baseSystemPrompt = buildBugAnalysisSystemPrompt(language)
+        val systemPromptWithRules = applyRulesToPrompt(baseSystemPrompt)
         val userPrompt = buildBugAnalysisUserPrompt(code, filePath, language)
 
         try {
             val response = llmProvider.sendRequest(
-                systemPrompt = systemPrompt,
+                systemPrompt = systemPromptWithRules,
                 userMessage = userPrompt,
                 conversationHistory = emptyList(),
                 parameters = LLMParameters.PRECISE.copy(
