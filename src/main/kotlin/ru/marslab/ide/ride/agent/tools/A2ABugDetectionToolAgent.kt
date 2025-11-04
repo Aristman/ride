@@ -464,17 +464,17 @@ class A2ABugDetectionToolAgent(
     }
 
     private fun buildBugAnalysisUserPrompt(code: String, filePath: String, language: String): String {
-        val codeSample = if (code.length > 2000) code.take(2000) + "\n... (truncated)" else code
+        val codeSample = if (code.length > 2000) code.take(2000) + "\n... (усечено)" else code
 
-        return """Please analyze the following $language code for potential bugs and issues:
+        return """Проанализируй следующий код на $language на наличие потенциальных багов и проблем:
 
-File: $filePath
+Файл: $filePath
 
 ```$language
 $codeSample
 ```
 
-Focus on identifying real bugs and potential runtime failures rather than style issues. Provide the analysis in the JSON format specified in the system prompt."""
+Сфокусируйся на реальных ошибках и возможных сбоях во время выполнения, а не на стилевых замечаниях. Предоставь анализ в формате JSON, указанном в системном промпте."""
     }
 
     private fun parseLLMBugAnalysisResponse(response: String, filePath: String): List<BugIssue> {

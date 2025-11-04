@@ -192,17 +192,17 @@ class A2ALLMReviewToolAgent(
 
     private fun buildSystemPrompt(language: String, focusAreas: List<String>, includeSuggestions: Boolean): String {
         val focusText = when {
-            focusAreas.contains("security") -> " Pay special attention to security vulnerabilities and best practices."
-            focusAreas.contains("performance") -> " Focus on performance optimizations and potential bottlenecks."
-            focusAreas.contains("readability") -> " Emphasize code readability, maintainability, and naming conventions."
-            focusAreas.contains("testing") -> " Look for testability issues and suggest testing strategies."
-            else -> " Provide a comprehensive review covering all aspects of code quality."
+            focusAreas.contains("security") -> " Особое внимание уделяй уязвимостям безопасности и лучшим практикам."
+            focusAreas.contains("performance") -> " Сфокусируйся на оптимизации производительности и возможных узких местах."
+            focusAreas.contains("readability") -> " Подчеркни читаемость кода, сопровождение и соглашения об именовании."
+            focusAreas.contains("testing") -> " Обрати внимание на тестопригодность и предложи стратегии тестирования."
+            else -> " Проведи всестороннее ревью, охватывающее все аспекты качества кода."
         }
 
         val suggestionText = if (includeSuggestions) {
-            " For each issue found, provide specific suggestions for improvement."
+            " Для каждой найденной проблемы предоставляй конкретные рекомендации по улучшению."
         } else {
-            " Identify issues but do not provide detailed suggestions."
+            " Определи проблемы, но не давай детальных рекомендаций."
         }
 
         return """Ты — эксперт по ревью кода на языке $language.
@@ -243,15 +243,15 @@ $focusText$suggestionText
     }
 
     private fun buildUserPrompt(code: String, language: String, focusAreas: List<String>): String {
-        return """Please review the following $language code:
+        return """Проведи ревью следующего кода на $language:
 
 ```$language
 $code
 ```
 
-Focus areas: ${focusAreas.joinToString(", ")}
+Области фокуса: ${focusAreas.joinToString(", ")}
 
-Provide a thorough analysis following the JSON format specified in the system prompt."""
+Предоставь подробный анализ, следуя формату JSON, указанному в системном промпте."""
     }
 
     private fun parseReviewResponse(

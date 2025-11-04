@@ -310,12 +310,12 @@ class A2AReportGeneratorToolAgent(
 
         try {
             val prompt = buildString {
-                appendLine("Generate a $reportType report with the following data:")
-                appendLine("Title: $title")
-                appendLine("Format: $format")
-                appendLine("Include Recommendations: $includeRecommendations")
-                appendLine("Source Data: $sourceData")
-                appendLine("\nGenerate a comprehensive, well-structured report.")
+                appendLine("Сгенерируй $reportType отчёт на основе следующих данных:")
+                appendLine("Заголовок: $title")
+                appendLine("Формат: $format")
+                appendLine("Включать рекомендации: $includeRecommendations")
+                appendLine("Исходные данные: $sourceData")
+                appendLine("\nСформируй подробный, хорошо структурированный отчёт.")
             }
 
             // Логируем промпт

@@ -176,17 +176,17 @@ class LLMCodeReviewToolAgent(
     }
 
     private fun buildPrompt(language: String, path: String, code: String, maxFindings: Int): String = buildString {
-        appendLine("Analyze the following ${'$'}language code and return potential bugs and code smells.")
-        appendLine("Return STRICT JSON with key 'findings' which is an array of objects with fields:")
-        appendLine("file (string), line (number|null), severity (one of: critical, high, medium, low), rule (string), message (string), suggestion (string). Do not include any text outside JSON.")
+        appendLine("Проанализируй следующий код на ${'$'}language и верни потенциальные баги и проблемные места (code smells).")
+        appendLine("Верни СТРОГИЙ JSON с ключом 'findings' — массив объектов со следующими полями:")
+        appendLine("file (string), line (number|null), severity (critical|high|medium|low), rule (string), message (string), suggestion (string). Не включай никакого текста вне JSON.")
         appendLine()
-        appendLine("Constraints:")
-        appendLine("- Max findings: ${'$'}maxFindings")
-        appendLine("- If line is unknown, use null")
+        appendLine("Ограничения:")
+        appendLine("- Максимум находок: ${'$'}maxFindings")
+        appendLine("- Если номер строки неизвестен, используй null")
         appendLine()
-        appendLine("File: ${'$'}path")
-        appendLine("Language: ${'$'}language")
-        appendLine("Code snippet:\n```${'$'}language\n${'$'}code\n```")
+        appendLine("Файл: ${'$'}path")
+        appendLine("Язык: ${'$'}language")
+        appendLine("Фрагмент кода:\n```\n${'$'}code\n```")
     }
 
     private fun parseFindings(content: String, path: String): List<Map<String, Any>> {
