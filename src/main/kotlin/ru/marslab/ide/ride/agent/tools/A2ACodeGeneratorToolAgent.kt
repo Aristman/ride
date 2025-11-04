@@ -59,7 +59,7 @@ class A2ACodeGeneratorToolAgent(
     ): AgentMessage.Response {
         val data = (request.payload as? MessagePayload.CustomPayload)?.data ?: emptyMap<String, Any>()
         val description = data["description"] as? String ?: ""
-        val language = data["language"] as? String ?: "kotlin"
+        val language = (data["language"] as? String).orEmpty()
         val context = data["context"] as? String ?: ""
         val files = data["files"] as? List<String> ?: emptyList()
         val requirements = data["requirements"] as? List<String> ?: emptyList()
@@ -125,7 +125,7 @@ class A2ACodeGeneratorToolAgent(
         val responsibilities = data["responsibilities"] as? List<String> ?: emptyList()
         val properties = data["properties"] as? List<String> ?: emptyList()
         val methods = data["methods"] as? List<String> ?: emptyList()
-        val language = data["language"] as? String ?: "kotlin"
+        val language = (data["language"] as? String).orEmpty()
         val designPattern = data["design_pattern"] as? String
         val parentClass = data["parent_class"] as? String
         val interfaces = data["interfaces"] as? List<String> ?: emptyList()
@@ -195,7 +195,7 @@ class A2ACodeGeneratorToolAgent(
         val description = data["description"] as? String ?: ""
         val parameters = data["parameters"] as? List<Map<String, Any>> ?: emptyList()
         val returnType = data["return_type"] as? String
-        val language = data["language"] as? String ?: "kotlin"
+        val language = (data["language"] as? String).orEmpty()
         val algorithm = data["algorithm"] as? String
         val complexity = data["complexity"] as? String ?: "O(n)"
 
@@ -264,7 +264,7 @@ class A2ACodeGeneratorToolAgent(
         val inputFormat = data["input_format"] as? String ?: ""
         val outputFormat = data["output_format"] as? String ?: ""
         val constraints = data["constraints"] as? List<String> ?: emptyList()
-        val language = data["language"] as? String ?: "kotlin"
+        val language = (data["language"] as? String).orEmpty()
         val timeComplexity = data["target_time_complexity"] as? String
         val spaceComplexity = data["target_space_complexity"] as? String
 
@@ -333,7 +333,7 @@ class A2ACodeGeneratorToolAgent(
         val sourceCode = data["source_code"] as? String ?: ""
         val codeType = data["code_type"] as? String ?: "function"
         val testFramework = data["test_framework"] as? String ?: "JUnit"
-        val language = data["language"] as? String ?: "kotlin"
+        val language = (data["language"] as? String).orEmpty()
         val coverageTarget = data["coverage_target"] as? Double ?: 80.0
 
         publishEvent(
@@ -397,7 +397,7 @@ class A2ACodeGeneratorToolAgent(
         val sourceCode = data["source_code"] as? String ?: ""
         val refactoringType = data["refactoring_type"] as? String ?: ""
         val goals = data["goals"] as? List<String> ?: emptyList()
-        val language = data["language"] as? String ?: "kotlin"
+        val language = (data["language"] as? String).orEmpty()
         val preserveBehavior = data["preserve_behavior"] as? Boolean ?: true
 
         publishEvent(

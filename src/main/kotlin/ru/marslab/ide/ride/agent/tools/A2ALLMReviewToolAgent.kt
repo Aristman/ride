@@ -49,7 +49,7 @@ class A2ALLMReviewToolAgent(
 
         val data = (request.payload as? MessagePayload.CustomPayload)?.data ?: emptyMap<String, Any>()
         val code = data["code"] as? String ?: ""
-        val language = data["language"] as? String ?: "kotlin"
+        val language = (data["language"] as? String).orEmpty()
         val focusAreas = data["focus_areas"] as? List<String> ?: listOf("general")
         val includeSuggestions = data["include_suggestions"] as? Boolean ?: true
 

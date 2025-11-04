@@ -122,7 +122,7 @@ class A2ABugDetectionToolAgent(
     ): AgentMessage.Response {
         val data = (request.payload as? MessagePayload.CustomPayload)?.data ?: emptyMap<String, Any>()
         val code = data["code"] as? String ?: ""
-        val language = data["language"] as? String ?: "kotlin"
+        val language = (data["language"] as? String).orEmpty()
         val filePath = data["file_path"] as? String
 
         if (code.isBlank()) {

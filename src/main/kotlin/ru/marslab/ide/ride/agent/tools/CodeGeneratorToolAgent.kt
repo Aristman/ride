@@ -34,7 +34,7 @@ class CodeGeneratorToolAgent(
 
     override fun validateInput(input: StepInput): ValidationResult {
         val request = input.getString("request")
-        val language = input.getString("language") ?: "kotlin"
+        val language = input.getString("language") .orEmpty()
         val codeType = input.getString("code_type")
 
         if (request.isNullOrBlank()) {
@@ -51,7 +51,7 @@ class CodeGeneratorToolAgent(
 
     override suspend fun doExecuteStep(step: ToolPlanStep, context: ExecutionContext): StepResult {
         val request = step.input.getString("request")!!
-        val language = step.input.getString("language") ?: "kotlin"
+        val language = step.input.getString("language") .orEmpty()
         val codeType = step.input.getString("code_type") ?: "general"
         val contextFiles = step.input.getList<String>("context_files") ?: emptyList()
 
@@ -193,7 +193,7 @@ class CodeGeneratorToolAgent(
                 try {
                     val file = java.io.File(filePath)
                     if (file.exists()) {
-                        val content = file.readText().take(1000) // Ограничиваем размер
+                        val content = file.readText()
                         "Файл: $filePath\n```\n$content\n```\n"
                     } else null
                 } catch (e: Exception) {
@@ -258,7 +258,7 @@ class CodeGeneratorToolAgent(
             }
         }
 
-        return explanationParts.joinToString("\n\n").take(1000) // Ограничиваем размер
+        return explanationParts.joinToString("\n\n")
     }
 
     private fun extractDependencies(code: String, language: String): List<String> {

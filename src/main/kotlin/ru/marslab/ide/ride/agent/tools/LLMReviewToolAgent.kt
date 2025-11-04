@@ -53,7 +53,7 @@ class LLMReviewToolAgent(
         val code = step.input.getString("code")
         val files = step.input.getList<String>("files") ?: emptyList()
         val reviewType = step.input.getString("review_type") ?: "general"
-        val language = step.input.getString("language") ?: "kotlin"
+        val language = step.input.getString("language").orEmpty()
 
         logger.info("LLM_REVIEW executing: review_type=$reviewType, language=$language, files=${files.size}, has_code=${!code.isNullOrBlank()}")
 
