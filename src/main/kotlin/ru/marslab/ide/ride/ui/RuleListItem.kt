@@ -6,7 +6,6 @@ import com.intellij.util.ui.JBUI
 import java.awt.BorderLayout
 import java.awt.Cursor
 import java.awt.Dimension
-import java.awt.FlowLayout
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import javax.swing.JButton
@@ -52,15 +51,19 @@ class RuleListItem(
     init {
         layout = BorderLayout(5, 0)
         border = JBUI.Borders.empty(2)
+        // Размещение элементов: чекбокс слева, метка по центру, кнопка удаления справа
+        add(checkBox, BorderLayout.WEST)
+        add(label, BorderLayout.CENTER)
+        add(deleteButton, BorderLayout.EAST)
 
-        // Панель с чекбоксом и кнопкой удаления
-        val controlsPanel = JPanel(FlowLayout(FlowLayout.TRAILING, 2, 0)).apply {
-            add(checkBox, BorderLayout.WEST)
-            add(label, BorderLayout.CENTER)
-            add(deleteButton, BorderLayout.EAST)
-        }
-
-        add(controlsPanel, BorderLayout.WEST)
+        // Клик по пустой области элемента открывает файл
+        addMouseListener(object : MouseAdapter() {
+            override fun mouseClicked(e: MouseEvent) {
+                if (e.clickCount == 1) {
+                    onOpenFile(fileName, isGlobal)
+                }
+            }
+        })
     }
 
     fun setActive(active: Boolean) {

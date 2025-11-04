@@ -10,6 +10,7 @@ import com.intellij.openapi.ui.DialogPanel
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.ui.Messages.showErrorDialog
 import com.intellij.openapi.vfs.VirtualFileManager
+import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.ui.ColorPanel
 import com.intellij.ui.components.*
 import com.intellij.ui.dsl.builder.*
@@ -30,6 +31,7 @@ import ru.marslab.ide.ride.service.embedding.IndexingStatusService
 import ru.marslab.ide.ride.service.rules.RuleItem
 import ru.marslab.ide.ride.service.rules.RulesService
 import ru.marslab.ide.ride.ui.RuleListItem
+import java.awt.BorderLayout
 import java.awt.CardLayout
 import java.awt.Color
 import java.awt.Dimension
@@ -1083,15 +1085,15 @@ class SettingsConfigurable : Configurable {
                 cell(addGlobalRuleButton).align(AlignX.RIGHT)
             }
             row {
+                // Панель содержимого (вертикальный список элементов)
                 globalRulesList = JPanel().apply {
                     layout = BoxLayout(this, BoxLayout.Y_AXIS)
-                    preferredSize = Dimension(300, 200)
                     border = compound(
                         customLine(borderColor(), 1),
                         empty(5)
                     )
                 }
-                // Обёртка для выравнивания содержимого по верхнему краю внутри скролла
+                // Обёртка для прилипания к верху в скролле
                 val globalWrapper = JPanel(BorderLayout()).apply {
                     add(globalRulesList, BorderLayout.NORTH)
                 }
@@ -1122,6 +1124,7 @@ class SettingsConfigurable : Configurable {
                 cell(addProjectRuleButton).align(AlignX.RIGHT)
             }
             row {
+                // Панель содержимого (вертикальный список элементов)
                 projectRulesList = JPanel().apply {
                     layout = BoxLayout(this, BoxLayout.PAGE_AXIS)
                     border = compound(
@@ -1129,7 +1132,7 @@ class SettingsConfigurable : Configurable {
                         empty(5)
                     )
                 }
-                // Обёртка для выравнивания содержимого по верхнему краю внутри скролла
+                // Обёртка для прилипания к верху в скролле
                 val projectWrapper = JPanel(BorderLayout()).apply {
                     add(projectRulesList, BorderLayout.NORTH)
                 }
@@ -1242,7 +1245,7 @@ class SettingsConfigurable : Configurable {
                     openRuleFileForEditing(fileName, isGlobal)
                 }
             )
-            globalRulesList.add(component)
+            globalRulesList.add(component, BorderLayout.NORTH)
             globalRulesList.add(Box.createVerticalStrut(2))
         }
 
@@ -1268,7 +1271,7 @@ class SettingsConfigurable : Configurable {
                     openRuleFileForEditing(fileName, isGlobal)
                 }
             )
-            projectRulesList.add(component)
+            projectRulesList.add(component, BorderLayout.NORTH)
             projectRulesList.add(Box.createVerticalStrut(2))
         }
 
@@ -1464,37 +1467,45 @@ class SettingsConfigurable : Configurable {
      */
     private fun openRuleFileForEditing(fileName: String, isGlobal: Boolean) {
         try {
-            val project = if (!isGlobal) {
-                ProjectManager.getInstance().openProjects.firstOrNull()
-            } else null
+            // Всегда выбираем первый открытый проект для открытия файла в редакторе
+            val project = ProjectManager.getInstance().openProjects.firstOrNull()
+                ?: throw Exception("Нет открытого проекта для открытия файла")
+
             val rulesService = service<RulesService>()
 
             val file = if (isGlobal) {
                 val globalDir = rulesService.getGlobalRulesDirectory()
                 globalDir.resolve("$fileName.md")
             } else {
-                if (project == null) {
-                    throw Exception("Нет открытого проекта")
-                }
                 val projectDir = rulesService.getProjectRulesDirectory(project)
                     ?: throw Exception("Не удалось определить директорию проектных правил")
                 projectDir.resolve("$fileName.md")
             }
 
             if (file.exists()) {
-                // Открываем файл в редакторе
-                val virtualFile = VirtualFileManager.getInstance().findFileByUrl(file.toURI().toString())
-                if (virtualFile != null && project != null) {
-                    FileEditorManager.getInstance(project).openFile(virtualFile, true)
+                // Обновляем локальную VFS и ищем файл
+                val vfs = LocalFileSystem.getInstance()
+                val virtualFile = vfs.refreshAndFindFileByIoFile(file)
+                    ?: run {
+                        vfs.refresh(true)
+                        vfs.refreshAndFindFileByIoFile(file)
+                    }
 
-                    // Закрываем настройки через OK
-                    SwingUtilities.invokeLater {
-                        val window = SwingUtilities.getWindowAncestor(panel)
-                        if (window is java.awt.Dialog) {
-                            window.dispose()
-                        }
+                if (virtualFile != null) {
+                    FileEditorManager.getInstance(project).openFile(virtualFile, true)
+                } else {
+                    throw Exception("Не удалось найти виртуальный файл для ${file.path}")
+                }
+
+                // Закрываем настройки (аналог нажатия OK)
+                SwingUtilities.invokeLater {
+                    val window = SwingUtilities.getWindowAncestor(panel)
+                    if (window is java.awt.Dialog) {
+                        window.dispose()
                     }
                 }
+            } else {
+                throw Exception("Файл не найден: ${file.path}")
             }
         } catch (e: Exception) {
             Messages.showErrorDialog(
