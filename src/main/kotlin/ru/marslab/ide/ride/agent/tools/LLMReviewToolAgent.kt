@@ -76,6 +76,18 @@ class LLMReviewToolAgent(
             val userPrompt = buildReviewUserPrompt(codeToReview, reviewType, language, files)
 
             logger.info("LLM_REVIEW sending request to LLM")
+            // Логируем промпт
+            logUserPrompt(
+                action = "LLM_REVIEW",
+                systemPrompt = systemPrompt,
+                userPrompt = userPrompt,
+                extraMeta = mapOf(
+                    "review_type" to reviewType,
+                    "language" to language,
+                    "files_count" to files.size,
+                    "has_inline_code" to (!code.isNullOrBlank())
+                )
+            )
 
             // Отправляем запрос в LLM
             val response = llmProvider.sendRequest(

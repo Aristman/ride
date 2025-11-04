@@ -69,6 +69,14 @@ class LLMCodeReviewToolAgent(
             }
 
             val response = withContext(Dispatchers.IO) {
+                // Логируем промпт (fallback режим)
+                logUserPrompt(
+                    action = "LLM_CODE_REVIEW_FALLBACK",
+                    systemPrompt = "Ты — опытный ревьюер кода. Возвращай ТОЛЬКО JSON в требуемом формате.",
+                    userPrompt = prompt,
+                    extraMeta = mapOf("mode" to "fallback", "maxFindingsPerFile" to maxFindingsPerFile)
+                )
+
                 llmProvider.sendRequest(
                     systemPrompt = "Ты — опытный ревьюер кода. Возвращай ТОЛЬКО JSON в требуемом формате.",
                     userMessage = prompt,
@@ -108,6 +116,19 @@ class LLMCodeReviewToolAgent(
             val response = withContext(Dispatchers.IO) {
                 // Логи длины запросов
                 log.info("LLM_REVIEW sendRequest: systemPromptLen=${SYSTEM_PROMPT.length}, userMessageLen=${prompt.length}")
+
+                // Логируем промпт (per-file)
+                logUserPrompt(
+                    action = "LLM_CODE_REVIEW",
+                    systemPrompt = SYSTEM_PROMPT,
+                    userPrompt = prompt,
+                    extraMeta = mapOf(
+                        "file" to path,
+                        "language" to language,
+                        "maxFindingsPerFile" to maxFindingsPerFile
+                    )
+                )
+
                 llmProvider.sendRequest(
                     systemPrompt = SYSTEM_PROMPT,
                     userMessage = prompt,

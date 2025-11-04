@@ -318,6 +318,18 @@ class A2AReportGeneratorToolAgent(
                 appendLine("\nGenerate a comprehensive, well-structured report.")
             }
 
+            // Логируем промпт
+            logUserPrompt(
+                action = "A2A_REPORT_GENERATE",
+                systemPrompt = "Ты — генератор технических отчётов. Создавай понятные и практичные отчёты для команд разработки.",
+                userPrompt = prompt,
+                extraMeta = mapOf(
+                    "report_type" to reportType,
+                    "format" to format,
+                    "include_recommendations" to includeRecommendations
+                )
+            )
+
             val response = llmProvider.sendRequest(
                 systemPrompt = "Ты — генератор технических отчётов. Создавай понятные и практичные отчёты для команд разработки.",
                 userMessage = prompt,
