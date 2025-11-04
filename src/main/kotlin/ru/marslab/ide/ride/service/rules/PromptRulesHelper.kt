@@ -20,16 +20,9 @@ object PromptRulesHelper {
      * @return Системный промпт с добавленными правилами (если включены)
      */
     fun applyRulesToPrompt(basePrompt: String, project: Project?): String {
-        val settings = service<PluginSettings>()
-
-        // Если правила отключены в настройках, возвращаем базовый промпт
-        if (!settings.enableCustomRules) {
-            return basePrompt
-        }
-
-        // Добавляем правила через RulesService
+        // Правила всегда применяются, но только активные
         val rulesService = service<RulesService>()
-        return rulesService.composeSystemPromptWithRules(basePrompt, project)
+        return rulesService.composeSystemPromptWithActiveRules(basePrompt, project)
     }
 
     /**

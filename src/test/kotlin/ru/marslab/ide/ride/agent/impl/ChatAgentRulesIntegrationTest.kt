@@ -1,22 +1,22 @@
 package ru.marslab.ide.ride.agent.impl
 
-import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
-import org.junit.jupiter.api.Assertions.*
-import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.BeforeEach
-import org.junit.jupiter.api.AfterEach
+import com.intellij.testFramework.fixtures.BasePlatformTestCase
+import kotlinx.coroutines.runBlocking
+import org.junit.After
+import org.junit.Before
+import org.junit.Test
 import ru.marslab.ide.ride.integration.llm.LLMProvider
 import ru.marslab.ide.ride.model.agent.AgentRequest
-import ru.marslab.ide.ride.model.llm.LLMResponse
-import ru.marslab.ide.ride.model.chat.*
+import ru.marslab.ide.ride.model.chat.ChatContext
+import ru.marslab.ide.ride.model.chat.ConversationMessage
 import ru.marslab.ide.ride.model.llm.LLMParameters
+import ru.marslab.ide.ride.model.llm.LLMResponse
 import ru.marslab.ide.ride.service.rules.RulesService
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
-import kotlinx.coroutines.runBlocking
 
 /**
  * Интеграционные тесты для ChatAgent с настраиваемыми правилами
@@ -28,7 +28,7 @@ class ChatAgentRulesIntegrationTest : BasePlatformTestCase() {
     private lateinit var testProject: Project
     private lateinit var tempDir: Path
 
-    @BeforeEach
+    @Before
     override fun setUp() {
         super.setUp()
         testProject = project
@@ -60,7 +60,7 @@ class ChatAgentRulesIntegrationTest : BasePlatformTestCase() {
         return file
     }
 
-    @AfterEach
+    @After
     override fun tearDown() {
         try {
             service<RulesService>().clearCache()

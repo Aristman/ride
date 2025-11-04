@@ -4,13 +4,10 @@ import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.project.ProjectManager
 import ru.marslab.ide.ride.settings.PluginSettings
 import java.io.File
 import java.nio.file.Files
-import java.nio.file.Path
 import java.nio.file.Paths
-import java.nio.file.attribute.FileTime
 
 /**
  * Сервис для управления настраиваемыми правилами из Markdown файлов
@@ -53,6 +50,26 @@ class RulesService {
         }
 
         val rulesContent = loadRules(project)
+        return if (rulesContent.isNotBlank()) {
+            buildString {
+                append(basePrompt)
+                append("\n\n")
+                append(rulesContent)
+            }
+        } else {
+            basePrompt
+        }
+    }
+
+    /**
+     * Создает системный промпт с добавленными активными правилами
+     *
+     * @param basePrompt Базовый системный промпт
+     * @param project Текущий проект (может быть null)
+     * @return Системный промпт с активными правилами
+     */
+    fun composeSystemPromptWithActiveRules(basePrompt: String, project: Project?): String {
+        val rulesContent = loadActiveRules(project)
         return if (rulesContent.isNotBlank()) {
             buildString {
                 append(basePrompt)
@@ -223,6 +240,13 @@ class RulesService {
     }
 
     /**
+     * Читает содержимое файла правила (публичный метод)
+     */
+    fun readRuleFile(file: File): String {
+        return readFileContent(file)
+    }
+
+    /**
      * Получает время последней модификации директории
      */
     private fun getDirectoryLastModified(directory: File): Long {
@@ -358,6 +382,63 @@ class RulesService {
             logger.warn("Failed to create rule template ${templateFile.absolutePath}: ${e.message}")
             null
         }
+    }
+
+    /**
+     * Загружает только активные правила из директорий
+     *
+     * @param project Текущий проект
+     * @return Сконкатенированное содержимое активных правил
+     */
+    private fun loadActiveRules(project: Project?): String {
+        val settings = service<PluginSettings>()
+        val activeGlobalRules = settings.getActiveGlobalRules()
+        val activeProjectRules = settings.getActiveProjectRules()
+
+        val globalDir = getGlobalRulesDirectory()
+        val projectDir = project?.let { getProjectRulesDirectory(it) }
+
+        val result = StringBuilder()
+
+        // Загружаем активные глобальные правила
+        if (globalDir.exists()) {
+            val globalFiles = globalDir.listFiles { file ->
+                file.isFile && file.extension.equals("md", ignoreCase = true)
+            }?.sortedBy { it.name } ?: emptyList<File>()
+
+            globalFiles.forEach { file ->
+                val fileName = file.nameWithoutExtension
+                if (activeGlobalRules[fileName] != false) { // Если правило активно или не указано (по умолчанию активно)
+                    val content = readRuleFile(file)
+                    if (content.isNotBlank()) {
+                        if (result.isNotEmpty()) result.append("\n\n")
+                        result.append("<!-- rules: глобальные -->\n")
+                        result.append(content)
+                    }
+                }
+            }
+        }
+
+        // Загружаем активные проектные правила
+        if (projectDir?.exists() == true) {
+            val projectFiles = projectDir.listFiles { file ->
+                file.isFile && file.extension.equals("md", ignoreCase = true)
+            }?.sortedBy { it.name } ?: emptyList<File>()
+
+            projectFiles.forEach { file ->
+                val fileName = file.nameWithoutExtension
+                if (activeProjectRules[fileName] != false) { // Если правило активно или не указано (по умолчанию активно)
+                    val content = readRuleFile(file)
+                    if (content.isNotBlank()) {
+                        if (result.isNotEmpty()) result.append("\n\n")
+                        result.append("<!-- rules: проектные -->\n")
+                        result.append(content)
+                    }
+                }
+            }
+        }
+
+        return result.toString()
     }
 
     /**

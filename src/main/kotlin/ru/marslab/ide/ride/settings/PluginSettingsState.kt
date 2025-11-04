@@ -41,7 +41,10 @@ data class PluginSettingsState(
     var uncertaintyRagEnrichmentThreshold: Double = DEFAULT_UNCERTAINTY_RAG_ENRICHMENT_THRESHOLD,
     var uncertaintyMaxSimpleQueryLength: Int = DEFAULT_UNCERTAINTY_MAX_SIMPLE_QUERY_LENGTH,
     // --- Custom Rules ---
-    var enableCustomRules: Boolean = DEFAULT_ENABLE_CUSTOM_RULES
+    var enableCustomRules: Boolean = DEFAULT_ENABLE_CUSTOM_RULES,
+    // Хранение активных правил (имя файла -> активность)
+    var activeGlobalRules: Map<String, Boolean> = emptyMap(),
+    var activeProjectRules: Map<String, Boolean> = emptyMap()
 ) {
     companion object {
         const val DEFAULT_CHAT_FONT_SIZE = 9

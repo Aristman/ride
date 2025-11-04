@@ -61,7 +61,7 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
             state.selectedProvider = value
         }
 
-    
+
     /**
      * Folder ID для Yandex GPT
      */
@@ -339,6 +339,49 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
         set(value) {
             state.enableCustomRules = value
         }
+
+    /**
+     * Получить активные глобальные правила
+     */
+    fun getActiveGlobalRules(): Map<String, Boolean> {
+        return state.activeGlobalRules.toMap()
+    }
+
+    /**
+     * Установить активные глобальные правила
+     */
+    fun setActiveGlobalRules(rules: Map<String, Boolean>) {
+        state.activeGlobalRules = rules.toMap()
+    }
+
+    /**
+     * Получить активные проектные правила
+     */
+    fun getActiveProjectRules(): Map<String, Boolean> {
+        return state.activeProjectRules.toMap()
+    }
+
+    /**
+     * Установить активные проектные правила
+     */
+    fun setActiveProjectRules(rules: Map<String, Boolean>) {
+        state.activeProjectRules = rules.toMap()
+    }
+
+    /**
+     * Обновить активность правила
+     */
+    fun updateRuleActivity(fileName: String, isActive: Boolean, isGlobal: Boolean) {
+        if (isGlobal) {
+            val currentRules = state.activeGlobalRules.toMutableMap()
+            currentRules[fileName] = isActive
+            state.activeGlobalRules = currentRules
+        } else {
+            val currentRules = state.activeProjectRules.toMutableMap()
+            currentRules[fileName] = isActive
+            state.activeProjectRules = currentRules
+        }
+    }
 
     /**
      * Получает токен Hugging Face из безопасного хранилища
