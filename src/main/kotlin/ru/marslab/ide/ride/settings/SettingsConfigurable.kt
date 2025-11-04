@@ -14,6 +14,11 @@ import com.intellij.ui.ColorPanel
 import com.intellij.ui.components.*
 import com.intellij.ui.dsl.builder.*
 import com.intellij.util.ui.JBUI
+import com.intellij.util.ui.JBUI.Borders.compound
+import com.intellij.util.ui.JBUI.Borders.customLine
+import com.intellij.util.ui.JBUI.Borders.empty
+import com.intellij.util.ui.JBUI.CurrentTheme.Label.disabledForeground
+import com.intellij.util.ui.JBUI.CurrentTheme.ToolWindow.borderColor
 import ru.marslab.ide.ride.agent.tools.EmbeddingIndexerToolAgent
 import ru.marslab.ide.ride.model.embedding.IndexingResult
 import ru.marslab.ide.ride.model.orchestrator.AgentType
@@ -1068,27 +1073,26 @@ class SettingsConfigurable : Configurable {
         group("Custom Rules") {
             row {
                 cell(JBLabel("Глобальные правила")).bold()
-            }
-            row {
                 addGlobalRuleButton = JButton("+").apply {
                     toolTipText = "Добавить новое глобальное правило"
-                    preferredSize = Dimension(30, 30)
+                    preferredSize = Dimension(10, 30)
                     addActionListener {
                         showAddRuleDialog(true)
                     }
                 }
-                cell(addGlobalRuleButton)
+                cell(addGlobalRuleButton).align(AlignX.RIGHT)
             }
             row {
                 globalRulesList = JPanel().apply {
                     layout = BoxLayout(this, BoxLayout.Y_AXIS)
-                    border = JBUI.Borders.compound(
-                        JBUI.Borders.customLine(JBUI.CurrentTheme.ToolWindow.borderColor(), 1),
-                        JBUI.Borders.empty(5)
+                    preferredSize = Dimension(300, 200)
+                    border = compound(
+                        customLine(borderColor(), 1),
+                        empty(5)
                     )
                 }
                 globalRulesScroll = JScrollPane(globalRulesList).apply {
-                    preferredSize = Dimension(400, 200)
+                    preferredSize = Dimension(300, 200)
                     verticalScrollBarPolicy = JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED
                     horizontalScrollBarPolicy = JScrollPane.HORIZONTAL_SCROLLBAR_NEVER
                 }
@@ -1104,8 +1108,6 @@ class SettingsConfigurable : Configurable {
 
             row {
                 cell(JBLabel("Проектные правила")).bold()
-            }
-            row {
                 addProjectRuleButton = JButton("+").apply {
                     toolTipText = "Добавить новое проектное правило"
                     preferredSize = Dimension(30, 30)
@@ -1113,18 +1115,18 @@ class SettingsConfigurable : Configurable {
                         showAddRuleDialog(false)
                     }
                 }
-                cell(addProjectRuleButton)
+                cell(addProjectRuleButton).align(AlignX.RIGHT)
             }
             row {
                 projectRulesList = JPanel().apply {
                     layout = BoxLayout(this, BoxLayout.Y_AXIS)
-                    border = JBUI.Borders.compound(
-                        JBUI.Borders.customLine(JBUI.CurrentTheme.ToolWindow.borderColor(), 1),
-                        JBUI.Borders.empty(5)
+                    border = compound(
+                        customLine(borderColor(), 1),
+                        empty(5)
                     )
                 }
                 projectRulesScroll = JScrollPane(projectRulesList).apply {
-                    preferredSize = Dimension(400, 200)
+                    preferredSize = Dimension(300, 200)
                     verticalScrollBarPolicy = JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED
                     horizontalScrollBarPolicy = JScrollPane.HORIZONTAL_SCROLLBAR_NEVER
                 }
@@ -1136,7 +1138,7 @@ class SettingsConfigurable : Configurable {
             row {
                 cell(JBLabel("Примечание: правила применяются только когда активны (✓)").apply {
                     font = font.deriveFont(font.size - 2f)
-                    foreground = JBUI.CurrentTheme.Label.disabledForeground()
+                    foreground = disabledForeground()
                 }).align(AlignX.LEFT)
             }
         }
@@ -1197,7 +1199,7 @@ class SettingsConfigurable : Configurable {
             // Обновляем UI
             updateRulesLists()
         } catch (e: Exception) {
-            Messages.showErrorDialog(
+            showErrorDialog(
                 "Ошибка при загрузке правил: ${e.message}",
                 "Ошибка"
             )

@@ -2,6 +2,7 @@ package ru.marslab.ide.ride.ui
 
 import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.components.JBLabel
+import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.util.ui.JBUI
 import java.awt.BorderLayout
 import java.awt.Cursor
@@ -52,12 +53,14 @@ class RuleListItem(
         border = JBUI.Borders.empty(2)
 
         // Панель с чекбоксом и кнопкой удаления
-        val controlsPanel = JPanel(FlowLayout(FlowLayout.LEFT, 2, 0))
-        controlsPanel.add(checkBox)
-        controlsPanel.add(deleteButton)
+        val controlsPanel = JPanel(FlowLayout(FlowLayout.LEFT, 2, 0)).apply {
+            add(checkBox)
+            add(label)
+            add(deleteButton)
+        }
 
         add(controlsPanel, BorderLayout.WEST)
-        add(label, BorderLayout.CENTER)
+//        add(label, BorderLayout.CENTER)
     }
 
     fun setActive(active: Boolean) {
