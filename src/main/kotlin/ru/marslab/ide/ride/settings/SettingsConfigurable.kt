@@ -14,6 +14,10 @@ import com.intellij.ui.components.JBPasswordField
 import com.intellij.ui.components.JBTabbedPane
 import com.intellij.ui.components.JBTextField
 import com.intellij.ui.dsl.builder.*
+import com.intellij.openapi.fileChooser.FileChooser
+import com.intellij.openapi.fileChooser.FileChooserDescriptor
+import com.intellij.openapi.vfs.VirtualFile
+import java.awt.Font
 import ru.marslab.ide.ride.agent.tools.EmbeddingIndexerToolAgent
 import ru.marslab.ide.ride.model.embedding.IndexingResult
 import ru.marslab.ide.ride.model.orchestrator.AgentType
@@ -22,6 +26,7 @@ import ru.marslab.ide.ride.model.tool.StepInput
 import ru.marslab.ide.ride.model.tool.ToolPlanStep
 import ru.marslab.ide.ride.service.ChatService
 import ru.marslab.ide.ride.service.embedding.IndexingStatusService
+import ru.marslab.ide.ride.service.rules.RulesService
 import java.awt.CardLayout
 import java.awt.Color
 import javax.swing.*
@@ -62,6 +67,15 @@ class SettingsConfigurable : Configurable {
     private lateinit var ragMmrTopKField: JBTextField
     private lateinit var ragSourceLinksEnabledCheck: JBCheckBox
 
+    // Custom Rules UI components
+    private lateinit var enableCustomRulesCheck: JBCheckBox
+    private lateinit var openGlobalRulesButton: JButton
+    private lateinit var openProjectRulesButton: JButton
+    private lateinit var createGlobalRuleTemplateButton: JButton
+    private lateinit var createProjectRuleTemplateButton: JButton
+    private lateinit var rulesPreviewArea: javax.swing.JTextArea
+    private lateinit var rulesScrollPane: javax.swing.JScrollPane
+
     private var panel: DialogPanel? = null
     private var initialApiKey: String = ""
     private var apiKeyLoaded = false
@@ -89,6 +103,7 @@ class SettingsConfigurable : Configurable {
         val chatAppearancePanel = createChatAppearancePanel()
         val agentSettingsPanel = createAgentSettingsPanel()
         val codeSettingsPanel = createCodeSettingsPanel()
+        val rulesPanel = createRulesPanel()
 
         panel = panel {
             row {
@@ -96,6 +111,7 @@ class SettingsConfigurable : Configurable {
                 tabs.addTab("Chat Appearance", chatAppearancePanel)
                 tabs.addTab("Agent Settings", agentSettingsPanel)
                 tabs.addTab("Code Settings", codeSettingsPanel)
+                tabs.addTab("Rules", rulesPanel)
                 tabs.addTab("LlmConfig", llmConfigPanel)
                 cell(tabs)
                     .align(Align.FILL)
@@ -172,7 +188,8 @@ class SettingsConfigurable : Configurable {
                 (ragRerankerStrategyComboBox.selectedItem as? String).orEmpty() != settings.ragRerankerStrategy ||
                 ragMmrLambdaField.text != settings.ragMmrLambda.toString() ||
                 ragMmrTopKField.text != settings.ragMmrTopK.toString() ||
-                ragSourceLinksEnabledCheck.isSelected != settings.ragSourceLinksEnabled
+                ragSourceLinksEnabledCheck.isSelected != settings.ragSourceLinksEnabled ||
+                enableCustomRulesCheck.isSelected != settings.enableCustomRules
     }
 
     override fun apply() {
@@ -298,6 +315,11 @@ class SettingsConfigurable : Configurable {
         // RAG Source Links
         settings.ragSourceLinksEnabled = ragSourceLinksEnabledCheck.isSelected
 
+        // Custom Rules
+        settings.enableCustomRules = enableCustomRulesCheck.isSelected
+        // Очищаем кеш правил при изменении настроек
+        service<RulesService>().clearCache()
+
         initialApiKey = apiKey
         apiKeyLoaded = true
         initialHFToken = hfToken
@@ -369,7 +391,13 @@ class SettingsConfigurable : Configurable {
         ragMmrLambdaField.text = settings.ragMmrLambda.toString()
         ragMmrTopKField.text = settings.ragMmrTopK.toString()
         ragSourceLinksEnabledCheck.isSelected = settings.ragSourceLinksEnabled
+        enableCustomRulesCheck.isSelected = settings.enableCustomRules
         updateMmrVisibility()
+
+        // Обновляем превью правил после загрузки настроек
+        SwingUtilities.invokeLater {
+            updateRulesPreview()
+        }
     }
 
     override fun disposeUIResources() {
@@ -1032,6 +1060,239 @@ class SettingsConfigurable : Configurable {
                     )
                 }
             }
+        }
+    }
+
+    /**
+     * Создает панель настроек правил
+     */
+    private fun createRulesPanel(): DialogPanel = panel {
+        group("Custom Rules") {
+            row {
+                enableCustomRulesCheck = JBCheckBox("Включить настраиваемые правила")
+                cell(enableCustomRulesCheck)
+                    .comment("Добавлять правила из .md файлов к системному промпту")
+                    .onChanged { updateRulesPreview() }
+            }
+
+            row("Directories:") {
+                cell(createDirectoryButtonsPanel())
+                    .align(AlignX.FILL)
+            }
+
+            row("Templates:") {
+                cell(createTemplateButtonsPanel())
+                    .align(AlignX.FILL)
+            }
+        }
+
+        group("Rules Preview") {
+            row {
+                rulesPreviewArea = javax.swing.JTextArea().apply {
+                    rows = 12
+                    columns = 50
+                    isEditable = false
+                    lineWrap = true
+                    wrapStyleWord = true
+                    font = java.awt.Font("Monospaced", java.awt.Font.PLAIN, 12)
+                }
+                rulesScrollPane = javax.swing.JScrollPane(rulesPreviewArea)
+                cell(rulesScrollPane)
+                    .align(Align.FILL)
+                    .resizableColumn()
+                    .comment("Предпросмотр активных правил (только для чтения)")
+            }
+        }
+
+        // Инициализируем превью при создании панели
+        SwingUtilities.invokeLater {
+            updateRulesPreview()
+        }
+    }
+
+    /**
+     * Создает панель с кнопками для работы с директориями правил
+     */
+    private fun createDirectoryButtonsPanel(): JPanel {
+        val panel = JPanel(java.awt.GridLayout(2, 2, 5, 5))
+
+        openGlobalRulesButton = JButton("Open Global Rules").apply {
+            toolTipText = "Открыть директорию ~/.ride/rules/"
+            addActionListener {
+                try {
+                    val rulesService = service<RulesService>()
+                    val globalDir = rulesService.getGlobalRulesDirectory()
+
+                    if (rulesService.ensureRulesDirectoryExists(true)) {
+                        // Открываем директорию в системном файловом менеджере
+                        java.awt.Desktop.getDesktop().open(globalDir)
+                    } else {
+                        showErrorDialog(
+                            "Не удалось создать директорию правил: ${globalDir.absolutePath}",
+                            "Ошибка"
+                        )
+                    }
+                } catch (e: Exception) {
+                    showErrorDialog(
+                        "Ошибка при открытии директории: ${e.message}",
+                        "Ошибка"
+                    )
+                }
+            }
+        }
+
+        openProjectRulesButton = JButton("Open Project Rules").apply {
+            toolTipText = "Открыть директорию <PROJECT_ROOT>/.ride/rules/"
+            addActionListener {
+                try {
+                    val project = ProjectManager.getInstance().openProjects.firstOrNull()
+                    if (project == null) {
+                        showErrorDialog(
+                            "Нет открытого проекта",
+                            "Ошибка"
+                        )
+                        return@addActionListener
+                    }
+
+                    val rulesService = service<RulesService>()
+                    val projectDir = rulesService.getProjectRulesDirectory(project)
+
+                    if (projectDir == null) {
+                        showErrorDialog(
+                            "Не удалось определить путь к проекту",
+                            "Ошибка"
+                        )
+                        return@addActionListener
+                    }
+
+                    if (rulesService.ensureRulesDirectoryExists(false, project)) {
+                        // Открываем директорию в системном файловом менеджере
+                        java.awt.Desktop.getDesktop().open(projectDir)
+                    } else {
+                        showErrorDialog(
+                            "Не удалось создать директорию правил: ${projectDir.absolutePath}",
+                            "Ошибка"
+                        )
+                    }
+                } catch (e: Exception) {
+                    showErrorDialog(
+                        "Ошибка при открытии директории: ${e.message}",
+                        "Ошибка"
+                    )
+                }
+            }
+        }
+
+        panel.add(openGlobalRulesButton)
+        panel.add(openProjectRulesButton)
+
+        // Добавляем пустые ячейки для выравнивания
+        panel.add(JLabel())
+        panel.add(JLabel())
+
+        return panel
+    }
+
+    /**
+     * Создает панель с кнопками для создания шаблонов правил
+     */
+    private fun createTemplateButtonsPanel(): JPanel {
+        val panel = JPanel(java.awt.GridLayout(2, 2, 5, 5))
+
+        createGlobalRuleTemplateButton = JButton("Create Global Template").apply {
+            toolTipText = "Создать шаблон глобального правила"
+            addActionListener {
+                try {
+                    val rulesService = service<RulesService>()
+                    val templateFile = rulesService.createRuleTemplate(true)
+
+                    if (templateFile != null) {
+                        Messages.showInfoMessage(
+                            "Шаблон глобального правила создан:\n${templateFile.absolutePath}",
+                            "Шаблон создан"
+                        )
+                        updateRulesPreview()
+                    } else {
+                        showErrorDialog(
+                            "Не удалось создать шаблон глобального правила",
+                            "Ошибка"
+                        )
+                    }
+                } catch (e: Exception) {
+                    showErrorDialog(
+                        "Ошибка при создании шаблона: ${e.message}",
+                        "Ошибка"
+                    )
+                }
+            }
+        }
+
+        createProjectRuleTemplateButton = JButton("Create Project Template").apply {
+            toolTipText = "Создать шаблон проектного правила"
+            addActionListener {
+                try {
+                    val project = ProjectManager.getInstance().openProjects.firstOrNull()
+                    if (project == null) {
+                        showErrorDialog(
+                            "Нет открытого проекта",
+                            "Ошибка"
+                        )
+                        return@addActionListener
+                    }
+
+                    val rulesService = service<RulesService>()
+                    val templateFile = rulesService.createRuleTemplate(false, project)
+
+                    if (templateFile != null) {
+                        Messages.showInfoMessage(
+                            "Шаблон проектного правила создан:\n${templateFile.absolutePath}",
+                            "Шаблон создан"
+                        )
+                        updateRulesPreview()
+                    } else {
+                        showErrorDialog(
+                            "Не удалось создать шаблон проектного правила",
+                            "Ошибка"
+                        )
+                    }
+                } catch (e: Exception) {
+                    showErrorDialog(
+                        "Ошибка при создании шаблона: ${e.message}",
+                        "Ошибка"
+                    )
+                }
+            }
+        }
+
+        panel.add(createGlobalRuleTemplateButton)
+        panel.add(createProjectRuleTemplateButton)
+
+        // Добавляем пустые ячейки для выравнивания
+        panel.add(JLabel())
+        panel.add(JLabel())
+
+        return panel
+    }
+
+    /**
+     * Обновляет превью правил
+     */
+    private fun updateRulesPreview() {
+        try {
+            val isEnabled = enableCustomRulesCheck.isSelected
+            val project = ProjectManager.getInstance().openProjects.firstOrNull()
+            val rulesService = service<RulesService>()
+
+            val preview = if (isEnabled) {
+                rulesService.getRulesPreview(project)
+            } else {
+                "Правила отключены"
+            }
+
+            rulesPreviewArea.text = preview
+            rulesPreviewArea.caretPosition = 0
+        } catch (e: Exception) {
+            rulesPreviewArea.text = "Ошибка загрузки правил: ${e.message}"
         }
     }
 }

@@ -2,6 +2,7 @@ package ru.marslab.ide.ride.agent.impl
 
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.project.Project
 import ru.marslab.ide.ride.agent.Agent
 import ru.marslab.ide.ride.agent.UncertaintyAnalyzer
 import ru.marslab.ide.ride.agent.formatter.PromptFormatter
@@ -17,6 +18,7 @@ import ru.marslab.ide.ride.model.agent.AgentSettings
 import ru.marslab.ide.ride.model.chat.*
 import ru.marslab.ide.ride.model.llm.LLMParameters
 import ru.marslab.ide.ride.model.schema.*
+import ru.marslab.ide.ride.service.rules.RulesService
 import ru.marslab.ide.ride.settings.PluginSettings
 import ru.marslab.ide.ride.ui.ResponseFormatter.formatJsonResponseData
 import ru.marslab.ide.ride.ui.ResponseFormatter.formatXmlResponseData
@@ -89,7 +91,7 @@ class ChatAgent(
             val settings = service<PluginSettings>()
 
             // Системный промпт (опционально расширяем инструкциями формата)
-            val systemPromptForRequest = buildSystemPrompt()
+            val systemPromptForRequest = buildSystemPrompt(context.project)
 
             // Полная история диалога для контекста
             val conversationHistory = buildConversationHistory(context)
@@ -267,16 +269,21 @@ class ChatAgent(
      * Формирует системный промпт. Если задана схема ответа,
      * добавляет инструкции по формату в системный промпт.
      */
-    private fun buildSystemPrompt(): String {
+    private fun buildSystemPrompt(project: Project?): String {
         val settings = service<PluginSettings>()
         val base = if (settings.enableUncertaintyAnalysis) {
             systemPrompt
         } else {
             SIMPLE_SYSTEM_PROMPT
         }
+
+        // Добавляем правила к системному промпту
+        val rulesService = service<RulesService>()
+        val promptWithRules = rulesService.composeSystemPromptWithRules(base, project)
+
         return if (responseSchema != null && settings.enableUncertaintyAnalysis) {
-            PromptFormatter.formatPrompt(base, responseSchema)
-        } else base
+            PromptFormatter.formatPrompt(promptWithRules, responseSchema)
+        } else promptWithRules
     }
 
     /**

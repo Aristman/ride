@@ -332,6 +332,15 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
         }
 
     /**
+     * Включить настраиваемые правила из Markdown файлов
+     */
+    var enableCustomRules: Boolean
+        get() = state.enableCustomRules
+        set(value) {
+            state.enableCustomRules = value
+        }
+
+    /**
      * Получает токен Hugging Face из безопасного хранилища
      */
     fun getHuggingFaceToken(): String {
