@@ -42,6 +42,13 @@ internal object ChatHtmlResources {
                 </head>
                 <body>
                     <div id="messages"></div>
+                    <!-- Overlay root for popovers/menus (e.g., @-picker) -->
+                    <div id="ride-overlay-root"></div>
+                    <!-- Chat input bar -->
+                    <div id="ride-input-bar" style="position: fixed; left: 0; right: 0; bottom: 0; padding: 8px; background: var(--ride-bg, #1e1f22); border-top: 1px solid var(--ride-border, #2b2d30);">
+                        <input id="ride-chat-input" type="text" placeholder="Type a message…" 
+                               style="width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--ride-border, #2b2d30); background: var(--ride-input-bg, #2b2d30); color: var(--ride-fg, #ddd); outline: none;" />
+                    </div>
                     <script>${js}</script>
                 </body>
             </html>
