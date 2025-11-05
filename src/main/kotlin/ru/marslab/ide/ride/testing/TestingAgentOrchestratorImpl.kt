@@ -4,6 +4,11 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.project.ProjectManager
+import com.intellij.openapi.vfs.LocalFileSystem
 
 /**
  * Реализация оркестратора: анализ → генерация → сохранение → запуск.
@@ -55,6 +60,18 @@ class TestingAgentOrchestratorImpl(
         val tSave0 = System.currentTimeMillis()
         val savedPaths = persister.persistForSource(filePath, tests)
         logger.debug("TestingOrchestrator: saved tests to ${savedPaths.joinToString()} in ${System.currentTimeMillis()-tSave0}ms")
+
+        // Откроем первый созданный тестовый файл в IDE
+        val project: Project? = ProjectManager.getInstance().openProjects.firstOrNull()
+        val firstTest = savedPaths.firstOrNull()
+        if (project != null && firstTest != null) {
+            ApplicationManager.getApplication().invokeLater {
+                val vFile = LocalFileSystem.getInstance().refreshAndFindFileByPath(firstTest.toString())
+                if (vFile != null) {
+                    FileEditorManager.getInstance(project).openFile(vFile, true)
+                }
+            }
+        }
 
         // Попробуем запустить только сгенерированный класс
         val scope = when (structure.buildSystem) {
