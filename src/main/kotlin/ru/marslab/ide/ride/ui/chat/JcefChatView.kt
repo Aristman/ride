@@ -16,6 +16,7 @@ import javax.swing.JPanel
 class JcefChatView : JPanel(BorderLayout()) {
     private val browser = JBCefBrowser()
     private val openFileJsQuery: JBCefJSQuery = JBCefJSQuery.create(browser)
+    private val atSuggestJsQuery: JBCefJSQuery = JBCefJSQuery.create(browser)
 
     // Флаг готовности страницы и очередь скриптов для выполнения после загрузки
     private var isReady: Boolean = false
@@ -42,6 +43,8 @@ class JcefChatView : JPanel(BorderLayout()) {
                     flushPending()
                     // Регистрируем JavaScript-функцию для открытия файлов из чата
                     registerOpenFileHandler()
+                    // Регистрируем обработчики для @-пикера
+                    registerAtPickerHandlers()
                 }
             }
 
@@ -60,6 +63,22 @@ class JcefChatView : JPanel(BorderLayout()) {
                 // no-op: ошибки логируются в сервисе
             }
             null
+        }
+
+        // Обработчик: запрос подсказок для @-пикера. В аргументе приходит строка запроса после '@'
+        atSuggestJsQuery.addHandler { query ->
+            try {
+                val project = com.intellij.openapi.project.ProjectManager.getInstance().openProjects.firstOrNull()
+                if (project == null) return@addHandler "[]"
+                val svc = AtPickerSuggestionService()
+                val items = svc.suggestFiles(project, query ?: "")
+                val json = items.joinToString(prefix = "[", postfix = "]") { s ->
+                    "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+                }
+                json
+            } catch (_: Exception) {
+                "[]"
+            }
         }
     }
 
@@ -239,6 +258,114 @@ class JcefChatView : JPanel(BorderLayout()) {
 
               // Запускаем постпроцессор сразу после инициализации
               window.__ride_enhanceAnchors();
+            })();
+        """.trimIndent()
+        exec(js)
+    }
+
+    /**
+     * Регистрирует JS для @-пикера: отслеживание ввода, запрос подсказок, отрисовка поповера и вставка токена.
+     */
+    private fun registerAtPickerHandlers() {
+        val js = """
+            (function(){
+              const input = document.getElementById('ride-chat-input');
+              const overlayRoot = document.getElementById('ride-overlay-root');
+              if (!input || !overlayRoot) return;
+
+              let picker = null;
+              let items = [];
+              let sel = 0;
+              let active = false;
+
+              function ensurePicker(){
+                if (picker) return picker;
+                picker = document.createElement('div');
+                picker.id = 'ride-at-picker';
+                picker.style.position = 'fixed';
+                picker.style.left = '8px';
+                picker.style.right = '8px';
+                picker.style.bottom = '56px';
+                picker.style.maxHeight = '40vh';
+                picker.style.overflow = 'auto';
+                picker.style.background = 'var(--ride-input-bg, #2b2d30)';
+                picker.style.border = '1px solid var(--ride-border, #3a3d40)';
+                picker.style.borderRadius = '8px';
+                picker.style.boxShadow = '0 6px 18px rgba(0,0,0,0.35)';
+                picker.style.fontSize = '12px';
+                picker.style.zIndex = 9999;
+                overlayRoot.appendChild(picker);
+                return picker;
+              }
+
+              function hide(){ if (picker){ picker.style.display='none'; active=false; } }
+              function show(){ ensurePicker().style.display='block'; active=true; }
+
+              function render(){
+                const el = ensurePicker();
+                el.innerHTML = '';
+                items.forEach((it, idx) => {
+                  const row = document.createElement('div');
+                  row.textContent = it;
+                  row.style.padding = '6px 10px';
+                  row.style.cursor = 'pointer';
+                  row.style.background = (idx===sel) ? 'rgba(80,120,220,0.35)' : 'transparent';
+                  row.onclick = () => { insert(it); };
+                  row.onmouseenter = () => { sel = idx; render(); };
+                  el.appendChild(row);
+                });
+              }
+
+              function insert(text){
+                // Вставляем строго @<workspace-relative-path>
+                const val = input.value;
+                const caret = input.selectionStart ?? val.length;
+                // Ищем последнюю позицию '@' перед кареткой
+                const atPos = val.lastIndexOf('@', caret-1);
+                if (atPos >= 0){
+                  const before = val.substring(0, atPos);
+                  const after = val.substring(caret);
+                  input.value = before + '@' + text + after;
+                  // Ставим курсор после вставленного токена
+                  const newPos = (before + '@' + text).length;
+                  input.setSelectionRange(newPos, newPos);
+                }
+                hide();
+                input.focus();
+              }
+
+              async function fetchSuggestions(q){
+                try {
+                  const res = await ${atSuggestJsQuery.inject("q")};
+                  items = JSON.parse(res || '[]');
+                  sel = 0;
+                  render();
+                } catch (e) { console.error('[RIDE] suggest error', e); }
+              }
+
+              function handleInput(){
+                const val = input.value;
+                const caret = input.selectionStart ?? val.length;
+                const atPos = val.lastIndexOf('@', caret-1);
+                if (atPos < 0){ hide(); return; }
+                const afterAt = val.substring(atPos+1, caret);
+                if (afterAt.length === 0){ show(); fetchSuggestions(''); return; }
+                show();
+                fetchSuggestions(afterAt);
+              }
+
+              input.addEventListener('input', (e)=>{
+                const v = input.value;
+                if (v.includes('@')) handleInput(); else hide();
+              });
+              input.addEventListener('keydown', (e)=>{
+                if (!active) return;
+                if (e.key === 'ArrowDown'){ sel = Math.min(sel+1, items.length-1); render(); e.preventDefault(); }
+                else if (e.key === 'ArrowUp'){ sel = Math.max(sel-1, 0); render(); e.preventDefault(); }
+                else if (e.key === 'Enter'){ if (items[sel]) { insert(items[sel]); e.preventDefault(); } }
+                else if (e.key === 'Escape'){ hide(); }
+              });
+
             })();
         """.trimIndent()
         exec(js)
