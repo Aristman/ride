@@ -24,7 +24,7 @@ class DartTestingAgent : LanguageTestingAgent {
         val provider = LLMProviderFactory.createLLMProvider()
         val settings = service<PluginSettings>()
         val params = LLMParameters(
-            temperature = (settings.temperature ?: 0.2f).coerceIn(0f, 1f),
+            temperature = settings.temperature,
             maxTokens = settings.maxTokens
         )
 
