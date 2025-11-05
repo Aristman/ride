@@ -1,6 +1,9 @@
 package ru.marslab.ide.ride.ui.chat
 
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.search.FilenameIndex
 import com.intellij.psi.search.GlobalSearchScope
@@ -11,15 +14,14 @@ import com.intellij.psi.search.GlobalSearchScope
  */
 class AtPickerSuggestionService {
     fun suggestFiles(project: Project, query: String, limit: Int = 50): List<String> {
+        if (project.isDisposed || DumbService.isDumb(project)) return emptyList()
         val scope = GlobalSearchScope.projectScope(project)
         val basePath = project.basePath ?: ""
 
         // Если запрос пустой — показываем топ по имени (алфавитно)
         val names: Array<String> = try {
-            FilenameIndex.getAllFilenames(project)
-        } catch (_: Throwable) {
-            emptyArray()
-        }
+            ReadAction.compute<Array<String>, Throwable> { FilenameIndex.getAllFilenames(project) }
+        } catch (_: Throwable) { emptyArray() }
 
         val filteredNames = if (query.isBlank()) names.asList() else names.filter {
             val q = query.trim()
@@ -30,16 +32,21 @@ class AtPickerSuggestionService {
         val results = LinkedHashSet<String>()
         for (name in filteredNames) {
             if (results.size >= limit) break
-            val files: MutableCollection<VirtualFile> = try {
-                FilenameIndex.getVirtualFilesByName(name, true, scope)
-            } catch (_: Throwable) { emptyList<VirtualFile>() as MutableCollection<VirtualFile> }
+            val files: Collection<VirtualFile> = try {
+                ReadAction.compute<Collection<VirtualFile>, Throwable> {
+                    FilenameIndex.getVirtualFilesByName(name, true, scope)
+                }
+            } catch (_: Throwable) { emptyList() }
             for (vf in files) {
                 val path = vf.path
                 val rel = if (basePath.isNotBlank() && path.startsWith(basePath)) {
                     path.removePrefix(basePath).trimStart('/')
                 } else path
-                // Фильтрация по сегментам пути для уточняющего запроса
-                if (query.isBlank() || rel.contains(query, ignoreCase = true)) {
+                // Фильтрация только по имени файла (basename), поддержка camelCase
+                val fname = vf.name
+                val q = query.trim()
+                val match = q.isBlank() || fname.contains(q, ignoreCase = true) || camelCaseMatch(fname, q)
+                if (match) {
                     results.add(rel)
                     if (results.size >= limit) break
                 }

@@ -272,9 +272,25 @@ class JcefChatView : JPanel(BorderLayout()) {
     private fun registerAtPickerHandlers() {
         val js = """
             (function(){
-              const input = document.getElementById('ride-chat-input');
-              const overlayRoot = document.getElementById('ride-overlay-root');
-              if (!input || !overlayRoot) return;
+              function getInput(){
+                // 1) Явный селектор
+                let el = document.getElementById('ride-chat-input');
+                if (el) return el;
+                // 2) Фокусированный элемент, если это input/textarea/contenteditable
+                const ae = document.activeElement;
+                if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return ae;
+                // 3) Первый подходящий элемент в DOM
+                el = document.querySelector('input[type="text"], textarea, [contenteditable="true"]');
+                return el || null;
+              }
+
+              let input = getInput();
+              let overlayRoot = document.getElementById('ride-overlay-root');
+              if (!overlayRoot) {
+                overlayRoot = document.createElement('div');
+                overlayRoot.id = 'ride-overlay-root';
+                document.body.appendChild(overlayRoot);
+              }
 
               let picker = null;
               let items = [];
@@ -321,14 +337,17 @@ class JcefChatView : JPanel(BorderLayout()) {
 
               function insert(text){
                 // Вставляем строго @<workspace-relative-path>
-                const val = input.value;
+                input = getInput();
+                if (!input) { hide(); return; }
+                const val = (input.value !== undefined) ? input.value : (input.textContent || '');
                 const caret = input.selectionStart ?? val.length;
                 // Ищем последнюю позицию '@' перед кареткой
                 const atPos = val.lastIndexOf('@', caret-1);
                 if (atPos >= 0){
                   const before = val.substring(0, atPos);
                   const after = val.substring(caret);
-                  input.value = before + '@' + text + after;
+                  const next = before + '@' + text + after;
+                  if (input.value !== undefined) input.value = next; else input.textContent = next;
                   // Ставим курсор после вставленного токена
                   const newPos = (before + '@' + text).length;
                   input.setSelectionRange(newPos, newPos);
@@ -347,7 +366,9 @@ class JcefChatView : JPanel(BorderLayout()) {
               }
 
               function handleInput(){
-                const val = input.value;
+                input = getInput();
+                if (!input) { hide(); return; }
+                const val = (input.value !== undefined) ? input.value : (input.textContent || '');
                 const caret = input.selectionStart ?? val.length;
                 const atPos = val.lastIndexOf('@', caret-1);
                 if (atPos < 0){ hide(); return; }
@@ -357,17 +378,38 @@ class JcefChatView : JPanel(BorderLayout()) {
                 fetchSuggestions(afterAt);
               }
 
-              input.addEventListener('input', (e)=>{
-                const v = input.value;
-                if (v.includes('@')) handleInput(); else hide();
+              function attachListeners(target){
+                if (!target) return;
+                target.addEventListener('input', ()=>{
+                  const v = (target.value !== undefined) ? target.value : (target.textContent || '');
+                  if (v.includes('@')) handleInput(); else hide();
+                });
+                target.addEventListener('keydown', (e)=>{
+                  if (!active) return;
+                  if (e.key === 'ArrowDown'){ sel = Math.min(sel+1, items.length-1); render(); e.preventDefault(); }
+                  else if (e.key === 'ArrowUp'){ sel = Math.max(sel-1, 0); render(); e.preventDefault(); }
+                  else if (e.key === 'Enter'){ if (items[sel]) { insert(items[sel]); e.preventDefault(); } }
+                  else if (e.key === 'Escape'){ hide(); }
+                });
+              }
+
+              // Начальная привязка и авто-перепривязка при смене фокуса
+              attachListeners(input);
+              document.addEventListener('focusin', ()=>{
+                const el = getInput();
+                if (el && el !== input){ input = el; attachListeners(input); }
               });
-              input.addEventListener('keydown', (e)=>{
-                if (!active) return;
-                if (e.key === 'ArrowDown'){ sel = Math.min(sel+1, items.length-1); render(); e.preventDefault(); }
-                else if (e.key === 'ArrowUp'){ sel = Math.max(sel-1, 0); render(); e.preventDefault(); }
-                else if (e.key === 'Enter'){ if (items[sel]) { insert(items[sel]); e.preventDefault(); } }
-                else if (e.key === 'Escape'){ hide(); }
+              document.addEventListener('keydown', (e)=>{
+                // Если ввели '@' — запускаем обработку даже без события input
+                if (e.key === '@') { setTimeout(handleInput, 0); }
               });
+
+              // Отслеживаем появление инпута в DOM (если рендерится позже)
+              const mo = new MutationObserver(()=>{
+                const el = getInput();
+                if (el && el !== input){ input = el; attachListeners(input); }
+              });
+              mo.observe(document.documentElement, { childList: true, subtree: true });
 
             })();
         """.trimIndent()
