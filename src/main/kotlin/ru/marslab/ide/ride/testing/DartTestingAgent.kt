@@ -55,16 +55,23 @@ class DartTestingAgent : LanguageTestingAgent {
     }
 
     private fun buildSystemPrompt(): String = """
-        You are an expert Dart and Flutter test writer.
-        Task: Generate a fully working Dart unit test file for the provided source code.
+        You are an expert Dart/Flutter test writer.
+        Task: Generate a fully working Dart test file for the provided source code.
 
-        Strict requirements:
-        - Use package:test/test.dart.
-        - Produce a single, runnable test file content only. No markdown, no code fences.
-        - Include main()/group()/test() with meaningful assertions based on the source.
+        Context metadata will be provided at the beginning of the user message as comments:
+        - // PACKAGE_NAME: <name>
+        - // LIB_RELATIVE_PATH: <path under lib/>
+        - // PACKAGE_IMPORT: package:<name>/<lib_relative_path>
+
+        STRICT REQUIREMENTS:
+        - Output ONLY the Dart test file content (no markdown, no backticks).
+        - Put all required imports at the top, including:
+          * import 'package:test/test.dart';
+          * import using the exact value from PACKAGE_IMPORT to import the code under test.
+        - No placeholder paths, no comments like "replace with..."; paths must be exact as provided.
+        - Use main()/group()/test() with meaningful assertions based on the source code.
         - Avoid external dependencies beyond 'test'.
-        - Do not include placeholder TODOs; create minimal but valid tests.
-        - If the source defines classes or functions, import it as package import (the exact path will be injected by the tool on save).
+        - The file must be runnable by `dart test` as-is.
     """.trimIndent()
 
     private fun buildUserMessage(sourceContent: String): String = buildString {
@@ -100,5 +107,34 @@ class DartTestingAgent : LanguageTestingAgent {
 
     private fun snakeToCamel(name: String): String = name.split('_').joinToString("") { part ->
         if (part.isEmpty()) "" else part.replaceFirstChar { it.uppercaseChar() }
+    }
+
+    companion object {
+        /**
+         * Обогащает исходник метаданными для LLM: PACKAGE_NAME / LIB_RELATIVE_PATH / PACKAGE_IMPORT
+         */
+        fun enrichWithDartMetadata(root: java.nio.file.Path, filePath: String, source: String): String {
+            val libRelative = filePath.removePrefix("./").let { if (it.startsWith("lib/")) it.removePrefix("lib/") else it }
+            val pkgName = readDartPackageName(root)
+            val importPath = if (pkgName != null) "package:${pkgName}/${libRelative}" else libRelative
+            return buildString {
+                appendLine("// PACKAGE_NAME: ${pkgName ?: "<unknown>"}")
+                appendLine("// LIB_RELATIVE_PATH: ${libRelative}")
+                appendLine("// PACKAGE_IMPORT: ${importPath}")
+                appendLine("// Use PACKAGE_IMPORT for importing the source under test in the generated test file.")
+                appendLine()
+                append(source)
+            }
+        }
+
+        private fun readDartPackageName(root: java.nio.file.Path): String? {
+            val pubspec = root.resolve("pubspec.yaml")
+            return try {
+                if (java.nio.file.Files.exists(pubspec)) {
+                    val text = java.nio.file.Files.readString(pubspec)
+                    Regex("^name:\\s*([A-Za-z0-9_\\-]+)", RegexOption.MULTILINE).find(text)?.groupValues?.getOrNull(1)
+                } else null
+            } catch (_: Throwable) { null }
+        }
     }
 }

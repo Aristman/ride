@@ -23,6 +23,7 @@ class TestingAgentOrchestratorImpl(
         val structure = structureProvider.getProjectStructure().also {
             logger.debug("TestingOrchestrator: structure buildSystem=${it.buildSystem} root='${it.root}' testDirs=${it.testSourceDirs}")
         }
+
         val abs = structure.root.resolve(filePath).normalize()
         require(Files.exists(abs)) { "Файл не найден: $filePath" }
 
@@ -43,7 +44,12 @@ class TestingAgentOrchestratorImpl(
 
         // TODO: на этапе анализа учитывать приватные элементы, но генерировать тесты на публичный API
         val tGen0 = System.currentTimeMillis()
-        val tests = langAgent.generate(source)
+        val tests = if (structure.buildSystem == BuildSystem.DART && langAgent is DartTestingAgent) {
+            val enriched = DartTestingAgent.enrichWithDartMetadata(structure.root, filePath, source)
+            langAgent.generate(enriched)
+        } else {
+            langAgent.generate(source)
+        }
         logger.debug("TestingOrchestrator: generated tests count=${tests.size} in ${System.currentTimeMillis()-tGen0}ms")
 
         val tSave0 = System.currentTimeMillis()

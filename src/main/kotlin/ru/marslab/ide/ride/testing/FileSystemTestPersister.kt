@@ -62,23 +62,9 @@ class FileSystemTestPersister(
             val targetFile = testRoot.resolve(testRel)
             if (!Files.exists(targetFile.parent)) Files.createDirectories(targetFile.parent)
 
-            val pkgName = readDartPackageName(root)
             val saved = mutableListOf<Path>()
             for (t in tests) {
-                // Удаляем любые import-строки из ответа LLM и оставляем только тело тестов
-                val body = t.content
-                    .lines()
-                    .filterNot { it.trimStart().startsWith("import ") }
-                    .joinToString("\n")
-
-                val content = buildString {
-                    appendLine("import 'package:test/test.dart';")
-                    if (pkgName != null) {
-                        appendLine("import 'package:${pkgName}/${sub}';")
-                    }
-                    appendLine()
-                    append(body.trimStart())
-                }
+                val content = t.content
                 Files.writeString(
                     targetFile,
                     content,
@@ -93,15 +79,5 @@ class FileSystemTestPersister(
         } else {
             persist(tests)
         }
-    }
-
-    private fun readDartPackageName(root: Path): String? {
-        val pubspec = root.resolve("pubspec.yaml")
-        return try {
-            if (Files.exists(pubspec)) {
-                val text = Files.readString(pubspec)
-                Regex("^name:\\s*([A-Za-z0-9_\\-]+)", RegexOption.MULTILINE).find(text)?.groupValues?.getOrNull(1)
-            } else null
-        } catch (_: Throwable) { null }
     }
 }
