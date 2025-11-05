@@ -21,23 +21,11 @@ repositories {
 // Read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin.html
 dependencies {
     intellijPlatform {
-        // Вариант 1: локальная Android Studio/IDE (рекомендуется, если URL недоступен)
-        //   ./gradlew -PideLocalPath=/path/to/android-studio runAndroidStudio
-        // По умолчанию используем путь, который вы указали: /home/aristman/.../android-studio/bin/studio.sh
-        val propLocal = (project.findProperty("ideLocalPath") as String?)
-        val defaultStudioSh = "/home/aristman/.local/share/JetBrains/Toolbox/apps/android-studio/bin/studio.sh"
-        val defaultLocalFromSh = File(defaultStudioSh).parentFile?.parentFile
-        val ideLocalPath = propLocal ?: defaultLocalFromSh?.absolutePath
-
-        if (!ideLocalPath.isNullOrBlank() && File(ideLocalPath).exists()) {
-            local(ideLocalPath)
-        } else {
-            // Вариант 2: загрузка по продукту/версии
-            // Примеры: -PideProduct=AI -PideVersion=AI-252.25557.131.2521.14344949
-            val ideProduct = (project.findProperty("ideProduct") as String?) ?: "IC"
-            val ideVersion = (project.findProperty("ideVersion") as String?) ?: "2024.2.5"
-            create(ideProduct, ideVersion)
-        }
+        // Позволяем задавать продукт и версию через -PideProduct и -PideVersion
+        // Примеры: -PideProduct=AI -PideVersion=AI-252.25557.131.2521.14344949
+        val ideProduct = (project.findProperty("ideProduct") as String?) ?: "IC"
+        val ideVersion = (project.findProperty("ideVersion") as String?) ?: "2024.2.5"
+        create(ideProduct, ideVersion)
         testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Platform)
 
         // Добавляем JetBrains Runtime с JCEF поддержкой
@@ -173,14 +161,45 @@ tasks {
         }
     }
 
-    // Запуск плагина в песочнице Android Studio (алиас на runIde)
-    // Использование: ./gradlew runAndroidStudio (-PideLocalPath=...)
-    register("runAndroidStudio") {
-        description = "Run plugin in Android Studio sandbox (alias to runIde)"
+    // Запуск плагина в песочнице Android Studio
+    // Использование:
+    //   ./gradlew runAndroidStudio -PandroidStudioPath=/path/to/android-studio
+    // или установить переменную окружения ANDROID_STUDIO_HOME
+    register<org.jetbrains.intellij.platform.gradle.tasks.RunIdeTask>("runAndroidStudio") {
+        description = "Run plugin in Android Studio sandbox"
         group = "intellij"
-        dependsOn("runIde")
-        // Конфигурация выполняется в runIde; эта задача - только ярлык для удобного запуска из IDE
-        // Избегаем несовместимости с configuration cache и новых свойств RunIdeTask
+
+        // Путь к установленной Android Studio (информативно — выбор IDE настраивается через -PideProduct/-PideVersion)
+        val fromProp = providers.gradleProperty("androidStudioPath").orNull
+        val fromEnv = System.getenv("ANDROID_STUDIO_HOME")
+        val asPath = fromProp ?: fromEnv
+        if (!asPath.isNullOrBlank()) {
+            logger.lifecycle("[runAndroidStudio] ANDROID_STUDIO_HOME: $asPath (используйте -PideProduct=AI -PideVersion=<build> для запуска этой версии)")
+        }
+
+        // JVM аргументы аналогично runIde
+        jvmArgs(
+            "-Didea.ignore.disabled.plugins=true",
+            "-Didea.plugins.disabled.plugins=com.intellij.gradle,org.jetbrains.plugins.gradle",
+            "-Dgradle-jvm-compatibility.disabled=true",
+            "-Dcom.intellij.gradle.jvm.support.skip=true",
+            "-Dide.browser.jcef.sandbox.enable=false",
+            "-Dide.browser.jcef.gpu.disable=true",
+            "-Dfile.encoding=UTF-8",
+            "-Dconsole.encoding=UTF-8"
+        )
+
+        // Отключаем Gradle plugin в песочнице (совместимость)
+        doFirst {
+            val configDir = File(buildDir, "idea-sandbox/config").apply { mkdirs() }
+            val optionsDir = File(configDir, "options").apply { mkdirs() }
+            val entries = listOf(
+                "com.intellij.gradle",
+                "org.jetbrains.plugins.gradle"
+            )
+            File(configDir, "disabled_plugins.txt").writeText(entries.joinToString("\n", postfix = "\n"))
+            File(optionsDir, "disabled_plugins.txt").writeText(entries.joinToString("\n", postfix = "\n"))
+        }
     }
 }
 
