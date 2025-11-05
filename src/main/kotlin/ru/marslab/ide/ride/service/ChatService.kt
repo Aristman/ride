@@ -37,6 +37,8 @@ import ru.marslab.ide.ride.util.TokenEstimator
 import ru.marslab.ide.ride.agent.a2a.AgentMessage
 import ru.marslab.ide.ride.agent.a2a.MessagePayload
 import ru.marslab.ide.ride.agent.a2a.MessageBusProvider
+import ru.marslab.ide.ride.testing.StubTestingAgentOrchestrator
+import ru.marslab.ide.ride.testing.TestRunResult
 import java.time.Instant
 
 /**
@@ -662,6 +664,62 @@ class ChatService {
                     withContext(Dispatchers.EDT) {
                         onError("Плагин не настроен. Перейдите в Settings → Tools → Ride")
                     }
+                    return@launch
+                }
+
+                // Обработка команды запуска тестов: "/test @path/to/File.kt"
+                val trimmed = userMessage.trim()
+                if (trimmed.startsWith("/test")) {
+                    // Ищем первый токен, начинающийся с '@'
+                    val atToken = trimmed.split(" ", "\n", "\t")
+                        .firstOrNull { it.startsWith("@") && it.length > 1 }
+
+                    if (atToken == null) {
+                        withContext(Dispatchers.EDT) {
+                            onError("Не указан файл. Используйте: /test @relative/path/ToFile.kt")
+                        }
+                        return@launch
+                    }
+
+                    val relativePath = atToken.removePrefix("@")
+
+                    // Временный оркестратор (заглушка)
+                    val orchestrator = StubTestingAgentOrchestrator()
+                    val result: TestRunResult = runCatching { orchestrator.generateAndRun(relativePath) }
+                        .getOrElse { ex ->
+                            withContext(Dispatchers.EDT) {
+                                onError("Ошибка запуска тестов: ${ex.message}")
+                            }
+                            return@launch
+                        }
+
+                    withContext(Dispatchers.EDT) {
+                        val content = buildString {
+                            appendLine("### 🧪 Результаты тестов (stub)")
+                            appendLine()
+                            appendLine("Файл: `" + relativePath + "`")
+                            appendLine()
+                            appendLine("- Успех: ${result.success}")
+                            appendLine("- Passed: ${result.passed}")
+                            appendLine("- Failed: ${result.failed}")
+                            appendLine("- Skipped: ${result.skipped}")
+                            appendLine("- Duration: ${result.durationMs} ms")
+                            appendLine()
+                            appendLine("```")
+                            appendLine(result.reportText)
+                            appendLine("```")
+                        }
+                        val assistantMsg = Message(
+                            content = content,
+                            role = MessageRole.ASSISTANT,
+                            metadata = mapOf("command" to "/test", "file" to relativePath)
+                        )
+                        getCurrentHistory().addMessage(assistantMsg)
+                        onResponse(assistantMsg)
+                        scope.launch { saveCurrentSession() }
+                    }
+
+                    // Не продолжаем обычную обработку LLM для этой команды
                     return@launch
                 }
 
