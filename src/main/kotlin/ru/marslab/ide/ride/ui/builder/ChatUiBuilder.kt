@@ -203,6 +203,15 @@ class ChatUiBuilder(
                 return
             }
         }
+        // Одноразовое подавление отправки после вставки из @-пикера
+        if (e.keyCode == KeyEvent.VK_ENTER || e.keyCode == KeyEvent.VK_SPACE) {
+            val suppress = (inputArea.getClientProperty("ride.atpicker.suppressSendOnce") as? Boolean) == true
+            if (suppress) {
+                inputArea.putClientProperty("ride.atpicker.suppressSendOnce", false)
+                e.consume()
+                return
+            }
+        }
         if (e.keyCode == KeyEvent.VK_ENTER) {
             if (e.isShiftDown) {
                 // Вставляем перевод строки вместо отправки

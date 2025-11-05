@@ -59,8 +59,19 @@ class AtPickerSwing(
                 when (e.keyCode) {
                     KeyEvent.VK_DOWN -> { logger.debug("AtPickerSwing: DOWN"); moveSelection(1); e.consume() }
                     KeyEvent.VK_UP -> { logger.debug("AtPickerSwing: UP"); moveSelection(-1); e.consume() }
-                    KeyEvent.VK_ENTER -> { logger.debug("AtPickerSwing: ENTER"); insertSelected(sync = true); e.consume() }
-                    KeyEvent.VK_SPACE -> { logger.debug("AtPickerSwing: SPACE"); insertSelected(sync = true); e.consume() }
+                    KeyEvent.VK_ENTER -> {
+                        logger.debug("AtPickerSwing: ENTER")
+                        // Помечаем подавление одноразовой отправки, т.к. попап будет скрыт до обработки ChatUiBuilder
+                        input.putClientProperty("ride.atpicker.suppressSendOnce", true)
+                        insertSelected(sync = true)
+                        e.consume()
+                    }
+                    KeyEvent.VK_SPACE -> {
+                        logger.debug("AtPickerSwing: SPACE")
+                        input.putClientProperty("ride.atpicker.suppressSendOnce", true)
+                        insertSelected(sync = true)
+                        e.consume()
+                    }
                     KeyEvent.VK_ESCAPE -> { logger.debug("AtPickerSwing: ESC"); hidePopup(); e.consume() }
                 }
             }
@@ -198,15 +209,17 @@ class AtPickerSwing(
         val caret = input.caretPosition
         val before = text.substring(0, atStartOffset)
         val after = text.substring(caret)
-        val next = before + "@" + value + after
+        val needsSpace = after.firstOrNull()?.isWhitespace() != true
+        val insertion = "@" + value + (if (needsSpace) " " else "")
+        val next = before + insertion + after
         val apply: () -> Unit = {
             input.text = next
-            input.caretPosition = (before + "@" + value).length
+            input.caretPosition = (before + insertion).length
             input.requestFocusInWindow()
             input.grabFocus()
         }
         if (sync) apply() else SwingUtilities.invokeLater { apply() }
-        logger.debug("AtPickerSwing: insertSelected value='${value}' at=${atStartOffset}")
+        logger.debug("AtPickerSwing: insertSelected value='${value}' at=${atStartOffset} space=${needsSpace}")
         hidePopup()
     }
 }

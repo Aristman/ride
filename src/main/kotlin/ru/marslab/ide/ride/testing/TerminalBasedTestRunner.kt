@@ -94,7 +94,8 @@ class TerminalBasedTestRunner(
      * Запуск Gradle в подкаталоге android (для Flutter/ Dart монореп).
      */
     private fun androidGradleCommand(scope: String): String {
-        val base = if (isWindows()) "cd android && gradlew.bat test" else "cd android && ./gradlew test"
+        // Запускаем gradle wrapper напрямую из подпапки android, без shell-комбинаций '&&'
+        val base = if (isWindows()) "android/gradlew.bat test" else "./android/gradlew test"
         return "$base --tests \"$scope\""
     }
 

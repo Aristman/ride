@@ -233,17 +233,36 @@ class ChatContentRenderer {
 
     private fun markFilePaths(text: String): String {
         if (text.isBlank()) return text
-        return filePathRegex.replace(text) { mr ->
-            var path = mr.value
-            // Снимаем завершающую пунктуацию, если она прилипла к пути в тексте
-            val trailing = path.takeLast(1)
-            if (trailing in listOf(".", ",", ";", ":", ")")) {
-                path = path.dropLast(1)
-                "<!--RIDEFILE:${path}-->${trailing}"
+        val sb = StringBuilder()
+        var last = 0
+        for (m in filePathRegex.findAll(text)) {
+            val start = m.range.first
+            val end = m.range.last + 1
+            var path = m.value
+            // Определяем начало текущей строки
+            val lineStart = text.lastIndexOf('\n', start - 1).let { if (it == -1) 0 else it + 1 }
+            // Если строка начинается с '@' и сразу далее идёт путь — не маркируем (оставляем текст как есть)
+            val isLeadingAt = lineStart == start - 1 && text.getOrNull(lineStart) == '@'
+
+            sb.append(text, last, start)
+            if (isLeadingAt) {
+                // Просто вставляем исходный путь без токена
+                sb.append(path)
             } else {
-                "<!--RIDEFILE:${path}-->"
+                // Снимаем завершающую пунктуацию, если она прилипла к пути в тексте
+                val trailing = path.takeLast(1)
+                if (trailing in listOf(".", ",", ";", ":", ")")) {
+                    path = path.dropLast(1)
+                    sb.append("<!--RIDEFILE:${path}-->")
+                    sb.append(trailing)
+                } else {
+                    sb.append("<!--RIDEFILE:${path}-->")
+                }
             }
+            last = end
         }
+        if (last < text.length) sb.append(text.substring(last))
+        return sb.toString()
     }
 
     private fun replaceFileTokensWithLinks(html: String): String {
@@ -309,22 +328,41 @@ class ChatContentRenderer {
      */
     private fun linkifyPlainHtml(segment: String, filePattern: Regex): String {
         if (segment.isEmpty()) return segment
-        return filePattern.replace(segment) { mr ->
-            var path = mr.value
-            val trailing = path.takeLast(1)
-            var suffix = ""
-            if (trailing in listOf(".", ",", ";", ":", ")")) {
-                path = path.dropLast(1)
-                suffix = trailing
+        val sb = StringBuilder()
+        var last = 0
+        for (m in filePattern.findAll(segment)) {
+            val start = m.range.first
+            val end = m.range.last + 1
+            var path = m.value
+            // Проверяем, не начинается ли текущая строка с '@' перед путём
+            val lineStart = segment.lastIndexOf('\n', start - 1).let { if (it == -1) 0 else it + 1 }
+            val isLeadingAt = lineStart == start - 1 && segment.getOrNull(lineStart) == '@'
+
+            sb.append(segment, last, start)
+            if (isLeadingAt) {
+                // Оставляем как есть — без линковки
+                sb.append(path)
+            } else {
+                val trailing = path.takeLast(1)
+                var suffix = ""
+                if (trailing in listOf(".", ",", ";", ":", ")")) {
+                    path = path.dropLast(1)
+                    suffix = trailing
+                }
+                val cmd = "open?path=$path&startLine=1&endLine=1"
+                sb.append(
+                    """
+                    <a href="#" class="${ChatPanelConfig.CSS.SOURCE_LINK_ACTION}" 
+                       data-open-command="${cmd}" 
+                       data-tooltip="${path}" 
+                       onclick="window.openSourceFile('${cmd}'); return false;">${path}</a>${suffix}
+                    """.trimIndent()
+                )
             }
-            val cmd = "open?path=$path&startLine=1&endLine=1"
-            """
-            <a href="#" class="${ChatPanelConfig.CSS.SOURCE_LINK_ACTION}" 
-               data-open-command="${cmd}" 
-               data-tooltip="${path}" 
-               onclick="window.openSourceFile('${cmd}'); return false;">${path}</a>${suffix}
-            """.trimIndent()
+            last = end
         }
+        if (last < segment.length) sb.append(segment.substring(last))
+        return sb.toString()
     }
 
     /**
