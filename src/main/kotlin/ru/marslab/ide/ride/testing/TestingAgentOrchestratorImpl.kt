@@ -47,11 +47,18 @@ class TestingAgentOrchestratorImpl(
         logger.debug("TestingOrchestrator: generated tests count=${tests.size} in ${System.currentTimeMillis()-tGen0}ms")
 
         val tSave0 = System.currentTimeMillis()
-        val savedPaths = persister.persist(tests)
+        val savedPaths = persister.persistForSource(filePath, tests)
         logger.debug("TestingOrchestrator: saved tests to ${savedPaths.joinToString()} in ${System.currentTimeMillis()-tSave0}ms")
 
         // Попробуем запустить только сгенерированный класс
-        val scope = tests.firstOrNull()?.className
+        val scope = when (structure.buildSystem) {
+            BuildSystem.DART -> {
+                // для Dart передаем путь к тест-файлу, чтобы запустить конкретный тест
+                savedPaths.firstOrNull()?.let { structure.root.relativize(it).toString() }
+                    ?: tests.firstOrNull()?.fileName
+            }
+            else -> tests.firstOrNull()?.className
+        }
         val tRun0 = System.currentTimeMillis()
         val result = testRunner.run(scope)
         logger.debug("TestingOrchestrator: test run done in ${System.currentTimeMillis()-tRun0}ms, success=${result.success}")

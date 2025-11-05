@@ -27,9 +27,14 @@ class TerminalBasedTestRunner(
             BuildSystem.GRADLE -> gradleCommand(scope)
             BuildSystem.MAVEN -> mavenCommand(scope)
             BuildSystem.DART -> {
-                // Если мы генерировали JVM-тесты (scope задан и выглядит как Java/Kotlin класс),
-                // пробуем запустить Gradle в android-модуле (типичный случай Flutter-проектов)
-                if (!scope.isNullOrBlank() && scope.matches(Regex("[A-Za-z0-9_.]+"))) {
+                // Для Flutter-монореп fallback на android Gradle только если wrapper существует.
+                // Иначе всегда запускаем dart test.
+                val androidWrapperExists = if (isWindows())
+                    structure.root.resolve("android/gradlew.bat").toFile().exists()
+                else
+                    structure.root.resolve("android/gradlew").toFile().exists()
+
+                if (androidWrapperExists && !scope.isNullOrBlank() && scope.matches(Regex("[A-Za-z0-9_.]+"))) {
                     androidGradleCommand(scope)
                 } else {
                     dartCommand(scope)
@@ -86,7 +91,10 @@ class TerminalBasedTestRunner(
 
     private fun dartCommand(scope: String?): String {
         val base = "dart test"
-        // Фильтрация по файлу/тесту может быть добавлена позже
+        // Если передан путь к конкретному тестовому файлу, запускаем его
+        if (!scope.isNullOrBlank() && scope.endsWith("_test.dart", ignoreCase = true)) {
+            return "$base $scope"
+        }
         return base
     }
 
