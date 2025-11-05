@@ -50,24 +50,26 @@ class DartTestingAgent : LanguageTestingAgent {
     }
 
     private fun buildSystemPrompt(): String = """
-        You are an expert Dart/Flutter test writer.
-        Task: Generate a fully working Dart test file for the provided source code.
+        Ты — эксперт по написанию тестов на Dart/Flutter.
+        Задача: сгенерировать полностью рабочий файл тестов Dart для переданного исходного кода.
 
-        Context metadata will be provided at the beginning of the user message as comments:
-        - // PACKAGE_NAME: <name>
-        - // LIB_RELATIVE_PATH: <path under lib/>
-        - // PACKAGE_IMPORT: package:<name>/<lib_relative_path>
+        В начале пользовательского сообщения будут даны метаданные в виде комментариев:
+        - // PACKAGE_NAME: <имя пакета>
+        - // LIB_RELATIVE_PATH: <путь внутри lib/>
+        - // PACKAGE_IMPORT: package:<имя_пакета>/<путь_внутри_lib>
+        - // PUBSPEC_BEGIN ... PUBSPEC_END — содержимое pubspec.yaml (если доступно)
 
-        STRICT REQUIREMENTS:
-        - Output ONLY the Dart test file content (no markdown, no backticks).
-        - Put all REQUIRED imports at the top.
-        - Import the code under test using the exact value from PACKAGE_IMPORT.
-        - Consider the provided pubspec.yaml content (if any) to select the correct testing framework import:
-          * If flutter_test is present (dev_dependencies), prefer `package:flutter_test/flutter_test.dart`.
-          * Otherwise use the standard `package:test/test.dart`.
-        - No placeholder paths, no comments like "replace with..."; paths must be exact as provided.
-        - Use main()/group()/test() with meaningful assertions based on the source code.
-        - The file must be runnable by `dart test` as-is.
+        СТРОГИЕ ТРЕБОВАНИЯ:
+        - Выводи ТОЛЬКО содержимое файла теста Dart (без markdown и без тройных кавычек).
+        - В начале файла укажи все НЕОБХОДИМЫЕ импорты.
+        - Обязательно добавляй импорты из исходного файла если в тестах используются какие-либо классы.
+        - Код под тестом импортируй строго значением из PACKAGE_IMPORT.
+        - При выборе фреймворка тестирования ориентируйся на содержимое pubspec.yaml (если есть):
+          * при наличии flutter_test в dev_dependencies используй import 'package:flutter_test/flutter_test.dart';
+          * иначе используй стандартный import 'package:test/test.dart';
+        - Никаких плейсхолдеров и комментариев вида "replace with..." — только точные пути.
+        - Используй main()/group()/test() и осмысленные проверки на основе исходника.
+        - Сгенерированный файл должен запускаться командой dart test/fluter test без ручных правок.
     """.trimIndent()
 
     private fun buildUserMessage(sourceContent: String): String = buildString {
@@ -88,18 +90,6 @@ class DartTestingAgent : LanguageTestingAgent {
         // Гарантируем наличие main()
         return s
     }
-
-//    private fun defaultTestTemplate(baseName: String): String = """
-//        import 'package:test/test.dart';
-//
-//        void main() {
-//          group('$baseName', () {
-//            test('example', () {
-//              expect(1 + 1, 2);
-//            });
-//          });
-//        }
-//    """.trimIndent()
 
     private fun snakeToCamel(name: String): String = name.split('_').joinToString("") { part ->
         if (part.isEmpty()) "" else part.replaceFirstChar { it.uppercaseChar() }

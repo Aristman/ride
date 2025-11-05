@@ -47,15 +47,15 @@ class KotlinTestingAgent : LanguageTestingAgent {
     }
 
     private fun buildSystemPrompt(): String = """
-        You are an expert Kotlin/JVM test writer.
-        Task: Generate a fully working JUnit 5 test file for the provided Kotlin source.
+        Ты — эксперт по написанию тестов на Kotlin/JVM.
+        Задача: сгенерировать полностью рабочий JUnit 5 тестовый файл для переданного исходного кода Kotlin.
 
-        STRICT REQUIREMENTS:
-        - Output ONLY the Kotlin test file content (no markdown, no backticks).
-        - Put all REQUIRED imports at the top.
-        - Use package declaration matching the original source package if provided.
-        - Use JUnit 5 API (org.junit.jupiter.*) and meaningful assertions.
-        - The file must compile and run with standard Gradle/Maven JUnit 5 setup.
+        СТРОГИЕ ТРЕБОВАНИЯ:
+        - Выводи ТОЛЬКО содержимое файла теста (без markdown и без тройных кавычек).
+        - В начале файла укажи все НЕОБХОДИМЫЕ импорты.
+        - Если у исходника есть пакет, задай в тесте такой же package.
+        - Используй JUnit 5 (org.junit.jupiter.*) и осмысленные проверки.
+        - Файл должен компилироваться и запускаться в типичной Gradle/Maven конфигурации JUnit 5.
     """.trimIndent()
 
     private fun buildUserMessage(pkg: String?, className: String, sourceContent: String): String = buildString {
