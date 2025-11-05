@@ -12,7 +12,7 @@ class TestingAgentOrchestratorImpl(
     private val structureProvider: ProjectStructureProvider = A2AProjectStructureProvider(),
     private val testRunner: TestRunner = TerminalBasedTestRunner(A2AProjectStructureProvider()),
     private val persister: TestPersister = FileSystemTestPersister(A2AProjectStructureProvider()),
-    private val detectors: List<LanguageTestingAgent> = listOf(KotlinTestingAgent(), JavaTestingAgent()),
+    private val detectors: List<LanguageTestingAgent> = listOf(KotlinTestingAgent(), JavaTestingAgent(), DartTestingAgent()),
     private val frameworkDetector: TestFrameworkDetector = JvmTestFrameworkDetector(A2AProjectStructureProvider())
 ) : TestingAgentOrchestrator {
     private val logger = Logger.getInstance(TestingAgentOrchestratorImpl::class.java)
