@@ -1,0 +1,104 @@
+package ru.marslab.ide.ride.testing
+
+import com.intellij.openapi.components.service
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.project.ProjectManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import ru.marslab.ide.ride.agent.impl.TerminalAgent
+import ru.marslab.ide.ride.model.agent.AgentRequest
+import ru.marslab.ide.ride.model.chat.ChatContext
+import ru.marslab.ide.ride.settings.PluginSettings
+
+/**
+ * Реализация TestRunner через существующий TerminalAgent.
+ * Формирует команду для Gradle/Maven и конвертирует результат в TestRunResult.
+ */
+class TerminalBasedTestRunner(
+    private val structureProvider: ProjectStructureProvider
+) : TestRunner {
+
+    override suspend fun run(scope: String?): TestRunResult = withContext(Dispatchers.IO) {
+        val structure = structureProvider.getProjectStructure()
+        val project = ProjectManager.getInstance().openProjects.firstOrNull()
+        val workingDir = structure.root.toFile().absolutePath
+
+        val command = when (structure.buildSystem) {
+            BuildSystem.GRADLE -> gradleCommand(scope)
+            BuildSystem.MAVEN -> mavenCommand(scope)
+            BuildSystem.DART -> dartCommand(scope)
+            else -> gradleCommand(scope) // дефолт
+        }
+
+        val terminal = TerminalAgent()
+        val ctxProject: Project? = project
+        val settings = service<PluginSettings>()
+        val req = AgentRequest(
+            request = command,
+            context = ChatContext(project = ctxProject, history = emptyList()),
+            parameters = ru.marslab.ide.ride.model.llm.LLMParameters(
+                temperature = settings.temperature,
+                maxTokens = settings.maxTokens
+            )
+        )
+        val resp = terminal.ask(req)
+
+        val exit = (resp.metadata["exitCode"] as? Int) ?: (if (resp.success) 0 else 1)
+        val stdout = resp.formattedOutput ?: resp.content
+        val parsed = quickParse(stdout)
+
+        TestRunResult(
+            success = exit == 0,
+            passed = parsed.passed,
+            failed = parsed.failed,
+            skipped = parsed.skipped,
+            durationMs = (resp.metadata["executionTime"] as? Long) ?: 0L,
+            reportText = stdout,
+            errors = if (exit == 0) emptyList() else listOf(resp.error ?: "")
+        )
+    }
+
+    private fun gradleCommand(scope: String?): String {
+        val base = if (isWindows()) "gradlew.bat test" else "./gradlew test"
+        return if (!scope.isNullOrBlank()) "$base --tests \"$scope\"" else base
+    }
+
+    private fun mavenCommand(scope: String?): String {
+        val base = "mvn -q -DskipITs=true test"
+        return if (!scope.isNullOrBlank()) "$base -Dtest=$scope" else base
+    }
+
+    private fun dartCommand(scope: String?): String {
+        val base = "dart test"
+        // Фильтрация по файлу/тесту может быть добавлена позже
+        return base
+    }
+
+    private fun isWindows(): Boolean = System.getProperty("os.name").lowercase().contains("win")
+
+    private data class Parsed(val passed: Int, val failed: Int, val skipped: Int)
+
+    private fun quickParse(output: String): Parsed {
+        // Простая эвристика: пытаемся найти числа в стандартных сводках Gradle/Maven
+        val gradleRe = Regex("(\n|\r)\s*(\d+) tests? completed,\s*(\d+) failed,\s*(\d+) skipped", RegexOption.IGNORE_CASE)
+        val mavenRe = Regex("Tests run:\s*(\d+),\s*Failures:\s*(\d+),\s*Errors:\s*(\d+),\s*Skipped:\s*(\d+)", RegexOption.IGNORE_CASE)
+
+        gradleRe.find(output)?.let {
+            val total = it.groupValues[2].toIntOrNull() ?: 0
+            val failed = it.groupValues[3].toIntOrNull() ?: 0
+            val skipped = it.groupValues[4].toIntOrNull() ?: 0
+            val passed = (total - failed - skipped).coerceAtLeast(0)
+            return Parsed(passed, failed, skipped)
+        }
+        mavenRe.find(output)?.let {
+            val run = it.groupValues[1].toIntOrNull() ?: 0
+            val failures = it.groupValues[2].toIntOrNull() ?: 0
+            val errors = it.groupValues[3].toIntOrNull() ?: 0
+            val skipped = it.groupValues[4].toIntOrNull() ?: 0
+            val failed = failures + errors
+            val passed = (run - failed - skipped).coerceAtLeast(0)
+            return Parsed(passed, failed, skipped)
+        }
+        return Parsed(passed = 0, failed = if (output.contains("FAIL", true)) 1 else 0, skipped = 0)
+    }
+}
