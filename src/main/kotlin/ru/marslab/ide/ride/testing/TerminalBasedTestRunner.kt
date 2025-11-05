@@ -31,7 +31,15 @@ class TerminalBasedTestRunner(
         }
 
         val terminal = TerminalAgent()
-        val ctxProject: Project? = project
+        val ctxProject: Project = project ?: return@withContext TestRunResult(
+            success = false,
+            passed = 0,
+            failed = 0,
+            skipped = 0,
+            durationMs = 0,
+            reportText = "Нет открытого проекта для запуска тестов",
+            errors = listOf("Project is null")
+        )
         val settings = service<PluginSettings>()
         val req = AgentRequest(
             request = command,
@@ -44,7 +52,7 @@ class TerminalBasedTestRunner(
         val resp = terminal.ask(req)
 
         val exit = (resp.metadata["exitCode"] as? Int) ?: (if (resp.success) 0 else 1)
-        val stdout = resp.formattedOutput ?: resp.content
+        val stdout = (resp.formattedOutput as? String) ?: resp.content
         val parsed = quickParse(stdout)
 
         TestRunResult(
@@ -52,7 +60,7 @@ class TerminalBasedTestRunner(
             passed = parsed.passed,
             failed = parsed.failed,
             skipped = parsed.skipped,
-            durationMs = (resp.metadata["executionTime"] as? Long) ?: 0L,
+            durationMs = ((resp.metadata["executionTime"]) as? Number)?.toLong() ?: 0L,
             reportText = stdout,
             errors = if (exit == 0) emptyList() else listOf(resp.error ?: "")
         )
@@ -80,8 +88,14 @@ class TerminalBasedTestRunner(
 
     private fun quickParse(output: String): Parsed {
         // Простая эвристика: пытаемся найти числа в стандартных сводках Gradle/Maven
-        val gradleRe = Regex("(\n|\r)\s*(\d+) tests? completed,\s*(\d+) failed,\s*(\d+) skipped", RegexOption.IGNORE_CASE)
-        val mavenRe = Regex("Tests run:\s*(\d+),\s*Failures:\s*(\d+),\s*Errors:\s*(\d+),\s*Skipped:\s*(\d+)", RegexOption.IGNORE_CASE)
+        val gradleRe = Regex(
+            pattern = """(\r|\n)\s*(\d+) tests? completed,\s*(\d+) failed,\s*(\d+) skipped""",
+            option = RegexOption.IGNORE_CASE
+        )
+        val mavenRe = Regex(
+            pattern = """Tests run:\s*(\d+),\s*Failures:\s*(\d+),\s*Errors:\s*(\d+),\s*Skipped:\s*(\d+)""",
+            option = RegexOption.IGNORE_CASE
+        )
 
         gradleRe.find(output)?.let {
             val total = it.groupValues[2].toIntOrNull() ?: 0

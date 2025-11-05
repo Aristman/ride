@@ -48,7 +48,7 @@ class A2AProjectStructureProvider : ProjectStructureProvider {
             "src/main/java",
             "lib" // dart
         )
-        candidates.map { root.resolve(it) }.forEach { p -> if (p.toFile().exists()) dirs += p }
+        candidates.map { root.resolve(it) }.forEach { p -> if (p.toFile().exists()) dirs.add(p) }
         return dirs
     }
 
@@ -59,7 +59,7 @@ class A2AProjectStructureProvider : ProjectStructureProvider {
             "src/test/java",
             "test" // dart
         )
-        candidates.map { root.resolve(it) }.forEach { p -> if (p.toFile().exists()) dirs += p }
+        candidates.map { root.resolve(it) }.forEach { p -> if (p.toFile().exists()) dirs.add(p) }
         if (dirs.isEmpty()) {
             // если тестовых директорий нет — вернем дефолт для выбранного языка позже на этапе сохранения
         }

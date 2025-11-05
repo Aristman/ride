@@ -37,8 +37,9 @@ import ru.marslab.ide.ride.util.TokenEstimator
 import ru.marslab.ide.ride.agent.a2a.AgentMessage
 import ru.marslab.ide.ride.agent.a2a.MessagePayload
 import ru.marslab.ide.ride.agent.a2a.MessageBusProvider
-import ru.marslab.ide.ride.testing.StubTestingAgentOrchestrator
 import ru.marslab.ide.ride.testing.TestRunResult
+import ru.marslab.ide.ride.testing.TestingAgentOrchestrator
+import ru.marslab.ide.ride.testing.TestingAgentOrchestratorImpl
 import java.time.Instant
 
 /**
@@ -683,8 +684,8 @@ class ChatService {
 
                     val relativePath = atToken.removePrefix("@")
 
-                    // Временный оркестратор (заглушка)
-                    val orchestrator = StubTestingAgentOrchestrator()
+                    // Реальный оркестратор (MVP)
+                    val orchestrator: TestingAgentOrchestrator = TestingAgentOrchestratorImpl()
                     val result: TestRunResult = runCatching { orchestrator.generateAndRun(relativePath) }
                         .getOrElse { ex ->
                             withContext(Dispatchers.EDT) {
@@ -695,7 +696,7 @@ class ChatService {
 
                     withContext(Dispatchers.EDT) {
                         val content = buildString {
-                            appendLine("### 🧪 Результаты тестов (stub)")
+                            appendLine("### 🧪 Результаты тестов")
                             appendLine()
                             appendLine("Файл: `" + relativePath + "`")
                             appendLine()

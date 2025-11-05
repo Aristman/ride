@@ -63,10 +63,10 @@
 - [ ] Реализовать `KotlinTestingAgent` с генерацией JUnit5.
 - [ ] Реализовать `JavaTestingAgent` с генерацией JUnit5.
 - [ ] Шаблоны тест-классов (package, imports, имя, `@Test`).
-- [ ] Сохранение файлов в правильные каталоги, определенные из данных `A2AProjectScannerToolAgent` (обычно `src/test/kotlin|java`).
+- [x] Сохранение файлов в правильные каталоги, определенные из данных `A2AProjectScannerToolAgent` (обычно `src/test/kotlin|java`). (реализовано: `FileSystemTestPersister`)
 
 ### Phase 3: Интеграция запуска и результаты
-- [ ] Запуск тестов через `TerminalAgent` с учетом сборочной системы (Gradle/Maven).
+- [x] Запуск тестов через `TerminalAgent` с учетом сборочной системы (Gradle/Maven). (реализовано: `TerminalBasedTestRunner`)
 - [ ] Нормализация вывода: парсинг `--tests`/build output в `TestRunResult`.
 - [ ] Рендер в чате: сводка (N passed, M failed, duration), список ошибок с трейсами.
 

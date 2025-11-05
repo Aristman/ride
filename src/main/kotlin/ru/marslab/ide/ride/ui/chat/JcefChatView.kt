@@ -69,15 +69,18 @@ class JcefChatView : JPanel(BorderLayout()) {
         atSuggestJsQuery.addHandler { query ->
             try {
                 val project = com.intellij.openapi.project.ProjectManager.getInstance().openProjects.firstOrNull()
-                if (project == null) return@addHandler "[]"
-                val svc = AtPickerSuggestionService()
-                val items = svc.suggestFiles(project, query ?: "")
-                val json = items.joinToString(prefix = "[", postfix = "]") { s ->
-                    "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+                val json = if (project == null) {
+                    "[]"
+                } else {
+                    val svc = AtPickerSuggestionService()
+                    val items = svc.suggestFiles(project, query ?: "")
+                    items.joinToString(prefix = "[", postfix = "]") { s ->
+                        "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+                    }
                 }
-                json
+                com.intellij.ui.jcef.JBCefJSQuery.Response(json)
             } catch (_: Exception) {
-                "[]"
+                com.intellij.ui.jcef.JBCefJSQuery.Response("[]")
             }
         }
     }
