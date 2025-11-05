@@ -50,6 +50,13 @@ class ChatContentRenderer {
         // Доп. обработка (fallback): попытаться линковать оставшиеся совпадения в чистых сегментах HTML
         result = linkifyFilePaths(result)
 
+        // Fallback: если после всех преобразований контент стал пустым (возможные побочные эффекты markdown),
+        // показываем безопасно экранированный исходный текст, чтобы пользователь не видел пустое сообщение
+        if (result.isBlank()) {
+            val safe = if (isJcefMode) escapeHtml(text) else escapeHtml(text)
+            return "<span class=\"plain-text\">${'$'}safe</span>"
+        }
+
         // Усиление: любые уже существующие <a href="path.ext"> помечаем internal-командой
         result = enhanceAnchorFileLinks(result)
 
@@ -58,7 +65,6 @@ class ChatContentRenderer {
 
     /**
      * Рендерит форматированный вывод агентов в HTML
-{{ ... }}
      */
     fun renderFormattedOutput(formattedOutput: FormattedOutput): String {
         return try {

@@ -117,6 +117,9 @@ class ChatUiBuilder(
             font = font.deriveFont(14f)
         }
 
+        // Подключаем Swing-реализацию @-пикера к основному полю ввода
+        ru.marslab.ide.ride.ui.chat.AtPickerSwing(inputArea)
+
         // Обработчик клавиш
         inputArea.addKeyListener(object : KeyAdapter() {
             override fun keyPressed(e: KeyEvent) = handleInputKey(e, inputArea, onSendMessage)
@@ -192,6 +195,14 @@ class ChatUiBuilder(
         inputArea: JBTextArea,
         onSendMessage: () -> Unit
     ) {
+        // Если активен @-пикер, то Enter/Space обрабатываются самим пикером и сообщение НЕ отправляем
+        val atPickerActive = (inputArea.getClientProperty("ride.atpicker.visible") as? Boolean) == true
+        if (atPickerActive) {
+            if (e.keyCode == KeyEvent.VK_ENTER || e.keyCode == KeyEvent.VK_SPACE) {
+                e.consume()
+                return
+            }
+        }
         if (e.keyCode == KeyEvent.VK_ENTER) {
             if (e.isShiftDown) {
                 // Вставляем перевод строки вместо отправки

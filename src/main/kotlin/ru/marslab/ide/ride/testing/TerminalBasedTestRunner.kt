@@ -26,7 +26,15 @@ class TerminalBasedTestRunner(
         val command = when (structure.buildSystem) {
             BuildSystem.GRADLE -> gradleCommand(scope)
             BuildSystem.MAVEN -> mavenCommand(scope)
-            BuildSystem.DART -> dartCommand(scope)
+            BuildSystem.DART -> {
+                // Если мы генерировали JVM-тесты (scope задан и выглядит как Java/Kotlin класс),
+                // пробуем запустить Gradle в android-модуле (типичный случай Flutter-проектов)
+                if (!scope.isNullOrBlank() && scope.matches(Regex("[A-Za-z0-9_.]+"))) {
+                    androidGradleCommand(scope)
+                } else {
+                    dartCommand(scope)
+                }
+            }
             else -> gradleCommand(scope) // дефолт
         }
 
@@ -80,6 +88,14 @@ class TerminalBasedTestRunner(
         val base = "dart test"
         // Фильтрация по файлу/тесту может быть добавлена позже
         return base
+    }
+
+    /**
+     * Запуск Gradle в подкаталоге android (для Flutter/ Dart монореп).
+     */
+    private fun androidGradleCommand(scope: String): String {
+        val base = if (isWindows()) "cd android && gradlew.bat test" else "cd android && ./gradlew test"
+        return "$base --tests \"$scope\""
     }
 
     private fun isWindows(): Boolean = System.getProperty("os.name").lowercase().contains("win")
