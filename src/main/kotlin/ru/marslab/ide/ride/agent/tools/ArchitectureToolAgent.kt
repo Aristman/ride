@@ -525,6 +525,18 @@ class ArchitectureToolAgent(
         - Рекомендации по улучшению
         """.trimIndent()
 
+        // Логируем промпт
+        logUserPrompt(
+            action = "ARCHITECTURE_DESCRIPTION",
+            systemPrompt = ARCHITECTURE_SYSTEM_PROMPT,
+            userPrompt = prompt,
+            extraMeta = mapOf(
+                "modules" to structure.modules.size,
+                "layers" to structure.layers.size,
+                "dependencies" to structure.dependencies.size
+            )
+        )
+
         val response = llmProvider.sendRequest(
             systemPrompt = ARCHITECTURE_SYSTEM_PROMPT,
             userMessage = prompt,

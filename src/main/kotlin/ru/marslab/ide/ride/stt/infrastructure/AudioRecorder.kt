@@ -46,12 +46,6 @@ class AudioRecorder(
                     val n = targetLine.read(buf, 0, buf.size)
                     if (n > 0) baos.write(buf, 0, n)
                 }
-                // дочитываем хвост, если остался доступный буфер
-                while (targetLine.available() > 0) {
-                    val n = targetLine.read(buf, 0, buf.size)
-                    if (n <= 0) break
-                    baos.write(buf, 0, n)
-                }
             } catch (_: Exception) {
             } finally {
                 runCatching { targetLine.stop() }
@@ -63,8 +57,14 @@ class AudioRecorder(
     fun stopAndGetBytes(): ByteArray {
         if (!isRecording.get()) return ByteArray(0)
         isRecording.set(false)
-        // ждём завершения воркера кратко
-        runCatching { worker?.join(200) }
+        // Немедленно останавливаем и закрываем линию, чтобы разблокировать read()
+        line?.run {
+            runCatching { stop() }
+            runCatching { close() }
+        }
+        line = null
+        // Ждём завершения воркера надёжнее
+        runCatching { worker?.join(1000) }
         worker = null
         val baos = bufferRef.getAndSet(null) ?: return ByteArray(0)
         return baos.toByteArray()
@@ -72,9 +72,14 @@ class AudioRecorder(
 
     fun cancel() {
         isRecording.set(false)
-        runCatching { worker?.join(100) }
+        // Немедленно останавливаем и закрываем линию
+        line?.run {
+            runCatching { stop() }
+            runCatching { close() }
+        }
+        line = null
+        runCatching { worker?.join(1000) }
         worker = null
         bufferRef.getAndSet(null)
-        line = null
     }
 }

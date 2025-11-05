@@ -49,7 +49,7 @@ class A2ALLMReviewToolAgent(
 
         val data = (request.payload as? MessagePayload.CustomPayload)?.data ?: emptyMap<String, Any>()
         val code = data["code"] as? String ?: ""
-        val language = data["language"] as? String ?: "kotlin"
+        val language = (data["language"] as? String).orEmpty()
         val focusAreas = data["focus_areas"] as? List<String> ?: listOf("general")
         val includeSuggestions = data["include_suggestions"] as? Boolean ?: true
 
@@ -156,8 +156,22 @@ class A2ALLMReviewToolAgent(
         )
 
         try {
+            val systemPromptWithRules = applyRulesToPrompt(systemPrompt)
+
+            // Логируем промпт до отправки в LLM
+            logUserPrompt(
+                action = "A2A_LLM_REVIEW",
+                systemPrompt = systemPromptWithRules,
+                userPrompt = userPrompt,
+                extraMeta = mapOf(
+                    "language" to language,
+                    "focus_areas" to focusAreas.joinToString(","),
+                    "include_suggestions" to includeSuggestions
+                )
+            )
+
             val response = llmProvider.sendRequest(
-                systemPrompt = systemPrompt,
+                systemPrompt = systemPromptWithRules,
                 userMessage = userPrompt,
                 conversationHistory = emptyList(),
                 parameters = agentRequest.parameters
@@ -178,31 +192,31 @@ class A2ALLMReviewToolAgent(
 
     private fun buildSystemPrompt(language: String, focusAreas: List<String>, includeSuggestions: Boolean): String {
         val focusText = when {
-            focusAreas.contains("security") -> " Pay special attention to security vulnerabilities and best practices."
-            focusAreas.contains("performance") -> " Focus on performance optimizations and potential bottlenecks."
-            focusAreas.contains("readability") -> " Emphasize code readability, maintainability, and naming conventions."
-            focusAreas.contains("testing") -> " Look for testability issues and suggest testing strategies."
-            else -> " Provide a comprehensive review covering all aspects of code quality."
+            focusAreas.contains("security") -> " Особое внимание уделяй уязвимостям безопасности и лучшим практикам."
+            focusAreas.contains("performance") -> " Сфокусируйся на оптимизации производительности и возможных узких местах."
+            focusAreas.contains("readability") -> " Подчеркни читаемость кода, сопровождение и соглашения об именовании."
+            focusAreas.contains("testing") -> " Обрати внимание на тестопригодность и предложи стратегии тестирования."
+            else -> " Проведи всестороннее ревью, охватывающее все аспекты качества кода."
         }
 
         val suggestionText = if (includeSuggestions) {
-            " For each issue found, provide specific suggestions for improvement."
+            " Для каждой найденной проблемы предоставляй конкретные рекомендации по улучшению."
         } else {
-            " Identify issues but do not provide detailed suggestions."
+            " Определи проблемы, но не давай детальных рекомендаций."
         }
 
-        return """You are an expert code reviewer specializing in $language programming language.
+        return """Ты — эксперт по ревью кода на языке $language.
 
-Your task is to analyze the provided code and identify:
-1. Security vulnerabilities and potential risks
-2. Performance issues and optimization opportunities
-3. Code quality and maintainability concerns
-4. Best practice violations
-5. Potential bugs and edge cases
+Твоя задача — проанализировать предоставленный код и выявить:
+1. Уязвимости безопасности и потенциальные риски
+2. Проблемы производительности и возможности оптимизации
+3. Вопросы качества кода и поддерживаемости
+4. Нарушения лучших практик
+5. Потенциальные баги и крайние случаи
 
 $focusText$suggestionText
 
-Format your response as structured JSON with the following fields:
+Верни ответ в структурированном JSON со следующими полями:
 {
   "overall_score": 0-100,
   "summary": {
@@ -217,27 +231,27 @@ Format your response as structured JSON with the following fields:
       "type": "security|performance|quality|bug|best_practice",
       "severity": "critical|major|minor",
       "line_number": number,
-      "description": "Clear description of the issue",
-      "suggestion": "Specific recommendation for fixing (if applicable)"
+      "description": "Четкое описание проблемы",
+      "suggestion": "Конкретная рекомендация по исправлению (если применимо)"
     }
   ],
-  "positive_points": ["List of well-implemented aspects"],
-  "recommendations": ["High-level improvement suggestions"]
+  "positive_points": ["Список сильных сторон реализации"],
+  "recommendations": ["Высокоуровневые рекомендации по улучшению"]
 }
 
-Be constructive and educational in your feedback."""
+Дай конструктивную и обучающую обратную связь."""
     }
 
     private fun buildUserPrompt(code: String, language: String, focusAreas: List<String>): String {
-        return """Please review the following $language code:
+        return """Проведи ревью следующего кода на $language:
 
 ```$language
 $code
 ```
 
-Focus areas: ${focusAreas.joinToString(", ")}
+Области фокуса: ${focusAreas.joinToString(", ")}
 
-Provide a thorough analysis following the JSON format specified in the system prompt."""
+Предоставь подробный анализ, следуя формату JSON, указанному в системном промпте."""
     }
 
     private fun parseReviewResponse(

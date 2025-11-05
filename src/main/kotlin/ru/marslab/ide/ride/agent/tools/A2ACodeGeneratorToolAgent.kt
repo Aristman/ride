@@ -58,8 +58,9 @@ class A2ACodeGeneratorToolAgent(
         messageBus: MessageBus
     ): AgentMessage.Response {
         val data = (request.payload as? MessagePayload.CustomPayload)?.data ?: emptyMap<String, Any>()
-        val description = data["description"] as? String ?: ""
-        val language = data["language"] as? String ?: "kotlin"
+        val description = (data["description"] as? String)?.takeIf { it.isNotBlank() }
+            ?: (data["request"] as? String).orEmpty()
+        val language = (data["language"] as? String).orEmpty()
         val context = data["context"] as? String ?: ""
         val files = data["files"] as? List<String> ?: emptyList()
         val requirements = data["requirements"] as? List<String> ?: emptyList()
@@ -125,7 +126,7 @@ class A2ACodeGeneratorToolAgent(
         val responsibilities = data["responsibilities"] as? List<String> ?: emptyList()
         val properties = data["properties"] as? List<String> ?: emptyList()
         val methods = data["methods"] as? List<String> ?: emptyList()
-        val language = data["language"] as? String ?: "kotlin"
+        val language = (data["language"] as? String).orEmpty()
         val designPattern = data["design_pattern"] as? String
         val parentClass = data["parent_class"] as? String
         val interfaces = data["interfaces"] as? List<String> ?: emptyList()
@@ -195,7 +196,7 @@ class A2ACodeGeneratorToolAgent(
         val description = data["description"] as? String ?: ""
         val parameters = data["parameters"] as? List<Map<String, Any>> ?: emptyList()
         val returnType = data["return_type"] as? String
-        val language = data["language"] as? String ?: "kotlin"
+        val language = (data["language"] as? String).orEmpty()
         val algorithm = data["algorithm"] as? String
         val complexity = data["complexity"] as? String ?: "O(n)"
 
@@ -264,7 +265,7 @@ class A2ACodeGeneratorToolAgent(
         val inputFormat = data["input_format"] as? String ?: ""
         val outputFormat = data["output_format"] as? String ?: ""
         val constraints = data["constraints"] as? List<String> ?: emptyList()
-        val language = data["language"] as? String ?: "kotlin"
+        val language = (data["language"] as? String).orEmpty()
         val timeComplexity = data["target_time_complexity"] as? String
         val spaceComplexity = data["target_space_complexity"] as? String
 
@@ -333,7 +334,7 @@ class A2ACodeGeneratorToolAgent(
         val sourceCode = data["source_code"] as? String ?: ""
         val codeType = data["code_type"] as? String ?: "function"
         val testFramework = data["test_framework"] as? String ?: "JUnit"
-        val language = data["language"] as? String ?: "kotlin"
+        val language = (data["language"] as? String).orEmpty()
         val coverageTarget = data["coverage_target"] as? Double ?: 80.0
 
         publishEvent(
@@ -397,7 +398,7 @@ class A2ACodeGeneratorToolAgent(
         val sourceCode = data["source_code"] as? String ?: ""
         val refactoringType = data["refactoring_type"] as? String ?: ""
         val goals = data["goals"] as? List<String> ?: emptyList()
-        val language = data["language"] as? String ?: "kotlin"
+        val language = (data["language"] as? String).orEmpty()
         val preserveBehavior = data["preserve_behavior"] as? Boolean ?: true
 
         publishEvent(
@@ -473,27 +474,38 @@ class A2ACodeGeneratorToolAgent(
         requirements: List<String>
     ): CodeGenerationResult = withContext(Dispatchers.Default) {
         val prompt = buildString {
-            appendLine("Generate $language code based on the following description:")
+            appendLine("Сгенерируй код на языке $language по следующему описанию:")
             appendLine(description)
             if (context.isNotBlank()) {
-                appendLine("\nContext:")
+                appendLine("\nКонтекст:")
                 appendLine(context)
             }
             if (files.isNotEmpty()) {
-                appendLine("\nRelated files:")
+                appendLine("\nСвязанные файлы:")
                 files.forEach { appendLine("- $it") }
             }
             if (requirements.isNotEmpty()) {
-                appendLine("\nRequirements:")
+                appendLine("\nТребования:")
                 requirements.forEach { appendLine("- $it") }
             }
-            appendLine("\nProvide clean, well-documented code with explanations.")
-            appendLine("Also suggest file structure and any dependencies needed.")
+            appendLine("\nПредоставь чистый, хорошо документированный код с пояснениями.")
+            appendLine("Также предложи структуру файлов и необходимые зависимости.")
         }
 
         try {
+            val baseSystemPrompt = "Ты — опытный разработчик. Генерируй высококачественный, готовый к продакшену код с корректной документацией."
+            val systemPromptWithRules = applyRulesToPrompt(baseSystemPrompt)
+
+            // Логирование промпта
+            logUserPrompt(
+                action = "A2A_CODE_GENERATE",
+                systemPrompt = systemPromptWithRules,
+                userPrompt = prompt,
+                extraMeta = mapOf("mode" to "general", "language" to language)
+            )
+
             val response = llmProvider.sendRequest(
-                systemPrompt = "You are a senior software developer. Generate high-quality, production-ready code with proper documentation.",
+                systemPrompt = systemPromptWithRules,
                 userMessage = prompt,
                 conversationHistory = emptyList(),
                 LLMParameters()
@@ -519,12 +531,12 @@ class A2ACodeGeneratorToolAgent(
             val explanation = if (parts.size >= 3) {
                 parts[2].trim()
             } else {
-                // Если нет отдельного объяснения, ищем его после кода или в начале
+                // Если нет отдельного объяснения, ищем его после кода или используем весь ответ без усечения
                 if (code.isNotEmpty() && response.content.contains(code)) {
                     val afterCode = response.content.substringAfter(code).trim()
                     if (afterCode.isNotEmpty()) afterCode else "Generated code based on requirements."
                 } else {
-                    response.content.take(200) + (if (response.content.length > 200) "..." else "")
+                    response.content
                 }
             }
 
@@ -562,34 +574,42 @@ class A2ACodeGeneratorToolAgent(
         interfaces: List<String>
     ): ClassGenerationResult = withContext(Dispatchers.Default) {
         val prompt = buildString {
-            appendLine("Generate a $language class named '$className':")
+            appendLine("Сгенерируй класс на языке $language с именем '$className':")
             if (responsibilities.isNotEmpty()) {
-                appendLine("Responsibilities:")
+                appendLine("Ответственности:")
                 responsibilities.forEach { appendLine("- $it") }
             }
             if (properties.isNotEmpty()) {
-                appendLine("Properties:")
+                appendLine("Свойства:")
                 properties.forEach { appendLine("- $it") }
             }
             if (methods.isNotEmpty()) {
-                appendLine("Methods:")
+                appendLine("Методы:")
                 methods.forEach { appendLine("- $it") }
             }
             if (designPattern != null) {
-                appendLine("Design Pattern: $designPattern")
+                appendLine("Паттерн проектирования: $designPattern")
             }
             if (parentClass != null) {
-                appendLine("Extends: $parentClass")
+                appendLine("Наследуется от: $parentClass")
             }
             if (interfaces.isNotEmpty()) {
-                appendLine("Implements: ${interfaces.joinToString(", ")}")
+                appendLine("Реализует интерфейсы: ${interfaces.joinToString(", ")}")
             }
-            appendLine("\nProvide complete implementation with proper documentation and usage example.")
+            appendLine("\nПредоставь полную реализацию с документацией и примером использования.")
         }
 
         try {
+            // Логирование промпта
+            logUserPrompt(
+                action = "A2A_CLASS_GENERATE",
+                systemPrompt = "Ты — эксперт по ООП. Генерируй хорошо спроектированные классы, строго соблюдая принципы SOLID.",
+                userPrompt = prompt,
+                extraMeta = mapOf("language" to language, "class_name" to className)
+            )
+
             val response = llmProvider.sendRequest(
-                systemPrompt = "You are an OOP expert. Generate well-designed classes following SOLID principles.",
+                systemPrompt = "Ты — эксперт по ООП. Генерируй хорошо спроектированные классы, строго соблюдая принципы SOLID.",
                 userMessage = prompt,
                 conversationHistory = emptyList(),
                 LLMParameters()
@@ -597,7 +617,7 @@ class A2ACodeGeneratorToolAgent(
 
             val parts = response.content.split("```")
             val code = if (parts.size >= 2) parts[1] else response.content
-            val explanation = if (parts.size >= 3) parts[2].trim() else "Generated class implementation."
+            val explanation = if (parts.size >= 3) parts[2].trim() else "Сгенерированная реализация класса."
 
             ClassGenerationResult(
                 code = code.trim(),
@@ -634,10 +654,10 @@ class A2ACodeGeneratorToolAgent(
         complexity: String
     ): FunctionGenerationResult = withContext(Dispatchers.Default) {
         val prompt = buildString {
-            appendLine("Generate a $language function named '$functionName':")
-            appendLine("Description: $description")
+            appendLine("Сгенерируй функцию на языке $language с именем '$functionName':")
+            appendLine("Описание: $description")
             if (parameters.isNotEmpty()) {
-                appendLine("Parameters:")
+                appendLine("Параметры:")
                 parameters.forEach { param ->
                     val name = param["name"] as? String ?: ""
                     val type = param["type"] as? String ?: "Any"
@@ -646,18 +666,26 @@ class A2ACodeGeneratorToolAgent(
                 }
             }
             if (returnType != null) {
-                appendLine("Return Type: $returnType")
+                appendLine("Тип возвращаемого значения: $returnType")
             }
             if (algorithm != null) {
-                appendLine("Algorithm: $algorithm")
+                appendLine("Алгоритм: $algorithm")
             }
-            appendLine("Target Complexity: $complexity")
-            appendLine("\nProvide implementation with documentation, usage example, and test cases.")
+            appendLine("Целевая сложность: $complexity")
+            appendLine("\nПредоставь реализацию с документацией, примером использования и тест-кейсами.")
         }
 
         try {
+            // Логирование промпта
+            logUserPrompt(
+                action = "A2A_FUNCTION_GENERATE",
+                systemPrompt = "Ты — эксперт по алгоритмам. Генерируй эффективные, хорошо документированные функции.",
+                userPrompt = prompt,
+                extraMeta = mapOf("language" to language, "function_name" to functionName)
+            )
+
             val response = llmProvider.sendRequest(
-                systemPrompt = "You are an algorithm expert. Generate efficient, well-documented functions.",
+                systemPrompt = "Ты — эксперт по алгоритмам. Генерируй эффективные, хорошо документированные функции.",
                 userMessage = prompt,
                 conversationHistory = emptyList(),
                 LLMParameters()
@@ -665,7 +693,7 @@ class A2ACodeGeneratorToolAgent(
 
             val parts = response.content.split("```")
             val code = if (parts.size >= 2) parts[1] else response.content
-            val explanation = if (parts.size >= 3) parts[2].trim() else "Generated function implementation."
+            val explanation = if (parts.size >= 3) parts[2].trim() else "Сгенерированная реализация функции."
 
             FunctionGenerationResult(
                 code = code.trim(),
@@ -701,26 +729,34 @@ class A2ACodeGeneratorToolAgent(
         spaceComplexity: String?
     ): AlgorithmGenerationResult = withContext(Dispatchers.Default) {
         val prompt = buildString {
-            appendLine("Generate a $language algorithm for $algorithmType:")
-            appendLine("Problem: $problemDescription")
-            appendLine("Input Format: $inputFormat")
-            appendLine("Output Format: $outputFormat")
+            appendLine("Сгенерируй алгоритм на языке $language для задачи: $algorithmType")
+            appendLine("Задача: $problemDescription")
+            appendLine("Формат входных данных: $inputFormat")
+            appendLine("Формат выходных данных: $outputFormat")
             if (constraints.isNotEmpty()) {
-                appendLine("Constraints:")
+                appendLine("Ограничения:")
                 constraints.forEach { appendLine("- $it") }
             }
             if (timeComplexity != null) {
-                appendLine("Target Time Complexity: $timeComplexity")
+                appendLine("Целевая временная сложность: $timeComplexity")
             }
             if (spaceComplexity != null) {
-                appendLine("Target Space Complexity: $spaceComplexity")
+                appendLine("Целевая пространственная сложность: $spaceComplexity")
             }
-            appendLine("\nProvide optimized implementation with complexity analysis and test cases.")
+            appendLine("\nПредоставь оптимизированную реализацию с анализом сложности и тест-кейсами.")
         }
 
         try {
+            // Логирование промпта
+            logUserPrompt(
+                action = "A2A_ALGORITHM_GENERATE",
+                systemPrompt = "Ты — эксперт по алгоритмам. Генерируй оптимизированные алгоритмы с корректным анализом сложности.",
+                userPrompt = prompt,
+                extraMeta = mapOf("language" to language, "algorithm_type" to algorithmType)
+            )
+
             val response = llmProvider.sendRequest(
-                systemPrompt = "You are an algorithm expert. Generate optimized algorithms with proper complexity analysis.",
+                systemPrompt = "Ты — эксперт по алгоритмам. Генерируй оптимизированные алгоритмы с корректным анализом сложности.",
                 userMessage = prompt,
                 conversationHistory = emptyList(),
                 LLMParameters()
@@ -728,7 +764,7 @@ class A2ACodeGeneratorToolAgent(
 
             val parts = response.content.split("```")
             val code = if (parts.size >= 2) parts[1] else response.content
-            val explanation = if (parts.size >= 3) parts[2].trim() else "Generated algorithm implementation."
+            val explanation = if (parts.size >= 3) parts[2].trim() else "Сгенерированная реализация алгоритма."
 
             AlgorithmGenerationResult(
                 code = code.trim(),
@@ -767,22 +803,22 @@ class A2ACodeGeneratorToolAgent(
         coverageTarget: Double
     ): TestGenerationResult = withContext(Dispatchers.Default) {
         val prompt = buildString {
-            appendLine("Generate comprehensive $testFramework tests for the following $language $codeType:")
+            appendLine("Сгенерируй подробные тесты $testFramework для следующего $language $codeType:")
             appendLine("```$language")
             appendLine(sourceCode)
             appendLine("```")
-            appendLine("Target Coverage: ${coverageTarget}%")
-            appendLine("\nInclude:")
-            appendLine("- Unit tests for all methods/functions")
-            appendLine("- Edge cases and boundary conditions")
-            appendLine("- Error handling tests")
-            appendLine("- Performance tests if applicable")
-            appendLine("- Integration tests if needed")
+            appendLine("Целевое покрытие: ${coverageTarget}%")
+            appendLine("\nВключи:")
+            appendLine("- Юнит-тесты для всех методов/функций")
+            appendLine("- Крайние случаи и граничные условия")
+            appendLine("- Тесты обработки ошибок")
+            appendLine("- Тесты производительности, если применимо")
+            appendLine("- Интеграционные тесты при необходимости")
         }
 
         try {
             val response = llmProvider.sendRequest(
-                systemPrompt = "You are a testing expert. Generate comprehensive tests with high coverage.",
+                systemPrompt = "Ты — эксперт по тестированию. Генерируй подробные тесты с высоким покрытием.",
                 userMessage = prompt,
                 conversationHistory = emptyList(),
                 LLMParameters()
@@ -790,7 +826,7 @@ class A2ACodeGeneratorToolAgent(
 
             val parts = response.content.split("```")
             val code = if (parts.size >= 2) parts[1] else response.content
-            val explanation = if (parts.size >= 3) parts[2].trim() else "Generated test cases."
+            val explanation = if (parts.size >= 3) parts[2].trim() else "Сгенерированные тесты."
 
             TestGenerationResult(
                 code = code.trim(),

@@ -672,9 +672,8 @@ class RequestPlanner {
             title = "Генерация кода",
             description = "Генерация кода на основе запроса",
             agentType = AgentType.CODE_GENERATOR,
-            input = mapOf<String, Any>(
+            input = mapOf(
                 "request" to (analysis.parameters["original_request"] ?: ""),
-                "language" to "kotlin",
                 "project_path" to (analysis.context.projectPath ?: "")
             ),
             dependencies = dependencies,
@@ -696,8 +695,7 @@ class RequestPlanner {
             description = "Ревью сгенерированного кода",
             agentType = AgentType.LLM_REVIEW,
             input = mapOf<String, Any>(
-                "review_type" to "general",
-                "language" to "kotlin"
+                "review_type" to "general"
             ),
             dependencies = dependencies,
             estimatedDurationMs = 8000

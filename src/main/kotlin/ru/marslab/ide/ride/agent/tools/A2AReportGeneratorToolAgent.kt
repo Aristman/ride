@@ -2,6 +2,8 @@ package ru.marslab.ide.ride.agent.tools
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.flow.collect
 import ru.marslab.ide.ride.agent.a2a.*
 import ru.marslab.ide.ride.integration.llm.LLMProvider
 import ru.marslab.ide.ride.model.orchestrator.AgentType
@@ -57,10 +59,69 @@ class A2AReportGeneratorToolAgent(
     ): AgentMessage.Response {
         val data = (request.payload as? MessagePayload.CustomPayload)?.data ?: emptyMap<String, Any>()
         val reportType = data["report_type"] as? String ?: "summary"
-        val sourceData = data["source_data"] as? Map<String, Any> ?: emptyMap()
+        val explicitSourceData = data["source_data"] as? Map<String, Any> ?: emptyMap()
         val format = data["format"] as? String ?: "markdown"
         val title = data["title"] as? String ?: "Generated Report"
         val includeRecommendations = data["include_recommendations"] as? Boolean ?: true
+        val dataRequirements = (data["data_requirements"] as? List<*>)
+            ?.filterIsInstance<Map<String, Any>>() ?: emptyList()
+
+        // planId прокинут оркестратором в metadata запроса
+        val planId = request.metadata["planId"] as? String
+
+        // 1) Собираем данные из зависимостей шага (dependency_*)
+        // enrichStepInput добавляет dependency_<stepId> в payload.data
+        val dependencyData = data.entries
+            .filter { (k, _) -> k.startsWith("dependency_") }
+            .associate { (k, v) -> k.removePrefix("dependency_") to v }
+
+        // 2) Если требуется, дополнительно собираем данные из A2A событий по текущему плану (best-effort)
+        val busCollectedData = mutableMapOf<String, Any>()
+        if (dataRequirements.isNotEmpty() && planId != null) {
+            try {
+                val remaining = dataRequirements.mapNotNull { it["agent_type"] as? String }.toMutableSet()
+                val events = mutableListOf<Map<String, Any>>()
+                withTimeout(1200L) {
+                    messageBus.subscribeAll().collect { evt ->
+                        if (evt is AgentMessage.Event) {
+                            val evtPlanId = evt.metadata["planId"] as? String
+                            if (evtPlanId == planId) {
+                                // Сохраняем событие целиком (минимум статус/результат)
+                                when (val payload = evt.payload) {
+                                    is MessagePayload.CustomPayload -> {
+                                        events.add(mapOf(
+                                            "sender" to evt.senderId,
+                                            "type" to payload.type,
+                                            "data" to payload.data
+                                        ))
+                                    }
+                                    is MessagePayload.ExecutionStatusPayload -> {
+                                        events.add(mapOf(
+                                            "sender" to evt.senderId,
+                                            "status" to payload.status,
+                                            "result" to (payload.result ?: ""),
+                                            "error" to (payload.error ?: "")
+                                        ))
+                                    }
+                                    else -> { /* ignore other payloads */ }
+                                }
+                            }
+                        }
+                        // Rely on timeout to stop collecting; no early return from withTimeout here
+                    }
+                }
+                if (events.isNotEmpty()) {
+                    busCollectedData["a2a_events"] = events
+                }
+            } catch (_: Exception) {
+                // Не критично: если не удалось собрать события, продолжаем с имеющимися данными
+            }
+        }
+
+        val sourceData = mutableMapOf<String, Any>()
+        if (explicitSourceData.isNotEmpty()) sourceData.putAll(explicitSourceData)
+        if (dependencyData.isNotEmpty()) sourceData["dependencies"] = dependencyData
+        if (busCollectedData.isNotEmpty()) sourceData.putAll(busCollectedData)
 
         publishEvent(
             messageBus = messageBus,
@@ -310,16 +371,28 @@ class A2AReportGeneratorToolAgent(
 
         try {
             val prompt = buildString {
-                appendLine("Generate a $reportType report with the following data:")
-                appendLine("Title: $title")
-                appendLine("Format: $format")
-                appendLine("Include Recommendations: $includeRecommendations")
-                appendLine("Source Data: $sourceData")
-                appendLine("\nGenerate a comprehensive, well-structured report.")
+                appendLine("Сгенерируй $reportType отчёт на основе следующих данных:")
+                appendLine("Заголовок: $title")
+                appendLine("Формат: $format")
+                appendLine("Включать рекомендации: $includeRecommendations")
+                appendLine("Исходные данные: $sourceData")
+                appendLine("\nСформируй подробный, хорошо структурированный отчёт.")
             }
 
+            // Логируем промпт
+            logUserPrompt(
+                action = "A2A_REPORT_GENERATE",
+                systemPrompt = "Ты — генератор технических отчётов. Создавай понятные и практичные отчёты для команд разработки.",
+                userPrompt = prompt,
+                extraMeta = mapOf(
+                    "report_type" to reportType,
+                    "format" to format,
+                    "include_recommendations" to includeRecommendations
+                )
+            )
+
             val response = llmProvider.sendRequest(
-                systemPrompt = "You are a technical report generator. Create clear, actionable reports for development teams.",
+                systemPrompt = "Ты — генератор технических отчётов. Создавай понятные и практичные отчёты для команд разработки.",
                 userMessage = prompt,
                 conversationHistory = emptyList(),
                 LLMParameters()

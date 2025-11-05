@@ -69,8 +69,16 @@ class LLMCodeReviewToolAgent(
             }
 
             val response = withContext(Dispatchers.IO) {
+                // Логируем промпт (fallback режим)
+                logUserPrompt(
+                    action = "LLM_CODE_REVIEW_FALLBACK",
+                    systemPrompt = "Ты — опытный ревьюер кода. Возвращай ТОЛЬКО JSON в требуемом формате.",
+                    userPrompt = prompt,
+                    extraMeta = mapOf("mode" to "fallback", "maxFindingsPerFile" to maxFindingsPerFile)
+                )
+
                 llmProvider.sendRequest(
-                    systemPrompt = "You are a senior code reviewer. Provide ONLY JSON as requested.",
+                    systemPrompt = "Ты — опытный ревьюер кода. Возвращай ТОЛЬКО JSON в требуемом формате.",
                     userMessage = prompt,
                     conversationHistory = emptyList(),
                     parameters = LLMParameters.PRECISE
@@ -108,6 +116,19 @@ class LLMCodeReviewToolAgent(
             val response = withContext(Dispatchers.IO) {
                 // Логи длины запросов
                 log.info("LLM_REVIEW sendRequest: systemPromptLen=${SYSTEM_PROMPT.length}, userMessageLen=${prompt.length}")
+
+                // Логируем промпт (per-file)
+                logUserPrompt(
+                    action = "LLM_CODE_REVIEW",
+                    systemPrompt = SYSTEM_PROMPT,
+                    userPrompt = prompt,
+                    extraMeta = mapOf(
+                        "file" to path,
+                        "language" to language,
+                        "maxFindingsPerFile" to maxFindingsPerFile
+                    )
+                )
+
                 llmProvider.sendRequest(
                     systemPrompt = SYSTEM_PROMPT,
                     userMessage = prompt,
@@ -155,17 +176,17 @@ class LLMCodeReviewToolAgent(
     }
 
     private fun buildPrompt(language: String, path: String, code: String, maxFindings: Int): String = buildString {
-        appendLine("Analyze the following ${'$'}language code and return potential bugs and code smells.")
-        appendLine("Return STRICT JSON with key 'findings' which is an array of objects with fields:")
-        appendLine("file (string), line (number|null), severity (one of: critical, high, medium, low), rule (string), message (string), suggestion (string). Do not include any text outside JSON.")
+        appendLine("Проанализируй следующий код на ${'$'}language и верни потенциальные баги и проблемные места (code smells).")
+        appendLine("Верни СТРОГИЙ JSON с ключом 'findings' — массив объектов со следующими полями:")
+        appendLine("file (string), line (number|null), severity (critical|high|medium|low), rule (string), message (string), suggestion (string). Не включай никакого текста вне JSON.")
         appendLine()
-        appendLine("Constraints:")
-        appendLine("- Max findings: ${'$'}maxFindings")
-        appendLine("- If line is unknown, use null")
+        appendLine("Ограничения:")
+        appendLine("- Максимум находок: ${'$'}maxFindings")
+        appendLine("- Если номер строки неизвестен, используй null")
         appendLine()
-        appendLine("File: ${'$'}path")
-        appendLine("Language: ${'$'}language")
-        appendLine("Code snippet:\n```${'$'}language\n${'$'}code\n```")
+        appendLine("Файл: ${'$'}path")
+        appendLine("Язык: ${'$'}language")
+        appendLine("Фрагмент кода:\n```\n${'$'}code\n```")
     }
 
     private fun parseFindings(content: String, path: String): List<Map<String, Any>> {
@@ -218,6 +239,6 @@ class LLMCodeReviewToolAgent(
     }
 
     companion object {
-        private const val SYSTEM_PROMPT = "You are a senior code reviewer. Provide ONLY JSON as requested."
+        private const val SYSTEM_PROMPT = "Ты — опытный ревьюер кода. Возвращай ТОЛЬКО JSON в требуемом формате."
     }
 }

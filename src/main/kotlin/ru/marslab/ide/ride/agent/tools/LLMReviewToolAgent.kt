@@ -53,7 +53,7 @@ class LLMReviewToolAgent(
         val code = step.input.getString("code")
         val files = step.input.getList<String>("files") ?: emptyList()
         val reviewType = step.input.getString("review_type") ?: "general"
-        val language = step.input.getString("language") ?: "kotlin"
+        val language = step.input.getString("language").orEmpty()
 
         logger.info("LLM_REVIEW executing: review_type=$reviewType, language=$language, files=${files.size}, has_code=${!code.isNullOrBlank()}")
 
@@ -76,6 +76,18 @@ class LLMReviewToolAgent(
             val userPrompt = buildReviewUserPrompt(codeToReview, reviewType, language, files)
 
             logger.info("LLM_REVIEW sending request to LLM")
+            // Логируем промпт
+            logUserPrompt(
+                action = "LLM_REVIEW",
+                systemPrompt = systemPrompt,
+                userPrompt = userPrompt,
+                extraMeta = mapOf(
+                    "review_type" to reviewType,
+                    "language" to language,
+                    "files_count" to files.size,
+                    "has_inline_code" to (!code.isNullOrBlank())
+                )
+            )
 
             // Отправляем запрос в LLM
             val response = llmProvider.sendRequest(

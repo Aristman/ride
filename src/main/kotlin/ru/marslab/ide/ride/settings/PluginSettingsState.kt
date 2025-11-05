@@ -39,7 +39,12 @@ data class PluginSettingsState(
     var uncertaintyOrchestratorThreshold: Double = DEFAULT_UNCERTAINTY_ORCHESTRATOR_THRESHOLD,
     var uncertaintyClarificationThreshold: Double = DEFAULT_UNCERTAINTY_CLARIFICATION_THRESHOLD,
     var uncertaintyRagEnrichmentThreshold: Double = DEFAULT_UNCERTAINTY_RAG_ENRICHMENT_THRESHOLD,
-    var uncertaintyMaxSimpleQueryLength: Int = DEFAULT_UNCERTAINTY_MAX_SIMPLE_QUERY_LENGTH
+    var uncertaintyMaxSimpleQueryLength: Int = DEFAULT_UNCERTAINTY_MAX_SIMPLE_QUERY_LENGTH,
+    // --- Custom Rules ---
+    var enableCustomRules: Boolean = DEFAULT_ENABLE_CUSTOM_RULES,
+    // Хранение активных правил (имя файла -> активность)
+    var activeGlobalRules: Map<String, Boolean> = emptyMap(),
+    var activeProjectRules: Map<String, Boolean> = emptyMap()
 ) {
     companion object {
         const val DEFAULT_CHAT_FONT_SIZE = 9
@@ -76,5 +81,8 @@ data class PluginSettingsState(
         const val DEFAULT_UNCERTAINTY_CLARIFICATION_THRESHOLD = 0.2
         const val DEFAULT_UNCERTAINTY_RAG_ENRICHMENT_THRESHOLD = 0.5
         const val DEFAULT_UNCERTAINTY_MAX_SIMPLE_QUERY_LENGTH = 100
+
+        // Custom Rules defaults
+        const val DEFAULT_ENABLE_CUSTOM_RULES = true
     }
 }

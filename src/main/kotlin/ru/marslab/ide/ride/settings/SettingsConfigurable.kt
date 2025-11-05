@@ -2,18 +2,20 @@ package ru.marslab.ide.ride.settings
 
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
+import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.options.Configurable
 import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.DialogPanel
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.ui.Messages.showErrorDialog
+import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.ui.ColorPanel
-import com.intellij.ui.components.JBCheckBox
-import com.intellij.ui.components.JBPasswordField
-import com.intellij.ui.components.JBTabbedPane
-import com.intellij.ui.components.JBTextField
+import com.intellij.ui.components.*
 import com.intellij.ui.dsl.builder.*
+import com.intellij.util.ui.JBUI.Borders.*
+import com.intellij.util.ui.JBUI.CurrentTheme.Label.disabledForeground
+import com.intellij.util.ui.JBUI.CurrentTheme.ToolWindow.borderColor
 import ru.marslab.ide.ride.agent.tools.EmbeddingIndexerToolAgent
 import ru.marslab.ide.ride.model.embedding.IndexingResult
 import ru.marslab.ide.ride.model.orchestrator.AgentType
@@ -22,8 +24,13 @@ import ru.marslab.ide.ride.model.tool.StepInput
 import ru.marslab.ide.ride.model.tool.ToolPlanStep
 import ru.marslab.ide.ride.service.ChatService
 import ru.marslab.ide.ride.service.embedding.IndexingStatusService
+import ru.marslab.ide.ride.service.rules.RuleItem
+import ru.marslab.ide.ride.service.rules.RulesService
+import ru.marslab.ide.ride.ui.RuleListItem
+import java.awt.BorderLayout
 import java.awt.CardLayout
 import java.awt.Color
+import java.awt.Dimension
 import javax.swing.*
 
 /**
@@ -62,6 +69,18 @@ class SettingsConfigurable : Configurable {
     private lateinit var ragMmrTopKField: JBTextField
     private lateinit var ragSourceLinksEnabledCheck: JBCheckBox
 
+    // Custom Rules UI components
+    private lateinit var globalRulesList: JPanel
+    private lateinit var projectRulesList: JPanel
+    private lateinit var globalRulesScroll: JScrollPane
+    private lateinit var projectRulesScroll: JScrollPane
+    private lateinit var addGlobalRuleButton: JButton
+    private lateinit var addProjectRuleButton: JButton
+
+    // Списки правил
+    private val globalRules = mutableListOf<RuleItem>()
+    private val projectRules = mutableListOf<RuleItem>()
+
     private var panel: DialogPanel? = null
     private var initialApiKey: String = ""
     private var apiKeyLoaded = false
@@ -89,6 +108,7 @@ class SettingsConfigurable : Configurable {
         val chatAppearancePanel = createChatAppearancePanel()
         val agentSettingsPanel = createAgentSettingsPanel()
         val codeSettingsPanel = createCodeSettingsPanel()
+        val rulesPanel = createRulesPanel()
 
         panel = panel {
             row {
@@ -96,6 +116,7 @@ class SettingsConfigurable : Configurable {
                 tabs.addTab("Chat Appearance", chatAppearancePanel)
                 tabs.addTab("Agent Settings", agentSettingsPanel)
                 tabs.addTab("Code Settings", codeSettingsPanel)
+                tabs.addTab("Rules", rulesPanel)
                 tabs.addTab("LlmConfig", llmConfigPanel)
                 cell(tabs)
                     .align(Align.FILL)
@@ -298,6 +319,9 @@ class SettingsConfigurable : Configurable {
         // RAG Source Links
         settings.ragSourceLinksEnabled = ragSourceLinksEnabledCheck.isSelected
 
+        // Очищаем кеш правил при изменении настроек
+        service<RulesService>().clearCache()
+
         initialApiKey = apiKey
         apiKeyLoaded = true
         initialHFToken = hfToken
@@ -370,6 +394,11 @@ class SettingsConfigurable : Configurable {
         ragMmrTopKField.text = settings.ragMmrTopK.toString()
         ragSourceLinksEnabledCheck.isSelected = settings.ragSourceLinksEnabled
         updateMmrVisibility()
+
+        // Обновляем списки правил после загрузки настроек
+        SwingUtilities.invokeLater {
+            loadRules()
+        }
     }
 
     override fun disposeUIResources() {
@@ -1032,6 +1061,453 @@ class SettingsConfigurable : Configurable {
                     )
                 }
             }
+        }
+    }
+
+    /**
+     * Создает панель настроек правил
+     */
+    private fun createRulesPanel(): DialogPanel = panel {
+        group("Custom Rules") {
+            row {
+                cell(JBLabel("Глобальные правила")).bold()
+                addGlobalRuleButton = JButton("+").apply {
+                    toolTipText = "Добавить новое глобальное правило"
+                    preferredSize = Dimension(10, 30)
+                    addActionListener {
+                        showAddRuleDialog(true)
+                    }
+                }
+                cell(addGlobalRuleButton).align(AlignX.RIGHT)
+            }
+            row {
+                // Панель содержимого (вертикальный список элементов)
+                globalRulesList = JPanel().apply {
+                    layout = BoxLayout(this, BoxLayout.Y_AXIS)
+                    border = compound(
+                        customLine(borderColor(), 1),
+                        empty(5)
+                    )
+                }
+                // Обёртка для прилипания к верху в скролле
+                val globalWrapper = JPanel(BorderLayout()).apply {
+                    add(globalRulesList, BorderLayout.NORTH)
+                }
+                globalRulesScroll = JScrollPane(globalWrapper).apply {
+                    preferredSize = Dimension(300, 200)
+                    verticalScrollBarPolicy = JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED
+                    horizontalScrollBarPolicy = JScrollPane.HORIZONTAL_SCROLLBAR_NEVER
+                }
+                cell(globalRulesScroll)
+                    .align(AlignX.FILL)
+                    .resizableColumn()
+            }
+
+            row {
+                // Разделитель
+                cell(JSeparator()).align(AlignX.FILL)
+            }
+
+            row {
+                cell(JBLabel("Проектные правила")).bold()
+                addProjectRuleButton = JButton("+").apply {
+                    toolTipText = "Добавить новое проектное правило"
+                    preferredSize = Dimension(30, 30)
+                    addActionListener {
+                        showAddRuleDialog(false)
+                    }
+                }
+                cell(addProjectRuleButton).align(AlignX.RIGHT)
+            }
+            row {
+                // Панель содержимого (вертикальный список элементов)
+                projectRulesList = JPanel().apply {
+                    layout = BoxLayout(this, BoxLayout.PAGE_AXIS)
+                    border = compound(
+                        customLine(borderColor(), 1),
+                        empty(5)
+                    )
+                }
+                // Обёртка для прилипания к верху в скролле
+                val projectWrapper = JPanel(BorderLayout()).apply {
+                    add(projectRulesList, BorderLayout.NORTH)
+                }
+                projectRulesScroll = JScrollPane(projectWrapper).apply {
+                    preferredSize = Dimension(300, 200)
+                    verticalScrollBarPolicy = JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED
+                    horizontalScrollBarPolicy = JScrollPane.HORIZONTAL_SCROLLBAR_NEVER
+                }
+                cell(projectRulesScroll)
+                    .align(AlignX.FILL)
+                    .resizableColumn()
+            }
+
+            row {
+                cell(JBLabel("Примечание: правила применяются только когда активны (✓)").apply {
+                    font = font.deriveFont(font.size - 2f)
+                    foreground = disabledForeground()
+                }).align(AlignX.LEFT)
+            }
+        }
+
+        // Инициализируем списки правил при создании панели
+        SwingUtilities.invokeLater {
+            loadRules()
+        }
+    }
+
+    /**
+     * Загружает правила из файловой системы с учетом активных
+     */
+    private fun loadRules() {
+        try {
+            val rulesService = service<RulesService>()
+            val settings = service<PluginSettings>()
+            val project = ProjectManager.getInstance().openProjects.firstOrNull()
+
+            // Очищаем текущие списки
+            globalRules.clear()
+            projectRules.clear()
+
+            // Загружаем активные глобальные правила
+            val activeGlobalRules = settings.getActiveGlobalRules()
+            val globalDir = rulesService.getGlobalRulesDirectory()
+            if (globalDir.exists()) {
+                val globalFiles = globalDir.listFiles { file ->
+                    file.isFile && file.extension.equals("md", ignoreCase = true)
+                }?.sortedBy { it.name }?.toList() ?: emptyList()
+
+                globalFiles.forEach { file ->
+                    val fileName = file.nameWithoutExtension
+                    val isActive = activeGlobalRules[fileName] ?: true // По умолчанию активно
+                    val rule = RuleItem(fileName = fileName, isActive = isActive, isGlobal = true)
+                    globalRules.add(rule)
+                }
+            }
+
+            // Загружаем активные проектные правила
+            if (project != null) {
+                val activeProjectRules = settings.getActiveProjectRules()
+                val projectDir = rulesService.getProjectRulesDirectory(project)
+                if (projectDir?.exists() == true) {
+                    val projectFiles = projectDir.listFiles { file ->
+                        file.isFile && file.extension.equals("md", ignoreCase = true)
+                    }?.sortedBy { it.name }?.toList() ?: emptyList()
+
+                    projectFiles.forEach { file ->
+                        val fileName = file.nameWithoutExtension
+                        val isActive = activeProjectRules[fileName] ?: true // По умолчанию активно
+                        val rule = RuleItem(fileName = fileName, isActive = isActive, isGlobal = false)
+                        projectRules.add(rule)
+                    }
+                }
+            }
+
+            // Обновляем UI
+            updateRulesLists()
+        } catch (e: Exception) {
+            showErrorDialog(
+                "Ошибка при загрузке правил: ${e.message}",
+                "Ошибка"
+            )
+        }
+    }
+
+    /**
+     * Обновляет списки правил в UI
+     */
+    private fun updateRulesLists() {
+        val settings = service<PluginSettings>()
+
+        // Обновляем глобальные правила
+        globalRulesList.removeAll()
+        globalRules.forEach { rule ->
+            val component = RuleListItem(
+                fileName = rule.fileName,
+                isActive = rule.isActive,
+                isGlobal = true,
+                onDelete = { fileName ->
+                    deleteRule(fileName, true)
+                },
+                onToggleActive = { fileName, isActive ->
+                    val index = globalRules.indexOfFirst { it.fileName == fileName }
+                    if (index >= 0) {
+                        globalRules[index] = globalRules[index].copy(isActive = isActive)
+                        // Сохраняем активность правила
+                        settings.updateRuleActivity(fileName, isActive, true)
+                    }
+                },
+                onOpenFile = { fileName, isGlobal ->
+                    openRuleFileForEditing(fileName, isGlobal)
+                }
+            )
+            globalRulesList.add(component, BorderLayout.NORTH)
+            globalRulesList.add(Box.createVerticalStrut(2))
+        }
+
+        // Обновляем проектные правила
+        projectRulesList.removeAll()
+        projectRules.forEach { rule ->
+            val component = RuleListItem(
+                fileName = rule.fileName,
+                isActive = rule.isActive,
+                isGlobal = false,
+                onDelete = { fileName ->
+                    deleteRule(fileName, false)
+                },
+                onToggleActive = { fileName, isActive ->
+                    val index = projectRules.indexOfFirst { it.fileName == fileName }
+                    if (index >= 0) {
+                        projectRules[index] = projectRules[index].copy(isActive = isActive)
+                        // Сохраняем активность правила
+                        settings.updateRuleActivity(fileName, isActive, false)
+                    }
+                },
+                onOpenFile = { fileName, isGlobal ->
+                    openRuleFileForEditing(fileName, isGlobal)
+                }
+            )
+            projectRulesList.add(component, BorderLayout.NORTH)
+            projectRulesList.add(Box.createVerticalStrut(2))
+        }
+
+        globalRulesList.revalidate()
+        globalRulesList.repaint()
+        projectRulesList.revalidate()
+        projectRulesList.repaint()
+    }
+
+    /**
+     * Показывает диалог для добавления нового правила
+     */
+    private fun showAddRuleDialog(isGlobal: Boolean) {
+        val title = if (isGlobal) "Новое глобальное правило" else "Новое проектное правило"
+        val message = "Введите имя файла правила (без расширения .md):"
+
+        val fileName = Messages.showInputDialog(
+            message,
+            title,
+            Messages.getQuestionIcon(),
+            "",
+            null
+        )?.trim()
+
+        if (fileName.isNullOrBlank()) {
+            return
+        }
+
+        // Проверяем корректность имени файла
+        if (!fileName.matches(Regex("^[a-zA-Z0-9_-]+$"))) {
+            Messages.showErrorDialog(
+                "Имя файла может содержать только буквы, цифры, подчеркивания и дефисы",
+                "Некорректное имя файла"
+            )
+            return
+        }
+
+        // Проверяем, что такого файла еще нет
+        val existingRules = if (isGlobal) globalRules else projectRules
+        if (existingRules.any { it.fileName.equals(fileName, ignoreCase = true) }) {
+            Messages.showErrorDialog(
+                "Правило с таким именем уже существует",
+                "Ошибка"
+            )
+            return
+        }
+
+        // Создаем файл правила
+        try {
+            val rulesService = service<RulesService>()
+            val project = if (!isGlobal) ProjectManager.getInstance().openProjects.firstOrNull() else null
+
+            val ruleFile = if (isGlobal) {
+                val globalDir = rulesService.getGlobalRulesDirectory()
+                if (rulesService.ensureRulesDirectoryExists(true)) {
+                    globalDir.resolve("$fileName.md")
+                } else {
+                    throw Exception("Не удалось создать директорию глобальных правил")
+                }
+            } else {
+                if (project == null) {
+                    throw Exception("Нет открытого проекта")
+                }
+                val projectDir = rulesService.getProjectRulesDirectory(project)
+                    ?: throw Exception("Не удалось определить директорию проектных правил")
+                if (rulesService.ensureRulesDirectoryExists(false, project)) {
+                    projectDir.resolve("$fileName.md")
+                } else {
+                    throw Exception("Не удалось создать директорию проектных правил")
+                }
+            }
+
+            // Создаем файл с шаблоном
+            val templateContent = """# $fileName
+
+## Описание
+*Описание правила*
+
+## Когда применять
+*Условия применения правила*
+
+## Примеры
+*Примеры использования правила*
+"""
+            ruleFile.writeText(templateContent)
+
+            // Добавляем правило в список (по умолчанию активно)
+            val newRule = RuleItem(fileName = fileName, isActive = true, isGlobal = isGlobal)
+            if (isGlobal) {
+                globalRules.add(newRule)
+            } else {
+                projectRules.add(newRule)
+            }
+
+            // Сохраняем активность правила в настройках
+            val settings = service<PluginSettings>()
+            if (isGlobal) {
+                val currentRules = settings.getActiveGlobalRules().toMutableMap()
+                currentRules[fileName] = true
+                settings.setActiveGlobalRules(currentRules)
+            } else {
+                val currentRules = settings.getActiveProjectRules().toMutableMap()
+                currentRules[fileName] = true
+                settings.setActiveProjectRules(currentRules)
+            }
+
+            // Обновляем UI
+            updateRulesLists()
+
+            // Спрашиваем, открыть ли файл для редактирования
+            val shouldOpen = Messages.showYesNoDialog(
+                "Правило '$fileName.md' создано. Открыть для редактирования?",
+                "Правило создано",
+                Messages.getQuestionIcon()
+            ) == Messages.YES
+
+            if (shouldOpen) {
+                openRuleFileForEditing(newRule.fileName, newRule.isGlobal)
+            }
+
+        } catch (e: Exception) {
+            Messages.showErrorDialog(
+                "Ошибка при создании правила: ${e.message}",
+                "Ошибка"
+            )
+        }
+    }
+
+    /**
+     * Удаляет правило
+     */
+    private fun deleteRule(fileName: String, isGlobal: Boolean) {
+        val result = Messages.showYesNoDialog(
+            "Удалить правило '$fileName'?",
+            "Подтверждение удаления",
+            Messages.getQuestionIcon()
+        )
+
+        if (result == Messages.YES) {
+            try {
+                val rulesService = service<RulesService>()
+                val settings = service<PluginSettings>()
+                val project = if (!isGlobal) ProjectManager.getInstance().openProjects.firstOrNull() else null
+
+                val ruleFile = if (isGlobal) {
+                    val globalDir = rulesService.getGlobalRulesDirectory()
+                    globalDir.resolve("$fileName.md")
+                } else {
+                    if (project == null) {
+                        throw Exception("Нет открытого проекта")
+                    }
+                    val projectDir = rulesService.getProjectRulesDirectory(project)
+                        ?: throw Exception("Не удалось определить директорию проектных правил")
+                    projectDir.resolve("$fileName.md")
+                }
+
+                if (ruleFile.exists()) {
+                    ruleFile.delete()
+                }
+
+                // Удаляем из списка
+                if (isGlobal) {
+                    globalRules.removeAll { it.fileName == fileName }
+                } else {
+                    projectRules.removeAll { it.fileName == fileName }
+                }
+
+                // Удаляем активность правила из настроек
+                if (isGlobal) {
+                    val currentRules = settings.getActiveGlobalRules().toMutableMap()
+                    currentRules.remove(fileName)
+                    settings.setActiveGlobalRules(currentRules)
+                } else {
+                    val currentRules = settings.getActiveProjectRules().toMutableMap()
+                    currentRules.remove(fileName)
+                    settings.setActiveProjectRules(currentRules)
+                }
+
+                // Обновляем UI
+                updateRulesLists()
+
+            } catch (e: Exception) {
+                Messages.showErrorDialog(
+                    "Ошибка при удалении правила: ${e.message}",
+                    "Ошибка"
+                )
+            }
+        }
+    }
+
+    /**
+     * Открывает файл правила для редактирования
+     */
+    private fun openRuleFileForEditing(fileName: String, isGlobal: Boolean) {
+        try {
+            // Всегда выбираем первый открытый проект для открытия файла в редакторе
+            val project = ProjectManager.getInstance().openProjects.firstOrNull()
+                ?: throw Exception("Нет открытого проекта для открытия файла")
+
+            val rulesService = service<RulesService>()
+
+            val file = if (isGlobal) {
+                val globalDir = rulesService.getGlobalRulesDirectory()
+                globalDir.resolve("$fileName.md")
+            } else {
+                val projectDir = rulesService.getProjectRulesDirectory(project)
+                    ?: throw Exception("Не удалось определить директорию проектных правил")
+                projectDir.resolve("$fileName.md")
+            }
+
+            if (file.exists()) {
+                // Обновляем локальную VFS и ищем файл
+                val vfs = LocalFileSystem.getInstance()
+                val virtualFile = vfs.refreshAndFindFileByIoFile(file)
+                    ?: run {
+                        vfs.refresh(true)
+                        vfs.refreshAndFindFileByIoFile(file)
+                    }
+
+                if (virtualFile != null) {
+                    FileEditorManager.getInstance(project).openFile(virtualFile, true)
+                } else {
+                    throw Exception("Не удалось найти виртуальный файл для ${file.path}")
+                }
+
+                // Закрываем настройки (аналог нажатия OK)
+                SwingUtilities.invokeLater {
+                    val window = SwingUtilities.getWindowAncestor(panel)
+                    if (window is java.awt.Dialog) {
+                        window.dispose()
+                    }
+                }
+            } else {
+                throw Exception("Файл не найден: ${file.path}")
+            }
+        } catch (e: Exception) {
+            Messages.showErrorDialog(
+                "Ошибка при открытии файла: ${e.message}",
+                "Ошибка"
+            )
         }
     }
 }

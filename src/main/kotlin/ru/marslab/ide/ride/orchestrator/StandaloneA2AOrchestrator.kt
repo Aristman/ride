@@ -1,15 +1,17 @@
 package ru.marslab.ide.ride.orchestrator
 
 import com.intellij.openapi.diagnostic.Logger
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import ru.marslab.ide.ride.agent.a2a.*
 import ru.marslab.ide.ride.agent.tools.*
+import ru.marslab.ide.ride.formatter.ChatOutputFormatter
 import ru.marslab.ide.ride.integration.llm.LLMProvider
 import ru.marslab.ide.ride.model.agent.AgentRequest
 import ru.marslab.ide.ride.model.agent.AgentResponse
 import ru.marslab.ide.ride.model.orchestrator.*
-import ru.marslab.ide.ride.model.schema.ParsedResponse
-import java.util.*
 
 /**
  * Независимый A2A оркестратор, работающий только с A2A агентами
@@ -23,6 +25,7 @@ class StandaloneA2AOrchestrator(
 
     private val logger = Logger.getInstance(StandaloneA2AOrchestrator::class.java)
     private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val chatOutputFormatter = ChatOutputFormatter()
 
     // A2A состояния
     private val activeExecutions = mutableMapOf<String, A2AExecutionContext>()
@@ -520,7 +523,7 @@ class StandaloneA2AOrchestrator(
                 }
 
                 // Выполняем шаг
-                val stepResult = executeStep(step, stepResults, context)
+                val stepResult = executeStep(plan, step, stepResults, context)
 
                 if (stepResult.success) {
                     completedSteps.add(step.id)
@@ -578,8 +581,10 @@ class StandaloneA2AOrchestrator(
                 "totalSteps" to plan.steps.size
             ))
 
+            val formatted = chatOutputFormatter.formatAsHtml(finalContent)
             return AgentResponse.success(
                 content = finalContent,
+                formattedOutput = formatted,
                 metadata = mapOf(
                     "planId" to plan.id,
                     "completedSteps" to completedSteps.size,
@@ -606,6 +611,7 @@ class StandaloneA2AOrchestrator(
      * Выполняет отдельный шаг через A2A агента
      */
     private suspend fun executeStep(
+        plan: ExecutionPlan,
         step: PlanStep,
         stepResults: Map<String, Any>,
         context: A2AExecutionContext
@@ -614,10 +620,25 @@ class StandaloneA2AOrchestrator(
 
         try {
             // Обогащаем входные данными из предыдущих шагов
-            val enrichedInput = enrichStepInput(step, stepResults)
+            val enrichedInputBase = enrichStepInput(step, stepResults)
+
+            // Для REPORT_GENERATOR формируем динамические требования к данным на основе зависимостей шага
+            val enrichedInput = if (step.agentType == AgentType.REPORT_GENERATOR) {
+                val requirements = step.dependencies.mapNotNull { depId ->
+                    val depStep = plan.steps.find { it.id == depId }
+                    depStep?.agentType?.name
+                }.distinct().map { agentTypeName ->
+                    mapOf(
+                        "agent_type" to agentTypeName,
+                        // событие прогресса, которое будем учитывать как завершение сбора
+                        "event_type" to "TOOL_EXECUTION_COMPLETED"
+                    )
+                }
+                if (requirements.isNotEmpty()) enrichedInputBase + ("data_requirements" to requirements) else enrichedInputBase
+            } else enrichedInputBase
 
             // Создаем A2A запрос
-            val request = createA2ARequest(step, enrichedInput)
+            val request = createA2ARequest(step, enrichedInput, plan.id)
 
             // Отправляем запрос агенту
             val response = messageBus.requestResponse(request, a2aConfig.getDefaultTimeoutMs())
@@ -662,7 +683,7 @@ class StandaloneA2AOrchestrator(
     /**
      * Создает A2A запрос для шага
      */
-    private fun createA2ARequest(step: PlanStep, input: Map<String, Any>): AgentMessage.Request {
+    private fun createA2ARequest(step: PlanStep, input: Map<String, Any>, planId: String): AgentMessage.Request {
         val messageType = when (step.agentType) {
             AgentType.PROJECT_SCANNER -> "PROJECT_STRUCTURE_REQUEST"
             AgentType.ARCHITECTURE_ANALYSIS -> "ARCHITECTURE_ANALYSIS_REQUEST"
@@ -689,7 +710,8 @@ class StandaloneA2AOrchestrator(
             metadata = mapOf(
                 "stepId" to step.id,
                 "stepTitle" to step.title,
-                "agentType" to step.agentType.name
+                "agentType" to step.agentType.name,
+                "planId" to planId
             )
         )
     }
@@ -875,7 +897,7 @@ class StandaloneA2AOrchestrator(
                 // Если нет специфичного результата, собираем результаты из всех шагов
                 val results = stepResults.map { (stepId, result) ->
                     val step = plan.steps.find { it.id == stepId }
-                    "${step?.title ?: stepId}: ${result.toString().take(200)}..."
+                    "${step?.title ?: stepId}: $result"
                 }
 
                 "План успешно выполнен. Завершено ${stepResults.size} шагов:\n\n${results.joinToString("\n\n")}"

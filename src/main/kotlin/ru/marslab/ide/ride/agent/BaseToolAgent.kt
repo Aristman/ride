@@ -95,4 +95,31 @@ abstract class BaseToolAgent(
     override fun dispose() {
         logger.info("Disposing $agentType agent")
     }
+
+    /**
+     * Логирует промпты, отправляемые в LLM, с безопасным усечением.
+     */
+    protected fun logUserPrompt(
+        action: String,
+        systemPrompt: String?,
+        userPrompt: String,
+        extraMeta: Map<String, Any> = emptyMap()
+    ) {
+        val maxLen = 2000
+        fun truncate(s: String?): String {
+            if (s == null) return ""
+            return if (s.length > maxLen) s.take(maxLen) + "\n... [truncated ${s.length - maxLen} chars]" else s
+        }
+
+        val sys = truncate(systemPrompt)
+        val usr = truncate(userPrompt)
+        val meta = buildString {
+            append("agentType=${agentType.name}, action=$action")
+            if (extraMeta.isNotEmpty()) {
+                append(", meta=")
+                append(extraMeta.entries.joinToString(prefix = "{", postfix = "}") { "${it.key}=${it.value}" })
+            }
+        }
+        logger.info("[PROMPT] $meta\n[SYSTEM]\n$sys\n[USER]\n$usr")
+    }
 }

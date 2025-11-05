@@ -94,6 +94,39 @@ class ChatService {
     }
 
     /**
+     * Формирует человеко-понятное сообщение об ошибке из AgentResponse,
+     * используя поля error/content/metadata, чтобы избежать пустого "Неизвестная ошибка".
+     */
+    private fun buildUserError(agentResponse: ru.marslab.ide.ride.model.agent.AgentResponse): String {
+        val base = agentResponse.error?.takeIf { it.isNotBlank() }
+        if (base != null) return base
+
+        val meta = agentResponse.metadata
+        val details = sequenceOf(
+            meta["errorDetails"],
+            meta["exception"],
+            meta["status"],
+            meta["reason"]
+        ).mapNotNull { it?.toString()?.takeIf { s -> s.isNotBlank() } }
+            .firstOrNull()
+
+        val sourceHints = listOfNotNull(
+            meta["agentType"]?.toString()?.let { "источник: $it" },
+            meta["stepId"]?.toString()?.let { "шаг: $it" },
+            meta["planId"]?.toString()?.let { "план: $it" }
+        ).joinToString(", ")
+
+        val contentSnippet = agentResponse.content.takeIf { it.isNotBlank() }?.let { it.take(140) }
+
+        return buildString {
+            append("Неизвестная ошибка")
+            if (details != null) append(": ").append(details)
+            if (sourceHints.isNotBlank()) append(" (" + sourceHints + ")")
+            if (contentSnippet != null) append(". Детали: ").append(contentSnippet)
+        }
+    }
+
+    /**
      * Подписка на A2A события и отображение прогресса в чате
      */
     private fun startA2AEventSubscription() {
@@ -167,8 +200,8 @@ class ChatService {
             "TOOL_EXECUTION_COMPLETED" -> "✅ $agentType: выполнено"
             "TOOL_EXECUTION_FAILED" -> "❌ $agentType: ошибка"
             "STEP_STARTED" -> "🔄 $stage"
-            "STEP_COMPLETED" -> "✅ $stage завершен"
-            "STEP_FAILED" -> "❌ $stage: ошибка"
+            "STEP_COMPLETED" -> "✅ $stage"
+            "STEP_FAILED" -> "❌ $stage"
             "ORCHESTRATION_STARTED" -> "🚀 Запуск многошагового выполнения"
             "PLAN_EXECUTION_STARTED" -> "📋 Начало выполнения плана"
             "PLAN_EXECUTION_COMPLETED" -> "🎉 План успешно выполнен"
@@ -721,8 +754,14 @@ class ChatService {
                         // Автосохранение сессии
                         scope.launch { saveCurrentSession() }
                     } else {
-                        logger.warn("Agent returned error: ${agentResponse.error}")
-                        onError(agentResponse.error ?: "Неизвестная ошибка")
+                        // Расширенное логирование причины ошибки
+                        val meta = agentResponse.metadata
+                        val errText = buildUserError(agentResponse)
+                        logger.warn(
+                            "Agent returned error. text='${agentResponse.error}', content='${agentResponse.content.take(200)}', " +
+                                "metadataKeys=${meta.keys}, agentType=${meta["agentType"]}, stepId=${meta["stepId"]}, planId=${meta["planId"]}"
+                        )
+                        onError(errText)
                     }
                 }
 
@@ -894,8 +933,13 @@ class ChatService {
                         getCurrentHistory().addMessage(assistantMsg)
                         onResponse(assistantMsg)
                     } else {
-                        logger.warn("Agent returned error: ${agentResponse.error}")
-                        onError(agentResponse.error ?: "Неизвестная ошибка")
+                        val meta = agentResponse.metadata
+                        val errText = buildUserError(agentResponse)
+                        logger.warn(
+                            "Agent returned error (tools path). text='${agentResponse.error}', content='${agentResponse.content.take(200)}', " +
+                                "metadataKeys=${meta.keys}, agentType=${meta["agentType"]}, stepId=${meta["stepId"]}, planId=${meta["planId"]}"
+                        )
+                        onError(errText)
                     }
                 }
 

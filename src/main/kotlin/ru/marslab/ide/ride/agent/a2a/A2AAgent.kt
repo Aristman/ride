@@ -14,6 +14,7 @@ import ru.marslab.ide.ride.model.agent.AgentResponse
 import ru.marslab.ide.ride.model.agent.AgentSettings
 import ru.marslab.ide.ride.model.orchestrator.AgentType
 import ru.marslab.ide.ride.model.orchestrator.ExecutionContext
+import ru.marslab.ide.ride.service.rules.PromptRulesHelper
 
 /**
  * Расширенный интерфейс агента с поддержкой A2A коммуникации
@@ -123,6 +124,10 @@ abstract class BaseA2AAgent(
     private val a2aSupervisor: Job = SupervisorJob()
     private val a2aScope = CoroutineScope(Dispatchers.Default + a2aSupervisor)
 
+    // Контекст выполнения для доступа к проекту
+    protected var currentExecutionContext: ExecutionContext = ExecutionContext.Empty
+        private set
+
     // Базовая реализация Agent интерфейса
     override val capabilities: AgentCapabilities = AgentCapabilities(
         stateful = false,
@@ -173,6 +178,10 @@ abstract class BaseA2AAgent(
         messageBus: MessageBus,
         context: ExecutionContext
     ) {
+        // Сохраняем контекст для дальнейшего использования
+        currentExecutionContext = context
+        logger.debug("A2A agent $a2aAgentId initialized with context: projectPath=${context.projectPath}")
+
         // Публикуем событие инициализации агента
         try {
             val initEvent = AgentMessage.Event(
@@ -312,5 +321,69 @@ abstract class BaseA2AAgent(
             metadata = metadata
         )
         return messageBus.publish(response)
+    }
+
+    /**
+     * Универсальный метод для применения правил к системному промпту
+     *
+     * Используется всеми A2A агентами для добавления настраиваемых правил
+     * к системным промптам без дублирования логики
+     *
+     * @param basePrompt Базовый системный промпт агента
+     * @return Системный промпт с добавленными правилами (если включены)
+     */
+    protected fun applyRulesToPrompt(basePrompt: String): String {
+        try {
+            // Преобразуем projectPath в Project если возможно
+            val project = currentExecutionContext.projectPath?.let { path ->
+                // Пытаемся получить Project из projectPath
+                runCatching {
+                    val projectManager = com.intellij.openapi.project.ProjectManager.getInstance()
+                    projectManager.openProjects.find { it.basePath == path }
+                }.getOrNull()
+            } ?: run {
+                // Резерв: берём первый открытый проект, чтобы подтянуть проектные правила
+                runCatching {
+                    com.intellij.openapi.project.ProjectManager.getInstance().openProjects.firstOrNull()
+                }.getOrNull()
+            }
+
+            // Используем универсальный помощник для применения правил
+            return PromptRulesHelper.applyRulesToPrompt(basePrompt, project)
+        } catch (e: Exception) {
+            logger.warn("Failed to apply rules to prompt in $a2aAgentId: ${e.message}", e)
+            // В случае ошибки возвращаем базовый промпт
+            return basePrompt
+        }
+    }
+
+    /**
+     * Логирует промпты, отправляемые в LLM, с безопасным усечением.
+     * Использовать во всех наследниках перед вызовом LLM.
+     */
+    protected fun logUserPrompt(
+        action: String,
+        systemPrompt: String?,
+        userPrompt: String,
+        extraMeta: Map<String, Any> = emptyMap()
+    ) {
+        val maxLen = 2000 // ограничение для логов, чтобы не раздувать
+        fun truncate(s: String?): String {
+            if (s == null) return ""
+            return if (s.length > maxLen) s.take(maxLen) + "\n... [truncated ${s.length - maxLen} chars]" else s
+        }
+
+        val sys = truncate(systemPrompt)
+        val usr = truncate(userPrompt)
+
+        val meta = buildString {
+            append("agentId=$a2aAgentId, agentType=${agentType.name}, action=$action")
+            if (extraMeta.isNotEmpty()) {
+                append(", meta=")
+                append(extraMeta.entries.joinToString(prefix = "{", postfix = "}") { "${it.key}=${it.value}" })
+            }
+        }
+
+        logger.info("[PROMPT] $meta\n[SYSTEM]\n$sys\n[USER]\n$usr")
     }
 }
