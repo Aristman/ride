@@ -1,11 +1,12 @@
 package ru.marslab.ide.ride.testing
 
-import java.nio.file.Files
-import java.nio.file.Path
+import ru.marslab.ide.ride.agent.LLMProviderFactory
+import ru.marslab.ide.ride.model.llm.LLMParameters
+import ru.marslab.ide.ride.settings.PluginSettings
+import com.intellij.openapi.components.service
 
 /**
- * Простой генератор JUnit5-тестов для Kotlin.
- * MVP: на основе имени класса и пакета формирует базовый тест-класс с одним пустым тестом.
+ * LLM-агент генерации тестов для Kotlin. Импорты и содержимое полностью формирует LLM.
  */
 class KotlinTestingAgent : LanguageTestingAgent {
     override fun supports(filePath: String): Boolean = filePath.endsWith(".kt", ignoreCase = true)
@@ -16,20 +17,24 @@ class KotlinTestingAgent : LanguageTestingAgent {
         val testClass = className + "Test"
         val fileName = "$testClass.kt"
 
-        val content = buildString {
-            if (!pkg.isNullOrBlank()) appendLine("package $pkg")
-            appendLine()
-            appendLine("import org.junit.jupiter.api.Test")
-            appendLine("import org.junit.jupiter.api.Assertions.*")
-            appendLine()
-            appendLine("class $testClass {")
-            appendLine("    @Test")
-            appendLine("    fun placeholder() {")
-            appendLine("        // TODO: implement")
-            appendLine("        assertTrue(true)")
-            appendLine("    }")
-            appendLine("}")
-        }
+        val provider = LLMProviderFactory.createLLMProvider()
+        val settings = service<PluginSettings>()
+        val params = LLMParameters(
+            temperature = settings.temperature,
+            maxTokens = settings.maxTokens
+        )
+
+        val systemPrompt = buildSystemPrompt()
+        val userMessage = buildUserMessage(pkg, className, sourceContent)
+
+        val content = sanitizeKotlinTest(
+            provider.sendRequest(
+                systemPrompt = systemPrompt,
+                userMessage = userMessage,
+                conversationHistory = emptyList(),
+                parameters = params
+            ).content
+        )
 
         return listOf(
             GeneratedTest(
@@ -39,6 +44,37 @@ class KotlinTestingAgent : LanguageTestingAgent {
                 content = content
             )
         )
+    }
+
+    private fun buildSystemPrompt(): String = """
+        You are an expert Kotlin/JVM test writer.
+        Task: Generate a fully working JUnit 5 test file for the provided Kotlin source.
+
+        STRICT REQUIREMENTS:
+        - Output ONLY the Kotlin test file content (no markdown, no backticks).
+        - Put all REQUIRED imports at the top.
+        - Use package declaration matching the original source package if provided.
+        - Use JUnit 5 API (org.junit.jupiter.*) and meaningful assertions.
+        - The file must compile and run with standard Gradle/Maven JUnit 5 setup.
+    """.trimIndent()
+
+    private fun buildUserMessage(pkg: String?, className: String, sourceContent: String): String = buildString {
+        if (!pkg.isNullOrBlank()) appendLine("// PACKAGE_NAME: $pkg")
+        appendLine("// SOURCE_CLASS_NAME: $className")
+        appendLine("Source Kotlin file content:")
+        appendLine("""
+            ---BEGIN SOURCE---
+            $sourceContent
+            ---END SOURCE---
+        """.trimIndent())
+        appendLine()
+        appendLine("Generate the test file content now:")
+    }
+
+    private fun sanitizeKotlinTest(raw: String): String {
+        var s = raw.trim()
+        s = s.removePrefix("```kotlin").removePrefix("```").removeSuffix("```").trim()
+        return s
     }
 
     private fun extractPackage(text: String): String? {
