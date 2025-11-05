@@ -41,7 +41,8 @@ class FileSystemTestPersister(
                 StandardOpenOption.TRUNCATE_EXISTING,
                 StandardOpenOption.WRITE
             )
-            saved += file.toList()
+            // ВАЖНО: добавляем сам Path, а не его сегменты (Path реализует Iterable<Path>)
+            saved.add(file)
         }
         return saved
     }
@@ -64,15 +65,19 @@ class FileSystemTestPersister(
             val pkgName = readDartPackageName(root)
             val saved = mutableListOf<Path>()
             for (t in tests) {
+                // Удаляем любые import-строки из ответа LLM и оставляем только тело тестов
+                val body = t.content
+                    .lines()
+                    .filterNot { it.trimStart().startsWith("import ") }
+                    .joinToString("\n")
+
                 val content = buildString {
-                    if (!t.content.contains("package:test/test.dart")) {
-                        appendLine("import 'package:test/test.dart';")
-                    }
+                    appendLine("import 'package:test/test.dart';")
                     if (pkgName != null) {
                         appendLine("import 'package:${pkgName}/${sub}';")
                     }
                     appendLine()
-                    append(t.content)
+                    append(body.trimStart())
                 }
                 Files.writeString(
                     targetFile,
@@ -81,7 +86,8 @@ class FileSystemTestPersister(
                     StandardOpenOption.TRUNCATE_EXISTING,
                     StandardOpenOption.WRITE
                 )
-                saved += targetFile.toList()
+                // ВАЖНО: добавляем сам Path, а не его сегменты
+                saved.add(targetFile)
             }
             saved
         } else {
@@ -94,7 +100,7 @@ class FileSystemTestPersister(
         return try {
             if (Files.exists(pubspec)) {
                 val text = Files.readString(pubspec)
-                Regex("^name:\s*([A-Za-z0-9_\-]+)", RegexOption.MULTILINE).find(text)?.groupValues?.getOrNull(1)
+                Regex("^name:\\s*([A-Za-z0-9_\\-]+)", RegexOption.MULTILINE).find(text)?.groupValues?.getOrNull(1)
             } else null
         } catch (_: Throwable) { null }
     }
