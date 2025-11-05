@@ -28,7 +28,6 @@ class TerminalBasedTestRunner(
             BuildSystem.MAVEN -> mavenCommand(scope)
             BuildSystem.DART -> {
                 // Для Flutter-монореп fallback на android Gradle только если wrapper существует.
-                // Иначе всегда запускаем dart test.
                 val androidWrapperExists = if (isWindows())
                     structure.root.resolve("android/gradlew.bat").toFile().exists()
                 else
@@ -37,7 +36,7 @@ class TerminalBasedTestRunner(
                 if (androidWrapperExists && !scope.isNullOrBlank() && scope.matches(Regex("[A-Za-z0-9_.]+"))) {
                     androidGradleCommand(scope)
                 } else {
-                    dartCommand(scope)
+                    dartOrFlutterCommand(structure.root, scope)
                 }
             }
             else -> gradleCommand(scope) // дефолт
@@ -91,11 +90,22 @@ class TerminalBasedTestRunner(
 
     private fun dartCommand(scope: String?): String {
         val base = "dart test"
-        // Если передан путь к конкретному тестовому файлу, запускаем его
         if (!scope.isNullOrBlank() && scope.endsWith("_test.dart", ignoreCase = true)) {
             return "$base $scope"
         }
         return base
+    }
+
+    private fun flutterCommand(scope: String?): String {
+        val base = "flutter test"
+        if (!scope.isNullOrBlank() && scope.endsWith("_test.dart", ignoreCase = true)) {
+            return "$base $scope"
+        }
+        return base
+    }
+
+    private fun dartOrFlutterCommand(root: java.nio.file.Path, scope: String?): String {
+        return if (isFlutterProject(root)) flutterCommand(scope) else dartCommand(scope)
     }
 
     /**
@@ -108,6 +118,19 @@ class TerminalBasedTestRunner(
     }
 
     private fun isWindows(): Boolean = System.getProperty("os.name").lowercase().contains("win")
+
+    private fun isFlutterProject(root: java.nio.file.Path): Boolean {
+        val pubspec = root.resolve("pubspec.yaml")
+        return try {
+            if (java.nio.file.Files.exists(pubspec)) {
+                val text = java.nio.file.Files.readString(pubspec)
+                // Признаки Flutter-проекта: секция flutter:, зависимость flutter или dev_dependency flutter_test
+                Regex("(?m)^flutter:\\s*$").containsMatchIn(text) ||
+                Regex("(?m)^\\s*dependencies:\\s*[\\s\\S]*?^\\s*flutter:\\s*\\n?\\s*sdk:\\s*flutter", RegexOption.MULTILINE).containsMatchIn(text) ||
+                Regex("(?m)^\\s*dev_dependencies:\\s*[\\s\\S]*?^\\s*flutter_test:\\s*\\n?\\s*sdk:\\s*flutter", RegexOption.MULTILINE).containsMatchIn(text)
+            } else false
+        } catch (_: Throwable) { false }
+    }
 
     private data class Parsed(val passed: Int, val failed: Int, val skipped: Int)
 
