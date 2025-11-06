@@ -2,6 +2,7 @@ package ru.marslab.ide.ride.agent.a2a
 
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.PersistentStateComponent
+import com.intellij.openapi.components.State
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.Storage
 import com.intellij.openapi.diagnostic.Logger
@@ -23,7 +24,7 @@ import java.util.concurrent.ConcurrentHashMap
  * - Автоматическую инициализацию и очистку
  */
 @Service(Service.Level.PROJECT)
-@Storage("A2AAgentRegistry.xml")
+@State(name = "A2AAgentRegistry", storages = [Storage("A2AAgentRegistry.xml")])
 class A2AAgentRegistry : PersistentStateComponent<A2AAgentRegistry.State> {
 
     data class State(
