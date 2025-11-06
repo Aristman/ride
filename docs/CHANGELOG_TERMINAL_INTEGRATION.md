@@ -174,10 +174,10 @@ Your branch is up to date with 'origin/main'.
 
 ### 📚 Ссылки
 
-- [Terminal Agent - Использование](docs/features/terminal-agent.md)
-- [Terminal Agent - Интеграция](docs/features/terminal-agent-integration.md)
-- [Команда /terminal](docs/features/terminal-command-usage.md)
-- [Краткое резюме](docs/TERMINAL_AGENT_SUMMARY.md)
+- [Terminal Agent - Использование](features/terminal-agent.md)
+- [Terminal Agent - Интеграция](features/terminal-agent-integration.md)
+- [Команда /terminal](features/terminal-command-usage.md)
+- [Краткое резюме](TERMINAL_AGENT_SUMMARY.md)
 
 ---
 

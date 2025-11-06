@@ -42,6 +42,8 @@ internal object ChatHtmlResources {
                 </head>
                 <body>
                     <div id="messages"></div>
+                    <!-- Overlay root for popovers/menus (e.g., @-picker). Input поле уже существует в основном UI и доступно по селектору #ride-chat-input -->
+                    <div id="ride-overlay-root"></div>
                     <script>${js}</script>
                 </body>
             </html>
