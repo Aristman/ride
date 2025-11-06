@@ -55,6 +55,8 @@ class SettingsConfigurable : Configurable {
     private lateinit var modelSelectorComboBox: ComboBox<String>
     private lateinit var hfModelSelectorComboBox: ComboBox<String>
     private lateinit var yandexModelSelectorComboBox: ComboBox<String>
+    private lateinit var ollamaModelSelectorComboBox: ComboBox<String>
+    private lateinit var ollamaBaseUrlField: JBTextField
     private lateinit var showProviderNameCheck: JBCheckBox
     private lateinit var enableUncertaintyAnalysisCheck: JBCheckBox
     private lateinit var maxContextTokensField: JBTextField
@@ -144,10 +146,13 @@ class SettingsConfigurable : Configurable {
         val expectedTop = when (settings.selectedProvider) {
             PluginSettings.PROVIDER_YANDEX -> PluginSettings.PROVIDER_YANDEX
             PluginSettings.PROVIDER_HUGGINGFACE -> PluginSettings.PROVIDER_HUGGINGFACE
+            PluginSettings.PROVIDER_OLLAMA -> PluginSettings.PROVIDER_OLLAMA
             else -> PluginSettings.PROVIDER_YANDEX
         }
         val selectedHFModel = (hfModelSelectorComboBox.selectedItem as? String)?.trim().orEmpty()
         val selectedYandexModel = (yandexModelSelectorComboBox.selectedItem as? String)?.trim().orEmpty()
+        val selectedOllamaModel = (ollamaModelSelectorComboBox.selectedItem as? String)?.trim().orEmpty()
+        val enteredOllamaBaseUrl = ollamaBaseUrlField.text.trim()
 
         return apiKeyModified ||
                 hfTokenModified ||
@@ -182,6 +187,8 @@ class SettingsConfigurable : Configurable {
                 selectedTop != expectedTop ||
                 selectedHFModel != settings.huggingFaceModelId ||
                 selectedYandexModel != settings.yandexModelId ||
+                selectedOllamaModel != settings.ollamaModelId ||
+                enteredOllamaBaseUrl != settings.ollamaBaseUrl ||
                 showProviderNameCheck.isSelected != settings.showProviderName ||
                 enableUncertaintyAnalysisCheck.isSelected != settings.enableUncertaintyAnalysis ||
                 maxContextTokensField.text != settings.maxContextTokens.toString() ||
@@ -210,6 +217,13 @@ class SettingsConfigurable : Configurable {
                 settings.selectedProvider = PluginSettings.PROVIDER_HUGGINGFACE
                 settings.huggingFaceModelId =
                     hfModelSelectorComboBox.selectedItem as? String ?: PluginSettingsState.DEFAULT_HUGGINGFACE_MODEL_ID
+            }
+
+            PluginSettings.PROVIDER_OLLAMA -> {
+                settings.selectedProvider = PluginSettings.PROVIDER_OLLAMA
+                settings.ollamaModelId =
+                    ollamaModelSelectorComboBox.selectedItem as? String ?: PluginSettingsState.DEFAULT_OLLAMA_MODEL_ID
+                settings.ollamaBaseUrl = ollamaBaseUrlField.text.trim()
             }
 
             else -> {
@@ -360,11 +374,14 @@ class SettingsConfigurable : Configurable {
         modelSelectorComboBox.selectedItem = when (settings.selectedProvider) {
             PluginSettings.PROVIDER_YANDEX -> PluginSettings.PROVIDER_YANDEX
             PluginSettings.PROVIDER_HUGGINGFACE -> PluginSettings.PROVIDER_HUGGINGFACE
+            PluginSettings.PROVIDER_OLLAMA -> PluginSettings.PROVIDER_OLLAMA
             else -> PluginSettings.PROVIDER_YANDEX
         }
         // Устанавливаем модели
         hfModelSelectorComboBox.selectedItem = settings.huggingFaceModelId
         yandexModelSelectorComboBox.selectedItem = settings.yandexModelId
+        ollamaModelSelectorComboBox.selectedItem = settings.ollamaModelId
+        ollamaBaseUrlField.text = settings.ollamaBaseUrl
         temperatureField.text = settings.temperature.toString()
         maxTokensField.text = settings.maxTokens.toString()
         chatFontSizeField.text = settings.chatFontSize.toString()
@@ -419,6 +436,7 @@ class SettingsConfigurable : Configurable {
         val topEntries: List<String> = buildList {
             add(PluginSettings.PROVIDER_YANDEX)
             add(PluginSettings.PROVIDER_HUGGINGFACE)
+            add(PluginSettings.PROVIDER_OLLAMA)
         }
         modelSelectorComboBox = ComboBox(topEntries.toTypedArray()).apply {
             renderer = object : DefaultListCellRenderer() {
@@ -468,6 +486,24 @@ class SettingsConfigurable : Configurable {
                     val component = super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus)
                     val key = value as? String
                     text = PluginSettings.AVAILABLE_YANDEX_MODELS[key] ?: key.orEmpty()
+                    return component
+                }
+            }
+        }
+
+        // Комбобокс для выбора моделей Ollama
+        ollamaModelSelectorComboBox = ComboBox(PluginSettings.AVAILABLE_OLLAMA_MODELS.keys.toTypedArray()).apply {
+            renderer = object : DefaultListCellRenderer() {
+                override fun getListCellRendererComponent(
+                    list: javax.swing.JList<*>,
+                    value: Any?,
+                    index: Int,
+                    isSelected: Boolean,
+                    cellHasFocus: Boolean
+                ): java.awt.Component {
+                    val component = super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus)
+                    val key = value as? String
+                    text = PluginSettings.AVAILABLE_OLLAMA_MODELS[key] ?: key.orEmpty()
                     return component
                 }
             }
@@ -532,12 +568,39 @@ class SettingsConfigurable : Configurable {
             }
         }
 
+        // Подпанель Ollama
+        val ollamaSubPanel: DialogPanel = panel {
+            row("Base URL:") {
+                ollamaBaseUrlField = JBTextField()
+                cell(ollamaBaseUrlField)
+                    .columns(COLUMNS_LARGE)
+                    .comment("URL Ollama сервера (например: http://localhost:11434)")
+            }
+            row("Model:") {
+                cell(ollamaModelSelectorComboBox)
+                    .align(Align.FILL)
+                    .resizableColumn()
+                    .comment("Выберите модель Ollama для чата")
+            }
+            row {
+                comment(
+                    """
+                    Подсказка: убедитесь что Ollama запущен и модель установлена.
+                    Например: ollama pull llama3:8b
+                    Модели для эмбеддингов используются автоматически в RAG системе.
+                """.trimIndent()
+                )
+            }
+        }
+
         // CardLayout со вложенными подпанелями
         val cardPanel = JPanel(CardLayout())
         val CARD_YANDEX = PluginSettings.PROVIDER_YANDEX
         val CARD_HF = PluginSettings.PROVIDER_HUGGINGFACE
+        val CARD_OLLAMA = PluginSettings.PROVIDER_OLLAMA
         cardPanel.add(yandexSubPanel, CARD_YANDEX)
         cardPanel.add(hfSubPanel, CARD_HF)
+        cardPanel.add(ollamaSubPanel, CARD_OLLAMA)
 
         fun updateCard() {
             val layout = cardPanel.layout as CardLayout
@@ -549,6 +612,10 @@ class SettingsConfigurable : Configurable {
 
                 PluginSettings.PROVIDER_HUGGINGFACE -> {
                     layout.show(cardPanel, CARD_HF)
+                }
+
+                PluginSettings.PROVIDER_OLLAMA -> {
+                    layout.show(cardPanel, CARD_OLLAMA)
                 }
 
                 else -> {

@@ -39,3 +39,36 @@ enum class OllamaEmbeddingModel(
         fun getDefault(): OllamaEmbeddingModel = NOMIC_EMBED_TEXT
     }
 }
+
+/**
+ * Доступные модели Ollama для генерации текста
+ */
+enum class OllamaChatModel(
+    val modelId: String,
+    val displayName: String
+) {
+    LLAMA3_8B(
+        modelId = "llama3:8b",
+        displayName = "Llama 3 8B"
+    ),
+    LLAMA3_8B_INSTRUCT(
+        modelId = "llama3:8b-instruct",
+        displayName = "Llama 3 8B Instruct"
+    ),
+    MISTRAL_7B(
+        modelId = "mistral:7b",
+        displayName = "Mistral 7B"
+    ),
+    QWEN_7B(
+        modelId = "qwen:7b",
+        displayName = "Qwen 7B"
+    );
+
+    companion object {
+        fun fromModelId(modelId: String): OllamaChatModel? {
+            return entries.find { it.modelId == modelId }
+        }
+
+        fun getDefault(): OllamaChatModel = LLAMA3_8B
+    }
+}

@@ -21,8 +21,8 @@ import java.time.LocalDateTime
  * Реализация агента для анализа кода
  */
 class CodeAnalysisAgentImpl(
-    private val project: Project,
-    private var llmProvider: LLMProvider
+    project: Project,
+    llmProvider: LLMProvider
 ) : CodeAnalysisAgent {
 
     private val projectScanner = ProjectScanner(project)
