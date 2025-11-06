@@ -456,70 +456,28 @@ class EnhancedChatAgent(
     ): AgentResponse {
         logger.info("Resuming plan $planId with user input")
 
-        val steps = mutableListOf<String>()
-
-        // Получаем baseOrchestrator из A2A
-        val baseOrchestrator = if (orchestrator is ru.marslab.ide.ride.orchestrator.EnhancedAgentOrchestratorA2A) {
-            val field = orchestrator::class.java.getDeclaredField("baseOrchestrator")
-            field.isAccessible = true
-            @Suppress("UNCHECKED_CAST")
-            field.get(orchestrator) as? ru.marslab.ide.ride.orchestrator.EnhancedAgentOrchestrator
-        } else {
-            orchestrator as? ru.marslab.ide.ride.orchestrator.EnhancedAgentOrchestrator
-        }
-
-        val result = baseOrchestrator?.resumePlanWithCallback(planId, userInput) { step ->
-            val stepInfo = when (step) {
-                is ru.marslab.ide.ride.agent.OrchestratorStep.PlanningComplete ->
-                    "📋 Планирование: ${step.content}"
-
-                is ru.marslab.ide.ride.agent.OrchestratorStep.TaskComplete ->
-                    "🔍 Задача ${step.taskId}: ${step.taskTitle}"
-
-                is ru.marslab.ide.ride.agent.OrchestratorStep.AllComplete ->
-                    "✅ Все задачи выполнены: ${step.content}"
-
-                is ru.marslab.ide.ride.agent.OrchestratorStep.Error ->
-                    "❌ Ошибка: ${step.error}"
-            }
-            steps.add(stepInfo)
-        } ?: run {
-            logger.warn("Base orchestrator not found, using fallback")
-            baseChatAgent.ask(AgentRequest(
-                request = userInput,
-                context = ru.marslab.ide.ride.model.chat.ChatContext(
-                    project = context.project,
-                    history = context.history,
-                    selectedText = context.selectedText,
-                    additionalContext = context.additionalContext + mapOf(
-                        "chat_history" to context.history.map { it.content },
-                        "selected_text" to (context.selectedText ?: ""),
-                        "current_file" to (context.currentFile?.path ?: "")
-                    )
+        // StandaloneA2AOrchestrator не поддерживает resumeWithCallback, используем baseChatAgent
+        logger.info("Using fallback to baseChatAgent for plan resumption")
+        val result = baseChatAgent.ask(AgentRequest(
+            request = userInput,
+            context = ru.marslab.ide.ride.model.chat.ChatContext(
+                project = context.project,
+                history = context.history,
+                selectedText = context.selectedText,
+                additionalContext = context.additionalContext + mapOf(
+                    "chat_history" to context.history.map { it.content },
+                    "selected_text" to (context.selectedText ?: ""),
+                    "current_file" to (context.currentFile?.path ?: "")
                 )
-            ))
-        }
-
-        // Формируем итоговый ответ
-        val content = buildString {
-            appendLine("## ✅ План возобновлён")
-            appendLine()
-            if (steps.isNotEmpty()) {
-                appendLine("### Выполненные шаги:")
-                steps.forEach { step ->
-                    appendLine("- $step")
-                }
-                appendLine()
-            }
-            appendLine(result.content)
-        }
+            )
+        ))
 
         return result.copy(
-            content = content,
             metadata = result.metadata + mapOf(
                 "plan_id" to planId,
                 "resumed" to true,
-                "user_input" to userInput
+                "user_input" to userInput,
+                "fallback_used" to true
             )
         )
     }

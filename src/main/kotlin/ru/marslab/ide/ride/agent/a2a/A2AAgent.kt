@@ -1,5 +1,6 @@
 package ru.marslab.ide.ride.agent.a2a
 
+import com.intellij.openapi.diagnostic.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -120,7 +121,7 @@ abstract class BaseA2AAgent(
     override val maxConcurrentMessages: Int = 10
 ) : A2AAgent {
 
-    protected val logger = com.intellij.openapi.diagnostic.Logger.getInstance(javaClass)
+    protected val logger = Logger.getInstance(javaClass)
     private val a2aSupervisor: Job = SupervisorJob()
     private val a2aScope = CoroutineScope(Dispatchers.Default + a2aSupervisor)
 
