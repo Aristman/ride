@@ -377,7 +377,7 @@ class EnhancedChatAgent(
         // Выполняем план через A2A оркестратор с передачей плана
         val executionSuccess = try {
             // Используем A2A метод processRequestWithPlan
-            val executionContext = ru.marslab.ide.ride.model.orchestrator.ExecutionContext(
+            val executionContext = ExecutionContext(
                 additionalContext = mapOf(
                     "uncertaintyResult" to uncertaintyResult,
                     "optimizedPrompt" to optimizedPrompt,

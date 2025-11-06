@@ -525,16 +525,16 @@ class StandaloneA2AOrchestrator(
                 // Выполняем шаг
                 val stepResult = executeStep(plan, step, stepResults, context)
 
-                if (stepResult.success) {
+                stepResult.onSuccess { result ->
                     completedSteps.add(step.id)
-                    stepResult.result?.let { stepResults[step.id] = it }
+                    stepResults[step.id] = result
 
                     // Callback о завершении шага
                     onStepComplete(A2AStepResult(
                         stepId = step.id,
                         stepTitle = step.title,
                         success = true,
-                        result = stepResult.result,
+                        result = result,
                         error = null
                     ))
 
@@ -544,29 +544,28 @@ class StandaloneA2AOrchestrator(
                         "stepTitle" to step.title,
                         "planId" to plan.id
                     ))
-
-                } else {
+                }.onFailure { exception ->
                     // Шаг завершился с ошибкой
                     onStepComplete(A2AStepResult(
                         stepId = step.id,
                         stepTitle = step.title,
                         success = false,
                         result = null,
-                        error = stepResult.error
+                        error = exception.message
                     ))
 
                     // Публикуем событие ошибки шага
                     publishEvent("STEP_FAILED", mapOf<String, Any>(
                         "stepId" to step.id,
                         "stepTitle" to step.title,
-                        "error" to (stepResult.error ?: "Unknown error"),
+                        "error" to (exception.message ?: "Unknown error"),
                         "planId" to plan.id
                     ))
 
                     // Прерываем выполнение плана при ошибке
                     return AgentResponse.error(
-                        error = stepResult.error ?: "Unknown error",
-                        content = "Ошибка выполнения шага '${step.title}': ${stepResult.error}"
+                        error = exception.message ?: "Unknown error",
+                        content = "Ошибка выполнения шага '${step.title}': ${exception.message}"
                     )
                 }
             }
@@ -615,10 +614,10 @@ class StandaloneA2AOrchestrator(
         step: PlanStep,
         stepResults: Map<String, Any>,
         context: A2AExecutionContext
-    ): A2AStepExecutionResult {
+    ): Result<Any> {
         logger.info("Executing step: ${step.title}")
 
-        try {
+        return try {
             // Обогащаем входные данными из предыдущих шагов
             val enrichedInputBase = enrichStepInput(step, stepResults)
 
@@ -630,7 +629,6 @@ class StandaloneA2AOrchestrator(
                 }.distinct().map { agentTypeName ->
                     mapOf(
                         "agent_type" to agentTypeName,
-                        // событие прогресса, которое будем учитывать как завершение сбора
                         "event_type" to "TOOL_EXECUTION_COMPLETED"
                     )
                 }
@@ -645,38 +643,22 @@ class StandaloneA2AOrchestrator(
 
             if (response.success) {
                 val result = extractStepResult(response)
-                return A2AStepExecutionResult(
-                    success = true,
-                    result = result,
-                    error = null
-                )
+                Result.success(result)
             } else {
-                return A2AStepExecutionResult(
-                    success = false,
-                    result = null,
-                    error = response.error ?: "Unknown error"
-                )
+                Result.failure(Exception(response.error ?: "Unknown error"))
             }
 
         } catch (e: OutOfMemoryError) {
             logger.error("Out of memory error executing step: ${step.title}", e)
-            // Fallback для проблем с памятью - возвращаем простое сообщение
-            return A2AStepExecutionResult(
-                success = true,
-                result = mapOf(
-                    "summary" to "Анализ проекта выполнен с ограничениями",
-                    "fallback" to true,
-                    "error_type" to "out_of_memory"
-                ),
-                error = null
-            )
+            // Fallback для проблем с памятью
+            Result.success(mapOf(
+                "summary" to "Анализ проекта выполнен с ограничениями",
+                "fallback" to true,
+                "error_type" to "out_of_memory"
+            ))
         } catch (e: Exception) {
             logger.error("Error executing step: ${step.title}", e)
-            return A2AStepExecutionResult(
-                success = false,
-                result = null,
-                error = e.message ?: "Execution error"
-            )
+            Result.failure(e)
         }
     }
 
@@ -995,10 +977,5 @@ class StandaloneA2AOrchestrator(
         val error: String?
     )
 
-    data class A2AStepExecutionResult(
-        val success: Boolean,
-        val result: Any?,
-        val error: String?
-    )
-
+    
   }

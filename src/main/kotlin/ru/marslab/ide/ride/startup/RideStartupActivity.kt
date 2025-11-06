@@ -24,21 +24,21 @@ class RideStartupActivity : ProjectActivity {
         ApplicationManager.getApplication().executeOnPooledThread {
             try {
                 val serverManager = MCPServerManager.getInstance()
-                
-                // Только проверяем, работает ли внешний сервер
-                if (serverManager.isServerRunning()) {
-                    logger.info("External MCP Server is already running")
+                val started = serverManager.ensureServerRunning()
+
+                if (started) {
+                    logger.info("MCP Server started successfully")
                     showNotification(
-                        "Ride Plugin Ready",
-                        "MCP server detected - file operations available",
+                        "MCP Server Started",
+                        "File system operations are now available",
                         NotificationType.INFORMATION
                     )
                 } else {
-                    logger.info("Ride plugin loaded for project: ${project.basePath}")
+                    logger.warn("Failed to start MCP Server")
                     showNotification(
-                        "Ride Plugin Ready", 
-                        "File operations will be available when needed",
-                        NotificationType.INFORMATION
+                        "MCP Server Failed",
+                        "Some features may not work. Check logs for details.",
+                        NotificationType.WARNING
                     )
                 }
             } catch (e: Exception) {

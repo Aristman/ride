@@ -17,6 +17,10 @@ repositories {
     }
 }
 
+java {
+    toolchain.languageVersion.set(JavaLanguageVersion.of(21))
+}
+
 // Configure IntelliJ Platform Gradle Plugin
 // Read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin.html
 dependencies {
@@ -136,10 +140,16 @@ tasks {
 
     // Add system properties to workaround Gradle JVM compatibility issue
     runIde {
+        // Указываем конкретную Java для запуска IDE через переменную окружения
+        environment["JAVA_HOME"] = "/usr/lib/jvm/java-21-openjdk-amd64"
+
         jvmArgs("-Didea.ignore.disabled.plugins=true",
-                "-Didea.plugins.disabled.plugins=com.intellij.gradle,org.jetbrains.plugins.gradle",
+                "-Didea.plugins.disabled.plugins=com.intellij.gradle,org.jetbrains.plugins.gradle,gradle-java-extensions,gradle-jvm-compatibility",
                 "-Dgradle-jvm-compatibility.disabled=true",
                 "-Dcom.intellij.gradle.jvm.support.skip=true",
+                "-Dgradle.skip.gc=true",
+                "-Didea.gradle.ignore.invalid.repositories=true",
+                "-Dgradle.ignore.test.failures=true",
                 // Включаем JCEF без sandbox (Linux): устраняет Embedded Browser is suspended
                 "-Dide.browser.jcef.sandbox.enable=false",
                 // Необязательный флаг: отключить GPU для стабильности (иногда помогает на Linux)
@@ -149,15 +159,31 @@ tasks {
 
         // Гарантированно отключаем bundled Gradle plugin через sandbox-конфиг
         doFirst {
-            val configDir = File(buildDir, "idea-sandbox/config").apply { mkdirs() }
-            val optionsDir = File(configDir, "options").apply { mkdirs() }
-            // Перечень плагинов для отключения, по одному в строке (возможные ID)
+            val configDir = File(layout.buildDirectory.get().asFile, "idea-sandbox/config")
+            configDir.mkdirs()
+            val optionsDir = File(configDir, "options")
+            optionsDir.mkdirs()
+            val pluginsDir = File(configDir, "plugins")
+            pluginsDir.mkdirs()
+
+            // Расширенный перечень плагинов для отключения
             val entries = listOf(
                 "com.intellij.gradle",
-                "org.jetbrains.plugins.gradle"
+                "org.jetbrains.plugins.gradle",
+                "Gradle",
+                "gradle-java-extensions",
+                "gradle-jvm-compatibility",
+                "org.jetbrains.plugins.gradle-java-extensions",
+                "org.jetbrains.plugins.gradle-jvm-compatibility"
             )
+
+            // Создаем файл отключенных плагинов в нескольких местах
             File(configDir, "disabled_plugins.txt").writeText(entries.joinToString("\n", postfix = "\n"))
             File(optionsDir, "disabled_plugins.txt").writeText(entries.joinToString("\n", postfix = "\n"))
+            File(pluginsDir, "disabled_plugins.txt").writeText(entries.joinToString("\n", postfix = "\n"))
+
+            // Также создаем пустой файл плагинов чтобы гарантированно отключить
+            File(pluginsDir, "available.txt").writeText("")
         }
     }
 
@@ -189,10 +215,12 @@ tasks {
             "-Dconsole.encoding=UTF-8"
         )
 
-        // Отключаем Gradle plugin в песочнице (совместимость)
+        // Дополнительное отключение Gradle plugin в песочнице (совместимость)
         doFirst {
-            val configDir = File(buildDir, "idea-sandbox/config").apply { mkdirs() }
-            val optionsDir = File(configDir, "options").apply { mkdirs() }
+            val configDir = File(layout.buildDirectory.get().asFile, "idea-sandbox/config")
+            configDir.mkdirs()
+            val optionsDir = File(configDir, "options")
+            optionsDir.mkdirs()
             val entries = listOf(
                 "com.intellij.gradle",
                 "org.jetbrains.plugins.gradle"
