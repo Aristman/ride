@@ -31,6 +31,10 @@ class A2ALLMReviewToolAgent(
 
     constructor() : this(createDefaultProvider())
 
+    init {
+        logger.info("A2ALLMReviewToolAgent initialized with LLM provider: ${llmProvider::class.simpleName}")
+    }
+
     private companion object {
         private fun createDefaultProvider(): LLMProvider {
             // Здесь должна быть реализация создания LLM провайдера по умолчанию
@@ -43,7 +47,10 @@ class A2ALLMReviewToolAgent(
         request: AgentMessage.Request,
         messageBus: MessageBus
     ): AgentMessage.Response? {
+        logger.info("A2ALLMReviewToolAgent received request: ${request.messageType}, ID: ${request.id}")
+
         if (request.messageType != "LLM_REVIEW_REQUEST") {
+            logger.warn("Unsupported message type: ${request.messageType}")
             return createErrorResponse(request.id, "Unsupported message type: ${request.messageType}")
         }
 
@@ -52,6 +59,15 @@ class A2ALLMReviewToolAgent(
         val language = (data["language"] as? String).orEmpty()
         val focusAreas = data["focus_areas"] as? List<String> ?: listOf("general")
         val includeSuggestions = data["include_suggestions"] as? Boolean ?: true
+        // Получаем путь проекта из контекста или из текущего открытого проекта
+        val projectPath = currentExecutionContext.projectPath
+            ?: runCatching {
+                com.intellij.openapi.project.ProjectManager.getInstance().openProjects.firstOrNull()?.basePath
+                    ?: System.getProperty("user.dir")
+            }.getOrNull()
+            ?: ""
+
+        logger.info("Processing LLM review request - Language: $language, Code length: ${code.length}, Project path: $projectPath")
 
         return try {
             publishEvent(
@@ -65,9 +81,42 @@ class A2ALLMReviewToolAgent(
                 )
             )
 
-            val review = withContext(Dispatchers.Default) {
-                performCodeReview(code, language, focusAreas, includeSuggestions)
+            logger.info("Requesting project data from scanner...")
+            // Запрашиваем данные у сканера проекта через A2A шину
+            val projectData = requestProjectData(messageBus, projectPath)
+            logger.info("Received project data: ${projectData.keys}, size: ${projectData.size}")
+
+            // Если код не предоставлен в запросе, получаем его из файлов проекта
+            val finalCode = if (code.isBlank()) {
+                logger.info("No code provided in request, fetching from project files...")
+                val codeFiles = requestCodeFiles(messageBus, projectPath)
+                if (codeFiles.isNotEmpty()) {
+                    val fileContents = readCodeFiles(codeFiles)
+                    val combinedCode = fileContents.entries.joinToString("\n\n") { (filePath, content) ->
+                        val fileName = filePath.substringAfterLast('/')
+                        "// File: $fileName\n$content"
+                    }
+                    logger.info("Combined code from ${fileContents.size} files, total length: ${combinedCode.length}")
+                    combinedCode
+                } else {
+                    logger.warn("No code files found in project")
+                    ""
+                }
+            } else {
+                logger.info("Using provided code for review")
+                code
             }
+
+            if (finalCode.isBlank()) {
+                logger.warn("No code available for review")
+                return createErrorResponse(request.id, "No code available for review")
+            }
+
+            logger.info("Starting code review with LLM...")
+            val review = withContext(Dispatchers.Default) {
+                performCodeReview(finalCode, language, focusAreas, includeSuggestions, projectData)
+            }
+            logger.info("LLM review completed successfully")
 
             publishEvent(
                 messageBus = messageBus,
@@ -77,8 +126,17 @@ class A2ALLMReviewToolAgent(
                     agentId = a2aAgentId,
                     requestId = request.id,
                     timestamp = System.currentTimeMillis(),
-                    result = "Code review completed"
+                    result = "Code review completed with project context"
                 )
+            )
+
+            val metadata = mutableMapOf(
+                "agent" to "LLM_REVIEW",
+                "language" to language,
+                "focus_areas" to focusAreas,
+                "review_timestamp" to System.currentTimeMillis(),
+                "used_project_context" to projectData.isNotEmpty(),
+                "code_source" to if (code.isBlank()) "auto_fetched_files" else "provided_in_request"
             )
 
             AgentMessage.Response(
@@ -89,12 +147,15 @@ class A2ALLMReviewToolAgent(
                     type = "LLM_REVIEW_RESULT",
                     data = mapOf(
                         "review" to review,
-                        "metadata" to mapOf(
-                            "agent" to "LLM_REVIEW",
-                            "language" to language,
-                            "focus_areas" to focusAreas,
-                            "review_timestamp" to System.currentTimeMillis()
-                        )
+                        "project_context" to projectData,
+                        "code_analysis_info" to mapOf(
+                            "code_length" to finalCode.length,
+                            "files_analyzed" to if (code.isBlank()) {
+                                (projectData["files"] as? List<*>)?.size ?: 0
+                            } else 1,
+                            "auto_fetched" to code.isBlank()
+                        ),
+                        "metadata" to metadata
                     )
                 )
             )
@@ -127,13 +188,177 @@ class A2ALLMReviewToolAgent(
         )
     }
 
+    /**
+     * Запрашивает данные о проекте у A2A сканера проекта
+     */
+    private suspend fun requestProjectData(messageBus: MessageBus, projectPath: String): Map<String, Any> {
+        return try {
+            logger.info("Requesting project data from scanner for path: $projectPath")
+
+            val scannerRequest = AgentMessage.Request(
+                senderId = a2aAgentId,
+                targetId = null, // Широковещательный запрос - любой сканер может ответить
+                messageType = "PROJECT_STRUCTURE_REQUEST",
+                payload = MessagePayload.CustomPayload(
+                    type = "PROJECT_STRUCTURE_REQUEST",
+                    data = mapOf(
+                        "project_path" to projectPath,
+                        "include_metrics" to true,
+                        "include_file_list" to true
+                    )
+                ),
+                timeoutMs = 10000 // 10 секунд таймаут
+            )
+
+            val response = messageBus.requestResponse(scannerRequest, 10000)
+
+            return if (response.success) {
+                when (val payload = response.payload) {
+                    is MessagePayload.ProjectStructurePayload -> {
+                        mapOf(
+                            "project_type" to payload.projectType,
+                            "total_files" to payload.totalFiles,
+                            "files" to payload.files.take(50), // Ограничиваем для контекста
+                            "directories" to payload.directories.take(20),
+                            "scanned_at" to payload.scannedAt,
+                            "files_by_extension" to payload.files
+                                .groupingBy { it.substringAfterLast('.') }
+                                .eachCount()
+                                .mapValues { (_, count) -> count }
+                        )
+                    }
+                    is MessagePayload.CustomPayload -> {
+                        payload.data + ("source" to "A2A_SCANNER")
+                    }
+                    else -> {
+                        logger.warn("Unexpected payload type from scanner: ${payload::class.simpleName}")
+                        emptyMap()
+                    }
+                }
+            } else {
+                logger.warn("Scanner returned error: ${response.error}")
+                emptyMap()
+            }
+        } catch (e: Exception) {
+            logger.error("Failed to request project data from A2A scanner", e)
+            emptyMap()
+        }
+    }
+
+    /**
+     * Запрашивает файлы с кодом у A2A сканера проекта
+     */
+    private suspend fun requestCodeFiles(messageBus: MessageBus, projectPath: String): List<String> {
+        return try {
+            logger.info("Requesting code files from scanner for path: '$projectPath'")
+
+            val requestData = mapOf(
+                "project_path" to projectPath,
+                "file_extensions" to listOf("kt", "java", "js", "ts", "py", "go", "rs", "cpp", "c", "h"),
+                "max_files" to 20
+            )
+            logger.debug("File request data: $requestData")
+
+            val fileRequest = AgentMessage.Request(
+                senderId = a2aAgentId,
+                targetId = null,
+                messageType = "FILE_DATA_REQUEST",
+                payload = MessagePayload.CustomPayload(
+                    type = "FILE_DATA_REQUEST",
+                    data = requestData
+                ),
+                timeoutMs = 15000 // 15 секунд таймаут
+            )
+
+            val response = messageBus.requestResponse(fileRequest, 15000)
+
+            if (response.success) {
+                logger.debug("File scanner response successful, payload type: ${response.payload::class.simpleName}")
+                when (val payload = response.payload) {
+                    is MessagePayload.CustomPayload -> {
+                        val files = payload.data["files"] as? List<String> ?: emptyList()
+                        val scanPath = payload.data["scan_path"] as? String
+                        val fileTypes = payload.data["file_types"] as? Map<String, Int>
+                        logger.info("Received ${files.size} code files from scanner, scan_path: '$scanPath', file_types: $fileTypes")
+                        if (files.isNotEmpty()) {
+                            logger.debug("First few files: ${files.take(3)}")
+                        }
+                        files
+                    }
+                    is MessagePayload.FilesScannedPayload -> {
+                        logger.info("Received ${payload.files.size} code files from scanner, scan_path: '${payload.scanPath}'")
+                        if (payload.files.isNotEmpty()) {
+                            logger.debug("First few files: ${payload.files.take(3)}")
+                        }
+                        payload.files
+                    }
+                    else -> {
+                        logger.warn("Unexpected payload type from file scanner: ${payload::class.simpleName}")
+                        emptyList()
+                    }
+                }
+            } else {
+                logger.warn("File scanner returned error: ${response.error}")
+                emptyList()
+            }
+        } catch (e: Exception) {
+            logger.error("Failed to request code files from A2A scanner", e)
+            emptyList()
+        }
+    }
+
+    /**
+     * Читает содержимое файлов для анализа
+     */
+    private suspend fun readCodeFiles(filePathStrings: List<String>): Map<String, String> {
+        return try {
+            logger.info("Reading content of ${filePathStrings.size} files")
+
+            val fileContents = mutableMapOf<String, String>()
+            val maxSize = 10000 // Ограничение размера на файл
+            var totalSize = 0
+            val maxTotal = 50000 // Общее ограничение
+
+            for (filePath in filePathStrings) {
+                if (totalSize >= maxTotal) {
+                    logger.warn("Reached total size limit, stopping file reading")
+                    break
+                }
+
+                try {
+                    val file = java.io.File(filePath)
+                    if (file.exists() && file.canRead()) {
+                        val content = file.readText().take(maxSize)
+                        fileContents[filePath] = content
+                        totalSize += content.length
+                        logger.debug("Read file: $filePath (${content.length} chars)")
+                    } else {
+                        logger.warn("Cannot read file: $filePath")
+                    }
+                } catch (e: Exception) {
+                    logger.warn("Error reading file $filePath: ${e.message}")
+                }
+            }
+
+            logger.info("Successfully read ${fileContents.size} files, total size: $totalSize chars")
+            fileContents
+        } catch (e: Exception) {
+            logger.error("Failed to read code files", e)
+            emptyMap()
+        }
+    }
+
     private suspend fun performCodeReview(
         code: String,
         language: String,
         focusAreas: List<String>,
-        includeSuggestions: Boolean
+        includeSuggestions: Boolean,
+        projectData: Map<String, Any> = emptyMap()
     ): Map<String, Any> {
+        logger.info("performCodeReview called - Code length: ${code.length}, Language: $language")
+
         if (code.isBlank()) {
+            logger.warn("Empty code provided for review")
             return mapOf(
                 "error" to "No code provided for review",
                 "summary" to mapOf(
@@ -143,20 +368,22 @@ class A2ALLMReviewToolAgent(
             )
         }
 
-        val systemPrompt = buildSystemPrompt(language, focusAreas, includeSuggestions)
-        val userPrompt = buildUserPrompt(code, language, focusAreas)
-
-        val agentRequest = AgentRequest(
-            request = userPrompt,
-            context = createEmptyChatContext(),
-            parameters = LLMParameters.PRECISE.copy(
-                temperature = 0.1,
-                maxTokens = 2000
-            )
-        )
-
         try {
+            val systemPrompt = buildSystemPrompt(language, focusAreas, includeSuggestions, projectData)
+            val userPrompt = buildUserPrompt(code, language, focusAreas, projectData)
+            logger.info("Built prompts - System prompt length: ${systemPrompt.length}, User prompt length: ${userPrompt.length}")
+
+            val agentRequest = AgentRequest(
+                request = userPrompt,
+                context = createEmptyChatContext(),
+                parameters = LLMParameters.PRECISE.copy(
+                    temperature = 0.1,
+                    maxTokens = 2000
+                )
+            )
+
             val systemPromptWithRules = applyRulesToPrompt(systemPrompt)
+            logger.info("Applied rules to prompt, preparing to call LLM provider...")
 
             // Логируем промпт до отправки в LLM
             logUserPrompt(
@@ -170,14 +397,18 @@ class A2ALLMReviewToolAgent(
                 )
             )
 
+            logger.info("Calling LLM provider...")
             val response = llmProvider.sendRequest(
                 systemPrompt = systemPromptWithRules,
                 userMessage = userPrompt,
                 conversationHistory = emptyList(),
                 parameters = agentRequest.parameters
             )
+            logger.info("LLM provider responded successfully - Response length: ${response.content.length}")
 
-            return parseReviewResponse(response.content, code, language, focusAreas)
+            val result = parseReviewResponse(response.content, code, language, focusAreas, projectData)
+            logger.info("Parsed LLM response successfully")
+            return result
         } catch (e: Exception) {
             logger.error("Error calling LLM for code review", e)
             return mapOf(
@@ -190,7 +421,7 @@ class A2ALLMReviewToolAgent(
         }
     }
 
-    private fun buildSystemPrompt(language: String, focusAreas: List<String>, includeSuggestions: Boolean): String {
+    private fun buildSystemPrompt(language: String, focusAreas: List<String>, includeSuggestions: Boolean, projectData: Map<String, Any> = emptyMap()): String {
         val focusText = when {
             focusAreas.contains("security") -> " Особое внимание уделяй уязвимостям безопасности и лучшим практикам."
             focusAreas.contains("performance") -> " Сфокусируйся на оптимизации производительности и возможных узких местах."
@@ -205,7 +436,26 @@ class A2ALLMReviewToolAgent(
             " Определи проблемы, но не давай детальных рекомендаций."
         }
 
-        return """Ты — эксперт по ревью кода на языке $language.
+        // Добавляем контекст проекта в промпт
+        val projectContextText = if (projectData.isNotEmpty()) {
+            val projectType = projectData["project_type"] as? String ?: "unknown"
+            val totalFiles = projectData["total_files"] as? Int ?: 0
+            val filesByExt = projectData["files_by_extension"] as? Map<String, Int> ?: emptyMap()
+
+            """
+            |
+            |КОНТЕКСТ ПРОЕКТА:
+            |- Тип проекта: $projectType
+            |- Всего файлов: $totalFiles
+            |- Распределение файлов: ${filesByExt.entries.joinToString(", ") { "${it.key} (${it.value})" }}
+            |
+            |Учитывай контекст проекта при анализе кода. Адаптируй рекомендации под стек технологий проекта.
+            """.trimMargin()
+        } else {
+            ""
+        }
+
+        return """Ты — эксперт по ревью кода на языке $language.$projectContextText
 
 Твоя задача — проанализировать предоставленный код и выявить:
 1. Уязвимости безопасности и потенциальные риски
@@ -242,7 +492,7 @@ $focusText$suggestionText
 Дай конструктивную и обучающую обратную связь."""
     }
 
-    private fun buildUserPrompt(code: String, language: String, focusAreas: List<String>): String {
+    private fun buildUserPrompt(code: String, language: String, focusAreas: List<String>, projectData: Map<String, Any> = emptyMap()): String {
         return """Проведи ревью следующего кода на $language:
 
 ```$language
@@ -258,7 +508,8 @@ $code
         response: String,
         originalCode: String,
         language: String,
-        focusAreas: List<String>
+        focusAreas: List<String>,
+        projectData: Map<String, Any> = emptyMap()
     ): Map<String, Any> {
         return try {
             // Попытка извлечь JSON из ответа
@@ -276,11 +527,12 @@ $code
                     "recommendations" to extractRecommendations(response),
                     "raw_response" to response,
                     "code_analysis" to analyzeCodeStructure(originalCode, language),
-                    "focus_areas" to focusAreas
+                    "focus_areas" to focusAreas,
+                    "project_context_used" to projectData.isNotEmpty()
                 )
             } else {
                 // Текстовый ответ - создаем структуру на основе анализа текста
-                createReviewFromText(response, originalCode, language, focusAreas)
+                createReviewFromText(response, originalCode, language, focusAreas, projectData)
             }
         } catch (e: Exception) {
             logger.warn("Failed to parse LLM response, returning as text", e)
@@ -298,7 +550,8 @@ $code
                 "recommendations" to listOf("Consider addressing the feedback provided in the review"),
                 "raw_response" to response,
                 "code_analysis" to analyzeCodeStructure(originalCode, language),
-                "focus_areas" to focusAreas
+                "focus_areas" to focusAreas,
+                "project_context_used" to projectData.isNotEmpty()
             )
         }
     }
@@ -391,7 +644,8 @@ $code
         response: String,
         originalCode: String,
         language: String,
-        focusAreas: List<String>
+        focusAreas: List<String>,
+        projectData: Map<String, Any> = emptyMap()
     ): Map<String, Any> {
         val lines = originalCode.lines()
         val codeAnalysis = analyzeCodeStructure(originalCode, language)
@@ -410,7 +664,8 @@ $code
             "recommendations" to extractRecommendations(response),
             "raw_response" to response,
             "code_analysis" to codeAnalysis,
-            "focus_areas" to focusAreas
+            "focus_areas" to focusAreas,
+            "project_context_used" to projectData.isNotEmpty()
         )
     }
 
