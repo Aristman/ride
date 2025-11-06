@@ -31,6 +31,7 @@ class JvmTestFrameworkDetector(
                     }
                     tasks.test { useJUnitPlatform() }
                 """.trimIndent()
+
                 BuildSystem.MAVEN -> """
                     <!-- pom.xml -->
                     <dependency>
@@ -52,8 +53,10 @@ class JvmTestFrameworkDetector(
                       </plugins>
                     </build>
                 """.trimIndent()
+
                 else -> defaultNote()
             }
+
             TestFramework.KOTEST -> when (bs) {
                 BuildSystem.GRADLE -> """
                     // build.gradle.kts
@@ -63,6 +66,7 @@ class JvmTestFrameworkDetector(
                     }
                     tasks.test { useJUnitPlatform() }
                 """.trimIndent()
+
                 BuildSystem.MAVEN -> """
                     <!-- pom.xml -->
                     <dependency>
@@ -78,8 +82,10 @@ class JvmTestFrameworkDetector(
                       <scope>test</scope>
                     </dependency>
                 """.trimIndent()
+
                 else -> defaultNote()
             }
+
             TestFramework.TESTNG -> when (bs) {
                 BuildSystem.GRADLE -> """
                     // build.gradle.kts
@@ -88,6 +94,7 @@ class JvmTestFrameworkDetector(
                     }
                     tasks.test { useTestNG() }
                 """.trimIndent()
+
                 BuildSystem.MAVEN -> """
                     <!-- pom.xml -->
                     <dependency>
@@ -97,8 +104,10 @@ class JvmTestFrameworkDetector(
                       <scope>test</scope>
                     </dependency>
                 """.trimIndent()
+
                 else -> defaultNote()
             }
+
             TestFramework.NONE -> defaultNote()
         }
     }

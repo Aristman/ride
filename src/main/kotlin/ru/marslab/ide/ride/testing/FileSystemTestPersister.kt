@@ -21,8 +21,10 @@ class FileSystemTestPersister(
             // Создадим дефолт при отсутствии каталога тестов
             structure.buildSystem == BuildSystem.GRADLE || structure.buildSystem == BuildSystem.MAVEN ->
                 structure.root.resolve("src/test/kotlin")
+
             structure.buildSystem == BuildSystem.DART ->
                 structure.root.resolve("test")
+
             else -> structure.root.resolve("src/test/kotlin")
         }
 
@@ -57,7 +59,10 @@ class FileSystemTestPersister(
             if (!Files.exists(testRoot)) Files.createDirectories(testRoot)
 
             val normalized = sourceRelativePath.trimStart('/')
-            val sub = if (normalized.startsWith("lib/")) normalized.removePrefix("lib/") else normalized.substringAfterLast('/')
+            val sub =
+                if (normalized.startsWith("lib/")) normalized.removePrefix("lib/") else normalized.substringAfterLast(
+                    '/'
+                )
             val testRel = sub.removeSuffix(".dart") + "_test.dart"
             val targetFile = testRoot.resolve(testRel)
             if (!Files.exists(targetFile.parent)) Files.createDirectories(targetFile.parent)

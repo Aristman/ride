@@ -1,9 +1,13 @@
-package ru.marslab.ide.ride.testing
+package ru.marslab.ide.ride.agent.testing
 
 import com.intellij.openapi.components.service
 import ru.marslab.ide.ride.agent.LLMProviderFactory
 import ru.marslab.ide.ride.model.llm.LLMParameters
 import ru.marslab.ide.ride.settings.PluginSettings
+import ru.marslab.ide.ride.testing.GeneratedTest
+import ru.marslab.ide.ride.agent.testing.LanguageTestingAgent
+import java.nio.file.Files
+import java.nio.file.Path
 
 /**
  * LLM-агент генерации тестов для Dart.
@@ -99,7 +103,7 @@ class DartTestingAgent : LanguageTestingAgent {
         /**
          * Обогащает исходник метаданными для LLM: PACKAGE_NAME / LIB_RELATIVE_PATH / PACKAGE_IMPORT
          */
-        fun enrichWithDartMetadata(root: java.nio.file.Path, filePath: String, source: String): String {
+        fun enrichWithDartMetadata(root: Path, filePath: String, source: String): String {
             val libRelative = filePath.removePrefix("./").let { if (it.startsWith("lib/")) it.removePrefix("lib/") else it }
             val pkgName = readDartPackageName(root)
             val importPath = if (pkgName != null) "package:${pkgName}/${libRelative}" else libRelative
@@ -119,20 +123,20 @@ class DartTestingAgent : LanguageTestingAgent {
             }
         }
 
-        private fun readDartPackageName(root: java.nio.file.Path): String? {
+        private fun readDartPackageName(root: Path): String? {
             val pubspec = root.resolve("pubspec.yaml")
             return try {
-                if (java.nio.file.Files.exists(pubspec)) {
-                    val text = java.nio.file.Files.readString(pubspec)
+                if (Files.exists(pubspec)) {
+                    val text = Files.readString(pubspec)
                     Regex("^name:\\s*([A-Za-z0-9_\\-]+)", RegexOption.MULTILINE).find(text)?.groupValues?.getOrNull(1)
                 } else null
             } catch (_: Throwable) { null }
         }
 
-        private fun readPubspec(root: java.nio.file.Path): String? {
+        private fun readPubspec(root: Path): String? {
             val pubspec = root.resolve("pubspec.yaml")
             return try {
-                if (java.nio.file.Files.exists(pubspec)) java.nio.file.Files.readString(pubspec) else null
+                if (Files.exists(pubspec)) Files.readString(pubspec) else null
             } catch (_: Throwable) { null }
         }
     }

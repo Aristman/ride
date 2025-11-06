@@ -1,9 +1,10 @@
-package ru.marslab.ide.ride.testing
+package ru.marslab.ide.ride.agent.testing
 
+import com.intellij.openapi.components.service
 import ru.marslab.ide.ride.agent.LLMProviderFactory
 import ru.marslab.ide.ride.model.llm.LLMParameters
 import ru.marslab.ide.ride.settings.PluginSettings
-import com.intellij.openapi.components.service
+import ru.marslab.ide.ride.testing.GeneratedTest
 
 /**
  * LLM-агент генерации тестов для Java. Импорты и содержимое полностью формирует LLM.

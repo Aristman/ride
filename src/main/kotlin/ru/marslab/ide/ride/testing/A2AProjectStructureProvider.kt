@@ -1,9 +1,9 @@
 package ru.marslab.ide.ride.testing
 
 import com.intellij.openapi.project.ProjectManager
+import java.io.File
 import java.nio.file.Path
 import java.nio.file.Paths
-import java.io.File
 
 /**
  * Базовая реализация ProjectStructureProvider.

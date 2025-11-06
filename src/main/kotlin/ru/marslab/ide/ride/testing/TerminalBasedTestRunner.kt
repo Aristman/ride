@@ -39,6 +39,7 @@ class TerminalBasedTestRunner(
                     dartOrFlutterCommand(structure.root, scope)
                 }
             }
+
             else -> gradleCommand(scope) // дефолт
         }
 
@@ -126,10 +127,18 @@ class TerminalBasedTestRunner(
                 val text = java.nio.file.Files.readString(pubspec)
                 // Признаки Flutter-проекта: секция flutter:, зависимость flutter или dev_dependency flutter_test
                 Regex("(?m)^flutter:\\s*$").containsMatchIn(text) ||
-                Regex("(?m)^\\s*dependencies:\\s*[\\s\\S]*?^\\s*flutter:\\s*\\n?\\s*sdk:\\s*flutter", RegexOption.MULTILINE).containsMatchIn(text) ||
-                Regex("(?m)^\\s*dev_dependencies:\\s*[\\s\\S]*?^\\s*flutter_test:\\s*\\n?\\s*sdk:\\s*flutter", RegexOption.MULTILINE).containsMatchIn(text)
+                        Regex(
+                            "(?m)^\\s*dependencies:\\s*[\\s\\S]*?^\\s*flutter:\\s*\\n?\\s*sdk:\\s*flutter",
+                            RegexOption.MULTILINE
+                        ).containsMatchIn(text) ||
+                        Regex(
+                            "(?m)^\\s*dev_dependencies:\\s*[\\s\\S]*?^\\s*flutter_test:\\s*\\n?\\s*sdk:\\s*flutter",
+                            RegexOption.MULTILINE
+                        ).containsMatchIn(text)
             } else false
-        } catch (_: Throwable) { false }
+        } catch (_: Throwable) {
+            false
+        }
     }
 
     private data class Parsed(val passed: Int, val failed: Int, val skipped: Int)
