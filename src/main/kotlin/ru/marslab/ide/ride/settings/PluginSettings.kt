@@ -8,6 +8,9 @@ import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.State
 import com.intellij.openapi.components.Storage
 import ru.marslab.ide.ride.integration.llm.impl.HuggingFaceModel
+import ru.marslab.ide.ride.integration.llm.impl.OllamaEmbeddingModel
+import ru.marslab.ide.ride.integration.llm.impl.OllamaChatModel
+import ru.marslab.ide.ride.integration.llm.impl.OllamaConfig
 
 /**
  * Сервис для хранения настроек плагина
@@ -168,6 +171,24 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
         get() = state.huggingFaceModelId
         set(value) {
             state.huggingFaceModelId = normalizeHuggingFaceModelId(value)
+        }
+
+    /**
+     * Текущий идентификатор модели Ollama для генерации
+     */
+    var ollamaModelId: String
+        get() = state.ollamaModelId
+        set(value) {
+            state.ollamaModelId = normalizeOllamaModelId(value)
+        }
+
+    /**
+     * URL Ollama сервера
+     */
+    var ollamaBaseUrl: String
+        get() = state.ollamaBaseUrl
+        set(value) {
+            state.ollamaBaseUrl = value.trim().takeIf { it.isNotBlank() } ?: OllamaConfig().baseUrl
         }
 
     /**
@@ -408,6 +429,7 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
         return when (selectedProvider) {
             PROVIDER_YANDEX -> getApiKey().isNotBlank() && folderId.isNotBlank()
             PROVIDER_HUGGINGFACE -> getHuggingFaceToken().isNotBlank()
+            PROVIDER_OLLAMA -> ollamaBaseUrl.isNotBlank()
             else -> false
         }
     }
@@ -437,7 +459,8 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
         private val COLOR_REGEX = Regex("^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
         val AVAILABLE_PROVIDERS: LinkedHashMap<String, String> = linkedMapOf(
             PROVIDER_YANDEX to "Yandex",
-            PROVIDER_HUGGINGFACE to "HuggingFace"
+            PROVIDER_HUGGINGFACE to "HuggingFace",
+            PROVIDER_OLLAMA to "Ollama (Local)"
         )
         val AVAILABLE_YANDEX_MODELS: LinkedHashMap<String, String> = linkedMapOf(
             "yandexgpt-lite" to "YandexGPT Lite",
@@ -449,8 +472,17 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
             HuggingFaceModel.DEEPSEEK_TERMINUS.modelId to HuggingFaceModel.DEEPSEEK_TERMINUS.displayName,
             HuggingFaceModel.OPENBUDDY_LLAMA3.modelId to HuggingFaceModel.OPENBUDDY_LLAMA3.displayName
         )
+
+        val AVAILABLE_OLLAMA_MODELS: LinkedHashMap<String, String> = linkedMapOf(
+            OllamaChatModel.LLAMA3_8B.modelId to OllamaChatModel.LLAMA3_8B.displayName,
+            OllamaChatModel.LLAMA3_8B_INSTRUCT.modelId to OllamaChatModel.LLAMA3_8B_INSTRUCT.displayName,
+            OllamaChatModel.MISTRAL_7B.modelId to OllamaChatModel.MISTRAL_7B.displayName,
+            OllamaChatModel.QWEN_7B.modelId to OllamaChatModel.QWEN_7B.displayName
+        )
+
         const val PROVIDER_YANDEX = "YandexGPT"
         const val PROVIDER_HUGGINGFACE = "HuggingFace"
+        const val PROVIDER_OLLAMA = "Ollama"
     }
 
     private fun ensureDefaults() {
@@ -467,6 +499,8 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
             normalizeColor(state.chatUserBorderColor, PluginSettingsState.DEFAULT_USER_BORDER_COLOR)
         state.yandexModelId = normalizeModelId(state.yandexModelId)
         state.huggingFaceModelId = normalizeHuggingFaceModelId(state.huggingFaceModelId)
+        state.ollamaModelId = normalizeOllamaModelId(state.ollamaModelId)
+        state.ollamaBaseUrl = state.ollamaBaseUrl.takeIf { it.isNotBlank() } ?: OllamaConfig().baseUrl
         if (!AVAILABLE_PROVIDERS.containsKey(state.selectedProvider)) {
             state.selectedProvider = PluginSettingsState.DEFAULT_PROVIDER
         }
@@ -515,5 +549,10 @@ class PluginSettings : PersistentStateComponent<PluginSettingsState> {
     private fun normalizeHuggingFaceModelId(value: String?): String {
         val normalized = value?.trim().orEmpty()
         return if (AVAILABLE_HUGGINGFACE_MODELS.containsKey(normalized)) normalized else PluginSettingsState.DEFAULT_HUGGINGFACE_MODEL_ID
+    }
+
+    private fun normalizeOllamaModelId(value: String?): String {
+        val normalized = value?.trim().orEmpty()
+        return if (AVAILABLE_OLLAMA_MODELS.containsKey(normalized)) normalized else PluginSettingsState.DEFAULT_OLLAMA_MODEL_ID
     }
 }

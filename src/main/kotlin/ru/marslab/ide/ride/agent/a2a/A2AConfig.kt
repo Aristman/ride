@@ -2,6 +2,7 @@ package ru.marslab.ide.ride.agent.a2a
 
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.PersistentStateComponent
+import com.intellij.openapi.components.State
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.Storage
 
@@ -12,7 +13,7 @@ import com.intellij.openapi.components.Storage
  * что обеспечивает безопасную миграцию и откат при необходимости
  */
 @Service(Service.Level.PROJECT)
-@Storage("A2AConfig.xml")
+@State(name = "A2AConfig", storages = [Storage("A2AConfig.xml")])
 class A2AConfig : PersistentStateComponent<A2AConfig.State> {
 
     data class State(

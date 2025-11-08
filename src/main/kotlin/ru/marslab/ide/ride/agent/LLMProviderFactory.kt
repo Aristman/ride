@@ -34,6 +34,12 @@ object LLMProviderFactory {
                 createHuggingFaceProvider(hfToken, modelId)
             }
 
+            PluginSettings.PROVIDER_OLLAMA -> {
+                val baseUrl = settings.ollamaBaseUrl
+                val modelId = settings.ollamaModelId
+                createOllamaProvider(baseUrl, modelId)
+            }
+
             else -> {
                 // По умолчанию Yandex
                 val apiKey = settings.getApiKey()
@@ -59,6 +65,10 @@ object LLMProviderFactory {
             PluginSettings.PROVIDER_HUGGINGFACE -> {
                 val hfToken = settings.getHuggingFaceToken()
                 createHuggingFaceProvider(hfToken, modelId)
+            }
+            PluginSettings.PROVIDER_OLLAMA -> {
+                val baseUrl = settings.ollamaBaseUrl
+                createOllamaProvider(baseUrl, modelId)
             }
             else -> {
                 // По умолчанию Yandex
@@ -102,6 +112,22 @@ object LLMProviderFactory {
             model = modelId
         )
         return HuggingFaceProvider(config)
+    }
+
+    /**
+     * Создает провайдер Ollama с указанными настройками
+     *
+     * @param baseUrl URL Ollama сервера
+     * @param modelId Идентификатор модели Ollama
+     * @return Настроенный OllamaProvider
+     */
+    fun createOllamaProvider(baseUrl: String, modelId: String): LLMProvider {
+        val config = OllamaConfig(
+            baseUrl = baseUrl,
+            model = modelId,
+            timeoutSeconds = 60
+        )
+        return OllamaProvider(config)
     }
 
     /**

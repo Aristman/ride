@@ -71,7 +71,7 @@ class RequestPlanner {
         val requiresUserInput = determineUserInputRequirement(taskType, uncertainty)
 
         val executionContext = ExecutionContext(
-            projectPath = context.project?.basePath,
+            projectPath = context.project.basePath,
             selectedFiles = extractSelectedFiles(context),
             selectedDirectories = emptyList(),
             gitBranch = null, // Можно добавить в будущем
@@ -112,8 +112,9 @@ class RequestPlanner {
             requestLower.contains("баг") || requestLower.contains("ошибк") -> TaskType.BUG_FIX
             requestLower.contains("рефактор") -> TaskType.REFACTORING
             requestLower.contains("создай") || requestLower.contains("напиши") || requestLower.contains("генерируй") ||
-            requestLower.contains("create") || requestLower.contains("write") || requestLower.contains("generate") ||
-            requestLower.contains("сделай") || requestLower.contains("implement") -> TaskType.CODE_GENERATION
+                    requestLower.contains("create") || requestLower.contains("write") || requestLower.contains("generate") ||
+                    requestLower.contains("сделай") || requestLower.contains("implement") -> TaskType.CODE_GENERATION
+
             requestLower.contains("оптимиз") || requestLower.contains("производительность") -> TaskType.PERFORMANCE_OPTIMIZATION
             requestLower.contains("тест") -> TaskType.TESTING
             requestLower.contains("документ") -> TaskType.DOCUMENTATION
@@ -122,8 +123,9 @@ class RequestPlanner {
             requestLower.contains("отчет") || requestLower.contains("report") -> TaskType.REPORT_GENERATION
             // Проверяем файловые операции в первую очередь
             requestLower.contains("открой") || requestLower.contains("покаж") || requestLower.contains("прочитай") ||
-            requestLower.contains("open") || requestLower.contains("view") || requestLower.contains("read") ||
-            (requestLower.contains("файл") && (requestLower.contains("path") || requestLower.contains("путь"))) -> TaskType.SIMPLE_QUERY
+                    requestLower.contains("open") || requestLower.contains("view") || requestLower.contains("read") ||
+                    (requestLower.contains("файл") && (requestLower.contains("path") || requestLower.contains("путь"))) -> TaskType.SIMPLE_QUERY
+
             uncertainty.complexity == ComplexityLevel.LOW -> TaskType.SIMPLE_QUERY
             else -> TaskType.COMPLEX_MULTI_STEP
         }
@@ -132,7 +134,11 @@ class RequestPlanner {
     /**
      * Определяет необходимые инструменты для задачи
      */
-    private fun determineRequiredTools(taskType: TaskType, uncertainty: UncertaintyResult, request: String): Set<AgentType> {
+    private fun determineRequiredTools(
+        taskType: TaskType,
+        uncertainty: UncertaintyResult,
+        request: String
+    ): Set<AgentType> {
         val tools = mutableSetOf<AgentType>()
         val requestLower = request.lowercase()
 
@@ -156,6 +162,7 @@ class RequestPlanner {
                 tools.add(AgentType.LLM_REVIEW)
                 tools.add(AgentType.CODE_FIXER)
             }
+
             TaskType.CODE_GENERATION -> {
                 tools.add(AgentType.CODE_GENERATOR)
                 tools.add(AgentType.LLM_REVIEW)
@@ -194,7 +201,8 @@ class RequestPlanner {
                 // Проверяем, не является ли это файловой операцией
                 if (requestLower.contains("открой") || requestLower.contains("покаж") || requestLower.contains("прочитай") ||
                     requestLower.contains("open") || requestLower.contains("view") || requestLower.contains("read") ||
-                    (requestLower.contains("файл") && (requestLower.contains("path") || requestLower.contains("путь")))) {
+                    (requestLower.contains("файл") && (requestLower.contains("path") || requestLower.contains("путь")))
+                ) {
                     tools.add(AgentType.FILE_OPERATIONS)
                 }
                 // Для остальных простых запросов инструменты не нужны
@@ -216,7 +224,7 @@ class RequestPlanner {
         return tools
     }
 
-    
+
     /**
      * Оценивает количество шагов для задачи
      */
@@ -234,7 +242,6 @@ class RequestPlanner {
             TaskType.ARCHITECTURE_ANALYSIS -> 4
             TaskType.MIGRATION -> 4
             TaskType.COMPLEX_MULTI_STEP -> 5
-            else -> 2
         }
 
         // Корректируем на основе сложности
@@ -308,7 +315,8 @@ class RequestPlanner {
                 steps.add(qualityStep)
                 createdStepIds["quality_check"] = qualityStep.id
 
-                val bugFixStep = createBugFixStep(requestAnalysis, stepIdCounter, setOf(bugDetectionStep.id, qualityStep.id))
+                val bugFixStep =
+                    createBugFixStep(requestAnalysis, stepIdCounter, setOf(bugDetectionStep.id, qualityStep.id))
                 steps.add(bugFixStep)
                 createdStepIds["bug_fix"] = bugFixStep.id
             }
@@ -321,7 +329,8 @@ class RequestPlanner {
 
                 // Затем генерация кода с использованием контекста
                 val codeGenerationDependencies = setOf(projectScanStep.id)
-                val codeGenerationStep = createCodeGenerationStep(requestAnalysis, stepIdCounter, codeGenerationDependencies)
+                val codeGenerationStep =
+                    createCodeGenerationStep(requestAnalysis, stepIdCounter, codeGenerationDependencies)
                 steps.add(codeGenerationStep)
                 createdStepIds["code_generation"] = codeGenerationStep.id
 
@@ -341,7 +350,8 @@ class RequestPlanner {
                 steps.add(refactorStep)
                 createdStepIds["refactor"] = refactorStep.id
 
-                val validationStep = createValidationStep(requestAnalysis, stepIdCounter, setOf(qualityStep.id, refactorStep.id))
+                val validationStep =
+                    createValidationStep(requestAnalysis, stepIdCounter, setOf(qualityStep.id, refactorStep.id))
                 steps.add(validationStep)
                 createdStepIds["validation"] = validationStep.id
             }
@@ -355,11 +365,16 @@ class RequestPlanner {
                 steps.add(architectureStep)
                 createdStepIds["architecture"] = architectureStep.id
 
-                val qualityStep = createQualityCheckStep(requestAnalysis, stepIdCounter, setOf(projectScanStep.id, architectureStep.id))
+                val qualityStep = createQualityCheckStep(
+                    requestAnalysis,
+                    stepIdCounter,
+                    setOf(projectScanStep.id, architectureStep.id)
+                )
                 steps.add(qualityStep)
                 createdStepIds["quality_check"] = qualityStep.id
 
-                val documentationStep = createDocumentationStep(requestAnalysis, stepIdCounter, setOf(architectureStep.id, qualityStep.id))
+                val documentationStep =
+                    createDocumentationStep(requestAnalysis, stepIdCounter, setOf(architectureStep.id, qualityStep.id))
                 steps.add(documentationStep)
                 createdStepIds["documentation"] = documentationStep.id
             }
@@ -373,7 +388,8 @@ class RequestPlanner {
                 steps.add(analysisStep)
                 createdStepIds["analysis"] = analysisStep.id
 
-                val reportStep = createReportStep(requestAnalysis, stepIdCounter, setOf(projectScanStep.id, analysisStep.id))
+                val reportStep =
+                    createReportStep(requestAnalysis, stepIdCounter, setOf(projectScanStep.id, analysisStep.id))
                 steps.add(reportStep)
                 createdStepIds["report"] = reportStep.id
             }
@@ -385,7 +401,8 @@ class RequestPlanner {
 
                 var ragEnrichmentStep: PlanStep? = null
                 if (shouldIncludeRagStep(requestAnalysis)) {
-                    ragEnrichmentStep = createRagEnrichmentStep(requestAnalysis, stepIdCounter, setOf(projectScanStep.id))
+                    ragEnrichmentStep =
+                        createRagEnrichmentStep(requestAnalysis, stepIdCounter, setOf(projectScanStep.id))
                     steps.add(ragEnrichmentStep)
                     createdStepIds["rag_enrichment"] = ragEnrichmentStep.id
                 }
@@ -404,7 +421,8 @@ class RequestPlanner {
                 createdStepIds["quality_check"] = qualityStep.id
 
                 // Используем отчет вместо документации (агент документации не существует)
-                val documentationStep = createReportStep(requestAnalysis, stepIdCounter, setOf(analysisStep.id, qualityStep.id))
+                val documentationStep =
+                    createReportStep(requestAnalysis, stepIdCounter, setOf(analysisStep.id, qualityStep.id))
                 steps.add(documentationStep)
                 createdStepIds["documentation"] = documentationStep.id
             }
@@ -424,13 +442,13 @@ class RequestPlanner {
         // Проверяем, не является ли запрос файловой операцией
         val request = (analysis.parameters["original_request"] as? String) ?: ""
         val isFileOperation = request.lowercase().contains("открой") ||
-                               request.lowercase().contains("покаж") ||
-                               request.lowercase().contains("прочитай") ||
-                               request.lowercase().contains("open") ||
-                               request.lowercase().contains("view") ||
-                               request.lowercase().contains("read") ||
-                               (request.lowercase().contains("файл") &&
-                                (request.lowercase().contains("path") || request.lowercase().contains("путь")))
+                request.lowercase().contains("покаж") ||
+                request.lowercase().contains("прочитай") ||
+                request.lowercase().contains("open") ||
+                request.lowercase().contains("view") ||
+                request.lowercase().contains("read") ||
+                (request.lowercase().contains("файл") &&
+                        (request.lowercase().contains("path") || request.lowercase().contains("путь")))
 
         return if (isFileOperation && analysis.requiredTools.contains(AgentType.FILE_OPERATIONS)) {
             // Создаем шаг для файловой операции
@@ -469,7 +487,10 @@ class RequestPlanner {
      * Извлекает путь к файлу из запроса
      */
     private fun extractFilePath(request: String): String {
-        val regex = Regex("""(?:файл|file)?\s*([^\s]+\.(?:md|txt|kt|java|py|js|ts|json|yaml|yml|xml|gradle|properties))""", RegexOption.IGNORE_CASE)
+        val regex = Regex(
+            """(?:файл|file)?\s*(\S+\.(?:md|txt|kt|java|py|js|ts|json|yaml|yml|xml|gradle|properties))""",
+            RegexOption.IGNORE_CASE
+        )
         val match = regex.find(request)
         return match?.groupValues?.get(1)?.trim() ?: request
     }
@@ -488,7 +509,11 @@ class RequestPlanner {
         )
     }
 
-    private fun createAnalysisStep(analysis: RequestAnalysis, counter: MutableMap<String, Int>, dependencies: Set<String> = emptySet()): PlanStep {
+    private fun createAnalysisStep(
+        analysis: RequestAnalysis,
+        counter: MutableMap<String, Int>,
+        dependencies: Set<String> = emptySet()
+    ): PlanStep {
         return PlanStep(
             id = generateStepId("analysis", counter),
             title = "Анализ кода",
@@ -507,7 +532,11 @@ class RequestPlanner {
         )
     }
 
-    private fun createQualityCheckStep(analysis: RequestAnalysis, counter: MutableMap<String, Int>, dependencies: Set<String> = emptySet()): PlanStep {
+    private fun createQualityCheckStep(
+        analysis: RequestAnalysis,
+        counter: MutableMap<String, Int>,
+        dependencies: Set<String> = emptySet()
+    ): PlanStep {
         return PlanStep(
             id = generateStepId("quality_check", counter),
             title = "Проверка качества кода",
@@ -536,7 +565,11 @@ class RequestPlanner {
         )
     }
 
-    private fun createBugFixStep(analysis: RequestAnalysis, counter: MutableMap<String, Int>, dependencies: Set<String> = emptySet()): PlanStep {
+    private fun createBugFixStep(
+        analysis: RequestAnalysis,
+        counter: MutableMap<String, Int>,
+        dependencies: Set<String> = emptySet()
+    ): PlanStep {
         return PlanStep(
             id = generateStepId("bug_fix", counter),
             title = "Исправление багов",
@@ -550,7 +583,11 @@ class RequestPlanner {
         )
     }
 
-    private fun createRefactorStep(analysis: RequestAnalysis, counter: MutableMap<String, Int>, dependencies: Set<String> = emptySet()): PlanStep {
+    private fun createRefactorStep(
+        analysis: RequestAnalysis,
+        counter: MutableMap<String, Int>,
+        dependencies: Set<String> = emptySet()
+    ): PlanStep {
         return PlanStep(
             id = generateStepId("refactor", counter),
             title = "Рефакторинг",
@@ -565,7 +602,11 @@ class RequestPlanner {
         )
     }
 
-    private fun createArchitectureStep(analysis: RequestAnalysis, counter: MutableMap<String, Int>, dependencies: Set<String> = emptySet()): PlanStep {
+    private fun createArchitectureStep(
+        analysis: RequestAnalysis,
+        counter: MutableMap<String, Int>,
+        dependencies: Set<String> = emptySet()
+    ): PlanStep {
         return PlanStep(
             id = generateStepId("architecture", counter),
             title = "Анализ архитектуры",
@@ -580,7 +621,11 @@ class RequestPlanner {
         )
     }
 
-    private fun createValidationStep(analysis: RequestAnalysis, counter: MutableMap<String, Int>, dependencies: Set<String> = emptySet()): PlanStep {
+    private fun createValidationStep(
+        analysis: RequestAnalysis,
+        counter: MutableMap<String, Int>,
+        dependencies: Set<String> = emptySet()
+    ): PlanStep {
         return PlanStep(
             id = generateStepId("validation", counter),
             title = "Валидация изменений",
@@ -594,7 +639,11 @@ class RequestPlanner {
         )
     }
 
-    private fun createRagEnrichmentStep(analysis: RequestAnalysis, counter: MutableMap<String, Int>, dependencies: Set<String> = emptySet()): PlanStep {
+    private fun createRagEnrichmentStep(
+        analysis: RequestAnalysis,
+        counter: MutableMap<String, Int>,
+        dependencies: Set<String> = emptySet()
+    ): PlanStep {
         return PlanStep(
             id = generateStepId("rag_enrichment", counter),
             title = "Поиск релевантного контекста",
@@ -609,7 +658,11 @@ class RequestPlanner {
         )
     }
 
-    private fun createReportStep(analysis: RequestAnalysis, counter: MutableMap<String, Int>, dependencies: Set<String> = emptySet()): PlanStep {
+    private fun createReportStep(
+        analysis: RequestAnalysis,
+        counter: MutableMap<String, Int>,
+        dependencies: Set<String> = emptySet()
+    ): PlanStep {
         // Определяем тип отчета на основе шага
         val stepId = generateStepId("report", counter)
         val isDocumentationStep = counter.get("documentation") != null && counter.get("report") == null
@@ -630,7 +683,11 @@ class RequestPlanner {
         )
     }
 
-    private fun createDocumentationStep(analysis: RequestAnalysis, counter: MutableMap<String, Int>, dependencies: Set<String> = emptySet()): PlanStep {
+    private fun createDocumentationStep(
+        analysis: RequestAnalysis,
+        counter: MutableMap<String, Int>,
+        dependencies: Set<String> = emptySet()
+    ): PlanStep {
         return PlanStep(
             id = generateStepId("documentation", counter),
             title = "Создание документации",
@@ -745,7 +802,7 @@ class RequestPlanner {
 
         val isSearchQuery = searchKeywords.any { keyword -> requestLower.contains(keyword) }
         val hasSpecificObjects = specificSearchKeywords.any { keyword -> requestLower.contains(keyword) } ||
-                              uiSearchKeywords.any { keyword -> requestLower.contains(keyword) }
+                uiSearchKeywords.any { keyword -> requestLower.contains(keyword) }
         val needsRagForSearch = isSearchQuery && hasSpecificObjects
 
         // 2. Сложные запросы, требующие контекста (с проверкой релевантности)
@@ -768,9 +825,11 @@ class RequestPlanner {
 
         val shouldUseRag = (needsRagForSearch || needsRagForComplex) && !isGeneralAnalysis
 
-        logger.info("RAG step decision: query='$request', complexity=${complexity.name}, " +
-                   "needsRagForSearch=$needsRagForSearch, needsRagForComplex=$needsRagForComplex, " +
-                   "isGeneral=$isGeneralAnalysis, shouldUse=$shouldUseRag")
+        logger.info(
+            "RAG step decision: query='$request', complexity=${complexity.name}, " +
+                    "needsRagForSearch=$needsRagForSearch, needsRagForComplex=$needsRagForComplex, " +
+                    "isGeneral=$isGeneralAnalysis, shouldUse=$shouldUseRag"
+        )
 
         return shouldUseRag
     }

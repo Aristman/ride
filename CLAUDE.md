@@ -39,6 +39,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # Запуск тестов с фильтром по названию
 ./gradlew test --tests "*UncertaintyAnalyzer*"
+
+# Запуск с конкретной IDE продуктом
+./gradlew runIde -PideProduct=AI -PideVersion=252.25557.131
+
+# Запуск MCP сервера (если используется)
+cd mcp-server-rust && docker-compose up
 ```
 
 ## Architecture Overview
@@ -106,10 +112,22 @@ src/main/kotlin/ru/marslab/ide/ride/
 │   ├── rag/           # RAG (Retrieval-Augmented Generation) агенты
 │   └── a2a/           # Реализация A2A протокола
 ├── integration/llm/    # LLM провайдеры и Yandex GPT интеграция
+│   └── impl/           # Дополнительные провайдеры (Ollama, HuggingFace)
 ├── model/              # Модели данных и доменные объекты
+│   ├── task/           # Модели задач для оркестрации
+│   ├── scanner/        # Модели сканера кода
+│   └── tool/           # Модели инструментов
 ├── service/            # Application сервисы
 │   ├── mcp/           # MCP (Model Context Protocol) интеграция
-│   └── rag/           # RAG сервисы обогащения
+│   ├── rag/           # RAG сервисы обогащения
+│   └── testing/       # Testing инфраструктура
+├── stt/                # Speech-to-Text система (распознавание голоса)
+│   ├── domain/        # Domain слой STT
+│   ├── infrastructure/ # Реализации STT сервисов
+│   └── app/           # Прикладной слой STT
+├── orchestrator/       # Оркестрация агентов
+│   ├── impl/          # Конкретные реализации оркестрации
+│   └── a2a/           # A2A оркестрация
 ├── settings/           # Конфигурация плагина и персистентность
 ├── ui/                 # Рефакторенные UI компоненты
 │   ├── config/         # Конфигурация и константы (ChatPanelConfig)
@@ -117,6 +135,7 @@ src/main/kotlin/ru/marslab/ide/ride/
 │   ├── renderer/       # Рендереры контента (ChatContentRenderer)
 │   ├── manager/        # UI менеджеры (HtmlDocumentManager, MessageDisplayManager)
 │   ├── builder/        # UI билдеры (ChatUiBuilder)
+│   ├── templates/      # Шаблонизация контента (HtmlTemplate, CodeBlockTemplate)
 │   └── chat/           # JCEF чат view
 └── actions/            # IntelliJ platform actions
 ```
@@ -138,20 +157,30 @@ src/a2aTest/kotlin/        # Изолированные A2A smoke тесты (he
 - **EnhancedAgentOrchestratorA2A**: Продвинутая оркестрация multi-agent workflows
 - **RagEnrichmentService**: RAG обогащение с source links
 - **MCPServerManager**: Управление MCP серверами
+- **YandexSpeechSttService**: Speech-to-Text сервис с Yandex SpeechKit интеграцией
+- **TestingAgentOrchestrator**: Оркестратор тестирования с агентами для Kotlin/Java/Dart
+- **EmbeddingGeneratorService**: Генерация эмбеддингов для RAG системы
+- **EmbeddingDatabaseService**: SQLite база данных для хранения эмбеддингов
+- **ResponseFormatter**: Форматирование ответов с шаблонизацией
+- **RulesService**: Управление настраиваемыми правилами агентов
+- **AgentFactory**: Фабрика для создания агентов с разными провайдерами
+- **LLMProviderFactory**: Фабрика для создания LLM провайдеров
 
 ## Technology Stack
 
 - **Language**: Kotlin 2.1.0
 - **Platform**: IntelliJ Platform 2024.2.5+
-- **UI Framework**: Swing (IntelliJ UI компоненты) с composition pattern
+- **UI Framework**: Swing (IntelliJ UI компоненты) с composition pattern и JCEF
 - **Async**: Kotlin Coroutines
 - **HTTP**: Java HttpClient (JDK 21+) - *Избегать Ktor из-за конфликтов корутин*
 - **JSON**: kotlinx.serialization 1.6.2
 - **XML**: xmlutil для XML сериализации
 - **Tokenization**: jtokkit (Tiktoken implementation)
 - **Database**: SQLite для RAG embeddings storage
-- **Testing**: JUnit 5 + MockK + Mockito (mixed test suite)
+- **Testing**: JUnit 5 + JUnit 4 + MockK + Mockito (mixed test suite)
 - **Build**: Gradle 8.14.3 с IntelliJ Platform Gradle Plugin 2.7.1
+- **Docker**: Для MCP сервера (Rust implementation)
+- **JCEF**: Для современного UI с HTML рендерингом
 
 ## Development Guidelines
 
@@ -199,6 +228,24 @@ src/a2aTest/kotlin/        # Изолированные A2A smoke тесты (he
 - **JCEF Support**: Используйте JetBrains Runtime с JCEF, отключите sandbox на Linux: `-Dide.browser.jcef.sandbox.enable=false`
 - **Plugin Conflicts**: Gradle plugin может вызывать конфликты, отключен в sandbox конфигурации
 - **Headless Testing**: A2A тесты запускаются в headless режиме с proper flags
+- **Продукт и версия IDE**: Задаются через `-PideProduct` и `-PideVersion` (пример: `-PideProduct=AI -PideVersion=252.25557.131`)
+
+## Speech-to-Text (STT) System
+
+### Architecture
+STT система следует чистой архитектуре с тремя слоями:
+- **Domain Layer**: `stt/domain/` - бизнес-логика и интерфейсы
+- **Infrastructure Layer**: `stt/infrastructure/` - реализации (Yandex SpeechKit)
+- **Application Layer**: `stt/app/` - использование в UI
+
+### Key Components
+- **YandexSpeechSttService**: Основная реализация STT
+- **AudioRecorder**: Запись аудио с микрофона
+- **SttConfiguration**: Настройки STT (API ключи, языки)
+- **VoiceRecognition**: Интеграция с чат интерфейсом
+
+### Usage in Development
+STT интегрирован в чат интерфейс для голосового ввода сообщений.
 
 ## RAG System (Retrieval-Augmented Generation)
 
@@ -223,6 +270,31 @@ Settings → Tools → Ride → RAG Enrichment
 └── MMR lambda: [0.5] (if MMR selected)
 ```
 
+## Testing Infrastructure
+
+### Overview
+Плагин включает полноценную инфраструктуру для тестирования кода с AI-ассистентом.
+
+### Key Components
+- **TestingAgentOrchestrator**: Центральный оркестратор тестирования
+- **KotlinTestingAgent**: Специализированный агент для Kotlin тестов
+- **JavaTestingAgent**: Специализированный агент для Java тестов
+- **DartTestingAgent**: Специализированный агент для Dart/Flutter тестов
+- **TestRunner**: Запуск тестов и анализ результатов
+- **TestGeneration**: LLM-генерация тестов с системными промптами
+
+### Supported Test Types
+- Unit тесты для Kotlin/Java/Dart
+- Интеграционные тесты
+- A2A smoke тесты (headless)
+- Тесты производительности
+
+### Development Workflow
+1. Agent анализирует код и определяет необходимые тесты
+2. Генерирует тестовый код с учетом фреймворков проекта
+3. Запускает тесты и анализирует результаты
+4. Предоставляет рекомендации по исправлению ошибок
+
 ## MCP Integration (Model Context Protocol)
 
 ### Configuration
@@ -240,6 +312,13 @@ Settings → Tools → Ride → RAG Enrichment
   ]
 }
 ```
+
+### MCP Server (Rust Implementation)
+Отдельный MCP сервер написан на Rust:
+- Расположен в `mcp-server-rust/`
+- Собирается через Docker Compose
+- Поддерживает stdio и HTTP коммуникацию
+- Расширяет функциональность базового MCP протокола
 
 ## Response Format System
 
@@ -288,6 +367,31 @@ A2A протокол позволяет создавать сложные multi-
 - **Isolated Tests**: `./gradlew a2aTest` для headless smoke тестирования
 - **Coverage**: Комплексные A2A smoke тесты в `src/a2aTest/kotlin/`
 
+## Advanced Features
+
+### Rules Engine System
+Плагин поддерживает настраиваемые правила для кастомизации поведения AI:
+- **Global Rules**: `~/.ride/rules/` применяются ко всем проектам
+- **Project Rules**: `<PROJECT>/.ride/rules/` применяются только к текущему проекту
+- **UI Configuration**: Управление правилами через `Settings → Tools → Ride → Rules`
+- **Priority System**: Проектные правила имеют высший приоритет
+- **Template System**: Автоматическая генерация шаблонов правил
+
+### Voice Input Integration
+STT (Speech-to-Text) система интегрирована в чат интерфейс:
+- Поддержка Yandex SpeechKit для распознавания речи
+- Запись аудио直接 с микрофона
+- Автоматическая конвертация речи в текст
+- Поддержка русского и английского языков
+
+### Template-Based UI Rendering
+Система шаблонизации для различных типов контента:
+- **HtmlTemplate**: Базовые HTML шаблоны
+- **CodeBlockTemplate**: Форматированные блоки кода
+- **TerminalOutputTemplate**: Терминальный вывод
+- **StructuredBlockTemplate**: Структурированные данные
+- **InteractionScriptsTemplate**: Скрипты взаимодействия
+
 ## Current Project Status
 
 ### Recently Completed (2025)
@@ -299,13 +403,19 @@ A2A протокол позволяет создавать сложные multi-
 - ✅ **UI Architecture Refactoring** - Модульный component-based design
 - ✅ **A2A Protocol Phase 0** - Инфраструктура и messaging система
 - ✅ **RAG System** - Обогащение контекста с source links
+- ✅ **STT System** - Speech-to-Text с Yandex SpeechKit
+- ✅ **Testing Infrastructure** - AI-ассистент для тестирования
+- ✅ **Rules Engine** - Настраиваемые правила поведения
+- ✅ **Template System** - UI шаблонизация контента
 
 ### Active Development
 - 🔄 **A2A Protocol Phase 1** - Специализированные tool агенты (70% complete)
 - 🔄 **Enhanced Agent Orchestration** - Продвинутое управление workflow
+- 🔄 **Advanced RAG Features** - Улучшение релевантности и производительности
 
 ### Testing Coverage
 - **40+ unit тестов** для ключевой функциональности
 - **12 uncertainty analysis тестов** с comprehensive pattern coverage
 - **A2A smoke тесты** для валидации протокола
 - **Интеграционные тесты** для end-to-end workflows
+- **Testing Agent тесты** для валидации генерации тестов
